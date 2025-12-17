@@ -20,8 +20,7 @@ def get_db():
 # Now Authorize will be our AuthWrapper.
 
 def auth_check(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_setting = str(settings.DISABLE_AUTH)
-    if auth_setting.lower() == "true":
+    if settings.DISABLE_AUTH is True:
         return
     else:
         # AuthWrapper.jwt_required() raises HTTPException if invalid
@@ -32,8 +31,7 @@ def check_permission(permission_name: str, Authorize: get_auth_wrapper, db: Sess
     Checks if the current user has the specified permission.
     Admins (is_superuser) always have access.
     """
-    auth_setting = str(settings.DISABLE_AUTH)
-    if auth_setting.lower() == "true":
+    if settings.DISABLE_AUTH is True:
         return True
 
     username = Authorize.get_jwt_subject()

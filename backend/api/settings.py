@@ -41,6 +41,6 @@ class Settings(BaseSettings):
     if os.environ.get("BASE_TEMPLATE", None):
         BASE_TEMPLATE = os.environ.get("BASE_TEMPLATE")
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        "DATABASE_URL", "sqlite:///config/data.sqlite"
+        "DATABASE_URL", "sqlite:////config/data.sqlite"
     )
-    COMPOSE_DIR = compose_dir_check()
+    COMPOSE_DIR = os.environ.get("COMPOSE_DIR", "/config/compose/")
