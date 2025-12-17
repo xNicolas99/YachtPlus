@@ -5,6 +5,9 @@ set -e
 echo "Starting Nginx..."
 nginx
 
+# Ensure config directory exists
+mkdir -p /config/compose
+
 # Start Backend
 # Determine if we should run with Uvicorn (dev) or Gunicorn (prod)
 # For now, we follow the nginx.conf expectation: upstream unix:/tmp/gunicorn.sock
@@ -26,5 +29,4 @@ exec gunicorn api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind unix:/tmp/gunicorn.sock \
-    --bind 0.0.0.0:8000 \
     --log-level info
