@@ -13,8 +13,6 @@ from api.auth.auth import auth_check
 
 from api.auth.jwt import get_auth_wrapper
 
-Base.metadata.create_all(bind=engine)
-
 
 router = APIRouter()
 

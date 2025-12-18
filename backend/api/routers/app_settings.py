@@ -20,8 +20,6 @@ from api.settings import Settings
 from api.auth.jwt import get_auth_wrapper
 
 
-containers.Base.metadata.create_all(bind=engine)
-
 settings = Settings()
 
 router = APIRouter()
