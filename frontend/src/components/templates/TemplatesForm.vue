@@ -58,8 +58,15 @@ export default {
     urlRules: [
       value => !!value || "Required.",
       value => {
-        const pattern = /https?:\/\/(([a-z0-9$-_@.&+!*"'(),]+(\.[a-z0-9$-_ @.&+!*"'(),]+)*)|(\d+.\d+.\d+.\d+))(:\d+)?\/.*/i;
-        return pattern.test(value) || "Invalid URL";
+        try {
+          const url = new URL(value);
+          return (
+            (url.protocol === "http:" || url.protocol === "https:") ||
+            "Invalid URL"
+          );
+        } catch (_) {
+          return "Invalid URL";
+        }
       }
     ]
   }),

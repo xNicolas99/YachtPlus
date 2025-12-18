@@ -1,8 +1,32 @@
 from ..settings import Settings
 import os
 import fnmatch
+from fastapi import HTTPException
+import re
 
 settings = Settings()
+
+
+def validate_compose_project_name(name):
+    """
+    Validates that the project name is safe to use in file paths.
+    Only allows alphanumeric characters, underscores, and hyphens.
+    """
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name cannot be empty.")
+
+    # Strictly allow only a-z, A-Z, 0-9, _, -
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid project name. Only alphanumeric characters, underscores, and hyphens are allowed."
+        )
+
+    # Check for path traversal attempts explicitly (double check, though regex handles it)
+    if ".." in name or "/" in name or "\\" in name:
+        raise HTTPException(status_code=400, detail="Invalid project name.")
+
+    return name
 
 
 def find_yml_files(path):
