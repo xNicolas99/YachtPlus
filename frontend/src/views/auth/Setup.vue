@@ -86,7 +86,6 @@
                       <v-btn color="primary" @click="verify2FA" :disabled="invalid || !validated">
                         Verify & Enable
                       </v-btn>
-                      <v-btn text @click="skip2FA">Skip</v-btn>
                     </v-form>
                   </ValidationObserver>
                 </v-stepper-content>
@@ -162,15 +161,14 @@ export default {
         await axios.post('/api/auth/2fa/enable', {
             token: this.otpToken
         });
+
+        // Finalize setup
+        await axios.post('/api/setup/finalize');
+
         this.finishSetup();
       } catch (err) {
-        this.showError("Invalid Code");
+        this.showError(err.response ? err.response.data.detail : "Verification failed");
       }
-    },
-
-    async skip2FA() {
-      // Just finish setup without enabling 2FA
-      this.finishSetup();
     },
 
     async finishSetup() {

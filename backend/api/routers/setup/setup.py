@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
 from api.db.models.users import User
-from api.db.schemas.users import UserCreate
-from api.db.crud.users import create_user
+from api.db.schemas.users import UserCreate, UserUpdate
+from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
 from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
+from api.auth.auth import auth_check
 import os
 
 router = APIRouter()
@@ -35,24 +36,34 @@ def register_first_user(
     if is_setup_completed():
          raise HTTPException(status_code=403, detail="Setup already completed.")
 
-    # Check if user already exists in DB (sanity check, though we don't rely on it for setup status)
-    # If the file doesn't exist but users do, we might have an issue.
-    # But the user asked to NOT depend on admin account existence.
-    # However, if we try to create 'admin@yacht.local' and it already exists, it will fail.
-    # So we should probably check if the username exists and error out if so,
-    # OR we handle the constraint error.
+    # Check if user already exists
+    existing_user = get_user_by_name(db, user.username)
 
-    # Create the user as superuser
-    user.is_superuser = True
-    try:
-        new_user = create_user(db=db, user=user)
-    except Exception as e:
-        # If user exists, we probably can't proceed with THIS user.
-        # But we haven't marked setup as complete.
-        raise HTTPException(status_code=400, detail=f"Error creating user: {str(e)}")
+    if existing_user:
+        if not existing_user.is_superuser:
+             # Should not happen during setup unless DB is messy
+             raise HTTPException(status_code=400, detail="User exists but is not admin.")
 
-    # Mark setup as complete
-    mark_setup_completed()
+        # Update existing user credentials/state
+        user_update = UserUpdate(
+            username=user.username,
+            password=user.password,
+            is_superuser=True,
+            is_active=True
+        )
+        new_user = update_user_by_id(db, existing_user.id, user_update)
+        if not new_user:
+             raise HTTPException(status_code=500, detail="Failed to update user.")
+    else:
+        # Create the user as superuser
+        user.is_superuser = True
+        try:
+            new_user = create_user(db=db, user=user)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error creating user: {str(e)}")
+
+    # DO NOT Mark setup as complete yet.
+    # mark_setup_completed()
 
     # Login the user
     access_token = create_access_token(data={"sub": new_user.username})
@@ -63,3 +74,24 @@ def register_first_user(
         "username": new_user.username,
         "access_token": access_token
     }
+
+@router.post("/finalize")
+def finalize_setup(
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    if is_setup_completed():
+        return {"message": "Setup already completed"}
+
+    username = Authorize.get_jwt_subject()
+    user = get_user_by_name(db, username)
+
+    if not user or not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not user.is_2fa_enabled:
+        raise HTTPException(status_code=400, detail="2FA must be enabled to finalize setup.")
+
+    mark_setup_completed()
+    return {"message": "Setup finalized"}

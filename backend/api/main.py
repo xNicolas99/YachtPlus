@@ -46,7 +46,12 @@ app.include_router(setup.router, prefix="/setup", tags=["setup"])
 async def startup(db: Session = Depends(get_db)):
     Base.metadata.create_all(bind=engine)
     start_scheduler()
-    generate_secret_key(db=SessionLocal())
+
+    # Initialize Persistent Secret Key
+    key = generate_secret_key(db=SessionLocal())
+    from api.auth import jwt
+    jwt.set_secret_key(key)
+
     users_exist = get_users(db=SessionLocal())
     print(
         "DISABLE_AUTH = "
