@@ -353,9 +353,12 @@ def _check_updates(tag):
 
         registry_digest = new.attrs["Descriptor"]["digest"]
 
+        # Safely get RepoDigests, defaulting to empty list if missing
+        repo_digests = current.attrs.get("RepoDigests") or []
+
         # Check if the registry digest matches any of the local digests exactly
         if any(
-            registry_digest == extract_hash(i) for i in current.attrs["RepoDigests"]
+            registry_digest == extract_hash(i) for i in repo_digests
         ):
             return False
         else:
