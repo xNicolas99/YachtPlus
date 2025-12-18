@@ -343,8 +343,19 @@ def _check_updates(tag):
             new = dclient.images.get_registry_data(tag)
         except APIError:
             return False
+
+        # Helper function to extract digest hash from a RepoDigest string
+        # Format is usually: repo@sha256:<hash>
+        def extract_hash(digest_str):
+            if "@" in digest_str:
+                return digest_str.split("@")[-1]
+            return digest_str
+
+        registry_digest = new.attrs["Descriptor"]["digest"]
+
+        # Check if the registry digest matches any of the local digests exactly
         if any(
-            new.attrs["Descriptor"]["digest"] in i for i in current.attrs["RepoDigests"]
+            registry_digest == extract_hash(i) for i in current.attrs["RepoDigests"]
         ):
             return False
         else:

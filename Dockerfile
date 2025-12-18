@@ -38,7 +38,9 @@ RUN apk add --no-cache \
     ruby-dev \
     nginx \
     curl \
-    linux-headers
+    linux-headers \
+    pkgconf \
+    mariadb-dev
 
 # Install Docker Compose 2.x as a standalone binary
 RUN curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
