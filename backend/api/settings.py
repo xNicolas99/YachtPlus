@@ -13,14 +13,14 @@ def compose_dir_check():
 
 class Settings(BaseSettings):
     app_name: str = "Yacht API"
-    SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(16))
-    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "pass")
-    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@yachtplus")
-    ACCESS_TOKEN_EXPIRES = os.environ.get("ACCESS_TOKEN_EXPIRES", 900)
-    REFRESH_TOKEN_EXPIRES = os.environ.get("REFRESH_TOKEN_EXPIRES", 2592000)
-    SAME_SITE_COOKIES = os.environ.get("SAME_SITE_COOKIES", "lax")
-    DISABLE_AUTH = os.environ.get("DISABLE_AUTH", False)
-    BASE_TEMPLATE_VARIABLES = [
+    SECRET_KEY: str = os.environ.get("SECRET_KEY", secrets.token_hex(16))
+    ADMIN_PASSWORD: str = os.environ.get("ADMIN_PASSWORD", "pass")
+    ADMIN_EMAIL: str = os.environ.get("ADMIN_EMAIL", "admin@yachtplus")
+    ACCESS_TOKEN_EXPIRES: int = os.environ.get("ACCESS_TOKEN_EXPIRES", 900)
+    REFRESH_TOKEN_EXPIRES: int = os.environ.get("REFRESH_TOKEN_EXPIRES", 2592000)
+    SAME_SITE_COOKIES: str = os.environ.get("SAME_SITE_COOKIES", "lax")
+    DISABLE_AUTH: bool = os.environ.get("DISABLE_AUTH", False)
+    BASE_TEMPLATE_VARIABLES: list = [
         {"variable": "!config", "replacement": "/yacht/AppData/Config"},
         {"variable": "!data", "replacement": "/yacht/AppData/Data"},
         {"variable": "!media", "replacement": "/yacht/Media/"},
@@ -38,9 +38,8 @@ class Settings(BaseSettings):
         {"variable": "!PUID", "replacement": "1000"},
         {"variable": "!PGID", "replacement": "100"},
     ]
-    if os.environ.get("BASE_TEMPLATE", None):
-        BASE_TEMPLATE = os.environ.get("BASE_TEMPLATE")
-    SQLALCHEMY_DATABASE_URI = os.environ.get(
+    BASE_TEMPLATE: str = os.environ.get("BASE_TEMPLATE", "")
+    SQLALCHEMY_DATABASE_URI: str = os.environ.get(
         "DATABASE_URL", "sqlite:////config/data.sqlite"
     )
-    COMPOSE_DIR = os.environ.get("COMPOSE_DIR", "/config/compose/")
+    COMPOSE_DIR: str = os.environ.get("COMPOSE_DIR", "/config/compose/")
