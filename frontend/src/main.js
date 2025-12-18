@@ -42,7 +42,7 @@ function createAxiosResponseInterceptor() {
             return Promise.reject(error);
           } else {
             store.dispatch("auth/AUTH_LOGOUT");
-            this.router.push("/");
+            router.push("/login");
             return Promise.reject(error);
           }
         })

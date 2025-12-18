@@ -180,7 +180,9 @@ def add_template(db: Session, template: models.Template):
         db.commit()
     except IntegrityError as err:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Template already exists.")
+        # If the template already exists, we return the existing one.
+        # This makes the "Add Template" operation idempotent.
+        return get_template(db=db, url=template.url)
 
     return get_template(db=db, url=template.url)
 
