@@ -1,5 +1,5 @@
 # Build Vue.js frontend
-FROM node:20-alpine as build-stage
+FROM node:16-alpine as build-stage
 
 ARG VUE_APP_VERSION
 ENV VUE_APP_VERSION=${VUE_APP_VERSION}
@@ -11,7 +11,7 @@ COPY ./frontend/ ./
 RUN npm run build --verbose
 
 # Setup Container and install Flask backend
-FROM python:3.11-alpine as deploy-stage
+FROM python:3.11-slim as deploy-stage
 
 # Set environment variables
 ENV PYTHONIOENCODING=UTF-8
@@ -21,30 +21,19 @@ WORKDIR /api
 COPY ./backend/requirements.txt ./
 
 # Install build dependencies and system libraries
-RUN apk add --no-cache \
-    build-base \
-    gcc \
-    g++ \
-    make \
-    libffi-dev \
-    openssl-dev \
-    musl-dev \
-    postgresql-dev \
-    mysql-dev \
-    jpeg-dev \
-    zlib-dev \
-    yaml-dev \
+# Switching to apt-get for Debian Slim
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     python3-dev \
-    ruby-dev \
+    default-libmysqlclient-dev \
+    pkg-config \
     nginx \
     curl \
-    linux-headers \
-    pkgconf \
-    mariadb-dev
+    ruby-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Docker Compose 2.x as a standalone binary
-# Using v2.29.1 (Stable, modern version as of late 2024)
-# Added retry logic to curl
+# Using v2.29.1
 RUN curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
     chmod +x /usr/local/bin/docker-compose
 
@@ -56,10 +45,6 @@ RUN pip3 install -r requirements.txt --no-cache-dir --verbose
 
 # Install SASS via gem
 RUN gem install sass --verbose
-
-# Clean up build dependencies
-RUN apk del --purge build-base && \
-    rm -rf /root/.cache /tmp/*
 
 # Copy the backend code
 COPY ./backend/ ./
@@ -74,7 +59,8 @@ COPY nginx.conf /etc/nginx/nginx.conf
 EXPOSE 8000
 
 # Create user and group 'abc' for Nginx
-RUN addgroup -S abc && adduser -S abc -G abc
+# On Debian, addgroup/adduser syntax differs slightly from Alpine but this should work or be adapted
+RUN groupadd -r abc && useradd -r -g abc abc
 
 # Create Nginx temp directories and set permissions
 RUN mkdir -p /var/www/client_body_temp /var/www/proxy_temp && \
