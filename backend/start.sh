@@ -8,6 +8,9 @@ mkdir -p /config/compose
 echo "Starting Nginx..."
 nginx
 
+# Ensure config directory exists
+mkdir -p /config/compose
+
 # Start Backend
 # Determine if we should run with Uvicorn (dev) or Gunicorn (prod)
 # For now, we follow the nginx.conf expectation: upstream unix:/tmp/gunicorn.sock

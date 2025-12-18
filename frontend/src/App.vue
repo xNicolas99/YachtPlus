@@ -72,7 +72,8 @@ export default {
 
     if (dark_theme == "false") {
       this.$vuetify.theme.dark = false;
-    } else if (dark_theme == "true") {
+    } else {
+      // Default to dark mode if not set or set to true
       this.$vuetify.theme.dark = true;
     }
     if (theme) {
@@ -85,7 +86,8 @@ export default {
 
     if (dark_theme == "false") {
       this.$vuetify.theme.dark = false;
-    } else if (dark_theme == "true") {
+    } else {
+      // Default to dark mode
       this.$vuetify.theme.dark = true;
     }
     if (theme) {

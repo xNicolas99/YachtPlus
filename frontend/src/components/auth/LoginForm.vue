@@ -111,8 +111,10 @@ export default {
       // We will handle the login request manually here to intercept 2FA requirement
       try {
         const response = await axios.post('/api/auth/login_cookie', {
-          username: this.username,
-          password: this.password
+          user: {
+            username: this.username,
+            password: this.password
+          }
         });
 
         if (response.data.login === '2fa_required') {
@@ -135,8 +137,10 @@ export default {
     async onSubmit2FA() {
        try {
         const response = await axios.post('/api/auth/login_cookie', {
-          username: this.username,
-          password: this.password,
+          user: {
+            username: this.username,
+            password: this.password
+          },
           otp_token: this.otpToken
         });
 
