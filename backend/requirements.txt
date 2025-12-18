@@ -43,4 +43,3 @@ setuptools==68.0.0
 pyotp==2.9.0
 qrcode==8.2
 APScheduler==3.11.1
-sh

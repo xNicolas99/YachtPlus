@@ -1,34 +1,21 @@
 <template>
   <v-app id="yacht">
-    <div v-if="isLoggedIn">
-      <Sidebar v-if="$vuetify.breakpoint.mdAndUp" />
-      <Bottombar v-if="$vuetify.breakpoint.smAndDown" />
-      <Appbar />
-      <v-main>
-        <!-- Provides the application the proper gutter -->
-        <v-container fluid>
-          <!-- If using vue-router -->
-          <transition
-            name="slide"
-            enter-active-class="animated slideInRight delay"
-            leave-active-class="animated slideOutLeft"
-          >
-            <router-view></router-view>
-          </transition>
-        </v-container>
-      </v-main>
-
-      <!--
-    <v-footer app>
-       <span class="px-4">&copy; {{ new Date().getFullYear() }}</span>
-    </v-footer>
-  -->
-    </div>
-    <div v-else>
+    <Sidebar v-if="isLoggedIn && $vuetify.breakpoint.mdAndUp" />
+    <Bottombar v-if="isLoggedIn && $vuetify.breakpoint.smAndDown" />
+    <Appbar v-if="isLoggedIn" />
+    <v-main>
+      <!-- Provides the application the proper gutter -->
       <v-container fluid>
-        <LoginForm />
+        <!-- If using vue-router -->
+        <transition
+          name="slide"
+          enter-active-class="animated slideInRight delay"
+          leave-active-class="animated slideOutLeft"
+        >
+          <router-view></router-view>
+        </transition>
       </v-container>
-    </div>
+    </v-main>
     <snackbar />
   </v-app>
 </template>
@@ -38,7 +25,6 @@ import { mapGetters, mapActions } from "vuex";
 import Sidebar from "./components/nav/Sidebar";
 import Appbar from "./components/nav/Appbar";
 import Bottombar from "./components/nav/Bottombar";
-import LoginForm from "./components/auth/LoginForm";
 import snackbar from "./components/notifications/snackbar";
 export default {
   name: "App",
@@ -47,7 +33,6 @@ export default {
     Sidebar: Sidebar,
     Appbar: Appbar,
     Bottombar: Bottombar,
-    LoginForm: LoginForm,
     snackbar: snackbar
   },
   data: () => ({}),

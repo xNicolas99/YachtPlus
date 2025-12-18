@@ -16,13 +16,15 @@ import router from "@/router/index";
 const state = {
   status: "",
   username: localStorage.getItem("username") || "",
-  authDisabled: null
+  authDisabled: null,
+  isSetup: true // Assume setup by default until checked
 };
 
 const getters = {
   isAuthenticated: state => !!state.username,
   authStatus: state => state.status,
-  getUsername: state => state.username
+  getUsername: state => state.username,
+  isSetup: state => state.isSetup
 };
 
 const actions = {
@@ -124,29 +126,42 @@ const actions = {
         });
     });
   },
-  [AUTH_CHECK]: ({ commit }) => {
+  [AUTH_CHECK]: ({ commit, dispatch }) => {
     commit(AUTH_REQUEST);
-    const url = "/api/auth/me";
-    axios
-      .get(url)
-      .then(resp => {
-        if (resp.data.authDisabled == true) {
-          localStorage.setItem("username", resp.data.username);
-          commit(AUTH_DISABLED);
-          commit(AUTH_SUCCESS, resp);
-        } else {
+    // Also check setup status
+    return dispatch("CHECK_SETUP").then(() => {
+      const url = "/api/auth/me";
+      return axios
+        .get(url)
+        .then(resp => {
+          if (resp.data.authDisabled == true) {
+            localStorage.setItem("username", resp.data.username);
+            commit(AUTH_DISABLED);
+            commit(AUTH_SUCCESS, resp);
+          } else {
+            commit(AUTH_ENABLED);
+          }
+        })
+        .catch(() => {
           commit(AUTH_ENABLED);
-        }
-      })
-      .catch(() => {
-        commit(AUTH_ENABLED);
-      });
+        });
+    });
+  },
+  CHECK_SETUP: ({ commit }) => {
+    return axios.get('/api/setup/status').then(resp => {
+      commit('SET_SETUP_STATUS', resp.data.is_setup);
+    }).catch(err => {
+      console.error(err);
+    });
   }
 };
 
 const mutations = {
   [AUTH_REQUEST]: state => {
     state.status = "loading";
+  },
+  SET_SETUP_STATUS: (state, isSetup) => {
+    state.isSetup = isSetup;
   },
   [AUTH_SUCCESS]: (state, resp) => {
     state.status = "success";

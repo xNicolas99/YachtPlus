@@ -1,7 +1,10 @@
 // Base
 import Vue from "vue";
 import VueRouter from "vue-router";
+import store from "../store";
 import Home from "../views/Home.vue";
+import Login from "../views/auth/Login.vue";
+import Setup from "../views/auth/Setup.vue";
 
 // Templates
 import Templates from "../views/Templates.vue";
@@ -63,6 +66,16 @@ const routes = [
     path: "/",
     name: "Home",
     component: Home
+  },
+  {
+    path: "/login",
+    name: "Login",
+    component: Login
+  },
+  {
+    path: "/setup",
+    name: "Setup",
+    component: Setup
   },
   {
     path: "/templates",
@@ -263,6 +276,47 @@ const router = new VueRouter({
   mode: "hash",
   base: "",
   routes
+});
+
+router.beforeEach(async (to, from, next) => {
+  // Check auth and setup status if not already known
+  // Note: authCheck action updates both isAuthenticated and isSetup
+
+  if (store.getters['auth/isSetup'] === true) {
+     // If we think it's setup, but maybe we haven't checked properly yet?
+     // The default state is true, so we should check if we haven't actually checked?
+     // But let's assume the App.vue or main.js calls AUTH_CHECK which calls CHECK_SETUP.
+     // To be safe, we can wait for a check or just proceed.
+     // Ideally, we await the check here if it's the first load.
+  }
+
+  // Ensure we have the latest status
+  if (!store.state.auth.status) { // checks if initial load
+     await store.dispatch('auth/AUTH_CHECK');
+  }
+
+  const isSetup = store.getters['auth/isSetup'];
+  const isLoggedIn = store.getters['auth/isAuthenticated'];
+
+  if (!isSetup) {
+    if (to.path !== '/setup') {
+      next('/setup');
+    } else {
+      next();
+    }
+  } else {
+    // System is setup
+    if (to.path === '/setup') {
+      // Cannot access setup if already setup
+      next('/login');
+    } else if (!isLoggedIn && to.path !== '/login') {
+      next('/login');
+    } else if (isLoggedIn && (to.path === '/login' || to.path === '/setup')) {
+      next('/');
+    } else {
+      next();
+    }
+  }
 });
 
 export default router;

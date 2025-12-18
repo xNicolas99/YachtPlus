@@ -13,6 +13,7 @@ from api.db.schemas.users import UserCreate
 from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
 from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower
+from api.routers.setup import setup
 from api.db.crud.templates import read_template_variables, set_template_variables
 from api.services.watchtower import start_scheduler, stop_scheduler
 
@@ -38,6 +39,7 @@ app.include_router(
 )
 app.include_router(compose.router, prefix="/compose", tags=["compose"])
 app.include_router(app_settings.router, prefix="/settings", tags=["settings"])
+app.include_router(setup.router, prefix="/setup", tags=["setup"])
 
 
 @app.on_event("startup")
@@ -55,12 +57,6 @@ async def startup(db: Session = Depends(get_db)):
     )
     if users_exist:
         print("Users Exist")
-    else:
-        print("No Users. Creating the default user.")
-        user = UserCreate(
-            username=settings.ADMIN_EMAIL, password=settings.ADMIN_PASSWORD
-        )
-        create_user(db=SessionLocal(), user=user)
     template_variables_exist = read_template_variables(SessionLocal())
     if template_variables_exist:
         print("Template Variables Exist")
