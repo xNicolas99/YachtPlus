@@ -43,7 +43,9 @@ RUN apk add --no-cache \
     mariadb-dev
 
 # Install Docker Compose 2.x as a standalone binary
-RUN curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
+# Using v2.29.1 (Stable, modern version as of late 2024)
+# Added retry logic to curl
+RUN curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
     chmod +x /usr/local/bin/docker-compose
 
 # Upgrade pip, setuptools, and wheel
