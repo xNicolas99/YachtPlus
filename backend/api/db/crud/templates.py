@@ -12,9 +12,48 @@ from urllib.parse import urlparse
 import json
 import yaml
 import os
+import socket
+import ipaddress
 
 # Templates
 
+def is_private_ip(ip: str) -> bool:
+    try:
+        ip_obj = ipaddress.ip_address(ip)
+        return ip_obj.is_private
+    except ValueError:
+        return False # Invalid IP, treat as public/unsafe
+
+def validate_url(url: str):
+    parsed = urlparse(url)
+
+    # Check scheme
+    if parsed.scheme not in ('http', 'https'):
+        raise HTTPException(status_code=400, detail="Invalid URL scheme. Only http and https are allowed.")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="Invalid URL: Hostname missing.")
+
+    try:
+        # Resolve hostname to IP
+        # Note: This might pick one IP if multiple are returned.
+        # For stricter security, we might need to check all IPs.
+        ip_list = socket.getaddrinfo(hostname, None)
+        for ip_info in ip_list:
+             # ip_info[4][0] is the IP address string
+             ip = ip_info[4][0]
+             if is_private_ip(ip):
+                 raise HTTPException(status_code=400, detail=f"Access to private IP {ip} is denied.")
+
+    except socket.gaierror:
+        # If hostname cannot be resolved, urllib will likely fail too, but we can fail early.
+        # Or we can let it proceed, but typically DNS failure implies we can't reach it.
+        # However, to avoid bypasses, let's treat resolution failure as suspicious if we are strict,
+        # or just pass through.
+        pass
+
+    return True
 
 def get_templates(db: Session):
     return db.query(models.Template).all()
@@ -46,6 +85,7 @@ def delete_template(db: Session, template_id: int):
 
 
 def add_template(db: Session, template: models.Template):
+    validate_url(template.url)
     try:
         _template_path = urlparse(template.url).path
         ext = os.path.splitext(_template_path)[1]
@@ -130,7 +170,10 @@ def add_template(db: Session, template: models.Template):
     except (OSError, TypeError, ValueError) as err:
         # Optional handle KeyError here too.
         print("data request failed", err)
-        raise HTTPException(status_code=err.status_code, detail=err.explanation)
+        if hasattr(err, "status_code"):
+             raise HTTPException(status_code=err.status_code, detail=err.explanation)
+        else:
+             raise HTTPException(status_code=400, detail=str(err))
 
     try:
         db.add(_template)
@@ -146,6 +189,8 @@ def refresh_template(db: Session, template_id: id):
     template = (
         db.query(models.Template).filter(models.Template.id == template_id).first()
     )
+
+    validate_url(template.url)
 
     _template_path = urlparse(template.url).path
     ext = os.path.splitext(_template_path)[1]
@@ -228,7 +273,10 @@ def refresh_template(db: Session, template_id: id):
             raise HTTPException(status_code=exc.code, detail=exc.url)
         else:
             print("Template update failed. ERR_001", exc)
-            raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
+            if hasattr(exc, "status_code"):
+                 raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
+            else:
+                 raise HTTPException(status_code=400, detail=str(exc))
     else:
         # db.delete(template)
         # make_transient(template)

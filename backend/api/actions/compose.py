@@ -16,7 +16,7 @@ import io
 import zipfile
 
 from api.settings import Settings
-from api.utils.compose import find_yml_files
+from api.utils.compose import find_yml_files, validate_compose_project_name
 
 settings = Settings()
 
@@ -26,6 +26,7 @@ Runs an action on the specified compose project.
 
 
 def compose_action(name, action):
+    validate_compose_project_name(name)
     files = find_yml_files(settings.COMPOSE_DIR)
     compose = get_compose(name)
     env = os.environ.copy()
@@ -104,7 +105,7 @@ def compose_app_action(
     action,
     app,
 ):
-
+    validate_compose_project_name(name)
     files = find_yml_files(settings.COMPOSE_DIR)
     compose = get_compose(name)
     env = os.environ.copy()
@@ -224,6 +225,7 @@ project.
 
 
 def get_compose(name):
+    validate_compose_project_name(name)
     try:
         files = find_yml_files(settings.COMPOSE_DIR + name)
     except Exception as exc:
@@ -271,6 +273,7 @@ the content of compose.content to it.
 
 
 def write_compose(compose):
+    validate_compose_project_name(compose.name)
     if not os.path.exists(settings.COMPOSE_DIR + compose.name):
         try:
             pathlib.Path(settings.COMPOSE_DIR + compose.name).mkdir(parents=True)
@@ -298,6 +301,7 @@ it exists. This also deletes all files in the folder.
 
 
 def delete_compose(project_name):
+    validate_compose_project_name(project_name)
     if not os.path.exists("/" + settings.COMPOSE_DIR + project_name):
         raise HTTPException(404, "Project directory not found.")
     elif not os.path.exists(
@@ -320,6 +324,7 @@ def delete_compose(project_name):
 
 
 def generate_support_bundle(project_name):
+    validate_compose_project_name(project_name)
     files = find_yml_files(settings.COMPOSE_DIR + project_name)
     if project_name in files:
         dclient = docker.from_env()
