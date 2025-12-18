@@ -1,6 +1,9 @@
 #!/bin/sh
 set -e
 
+# Create config directories if they don't exist
+mkdir -p /config/compose
+
 # Start Nginx
 echo "Starting Nginx..."
 nginx
@@ -29,4 +32,5 @@ exec gunicorn api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind unix:/tmp/gunicorn.sock \
+    --umask 000 \
     --log-level info
