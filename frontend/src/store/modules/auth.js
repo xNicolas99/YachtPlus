@@ -132,7 +132,7 @@ const actions = {
     return dispatch("CHECK_SETUP").then(() => {
       const url = "/api/auth/me";
       return axios
-        .get(url)
+        .get(url, { skipAuthRefresh: true })
         .then(resp => {
           if (resp.data.authDisabled == true) {
             localStorage.setItem("username", resp.data.username);
@@ -140,19 +140,34 @@ const actions = {
             commit(AUTH_SUCCESS, resp);
           } else {
             commit(AUTH_ENABLED);
+            // If we are here, we are actually logged in, but we need to update state
+            // The original code was a bit vague. If /api/auth/me returns 200, it returns user info.
+            // We should treat it as success.
+            commit(AUTH_SUCCESS, resp);
           }
         })
-        .catch(() => {
-          commit(AUTH_ENABLED);
+        .catch(err => {
+          // If 401, we are not logged in.
+          // Do not redirect here (router handles that), just update state.
+          if (err.response && err.response.status === 401) {
+            commit(AUTH_CLEAR);
+            commit(AUTH_ERROR);
+          } else {
+            // Other errors
+            commit(AUTH_ERROR);
+          }
         });
     });
   },
   CHECK_SETUP: ({ commit }) => {
-    return axios.get('/api/setup/status').then(resp => {
-      commit('SET_SETUP_STATUS', resp.data.is_setup);
-    }).catch(err => {
-      console.error(err);
-    });
+    return axios
+      .get("/api/setup/status")
+      .then(resp => {
+        commit("SET_SETUP_STATUS", resp.data.is_setup);
+      })
+      .catch(err => {
+        console.error(err);
+      });
   }
 };
 

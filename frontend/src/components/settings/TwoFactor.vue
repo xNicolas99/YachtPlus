@@ -17,7 +17,12 @@
         <v-card>
           <v-card-title>Scan QR Code</v-card-title>
           <v-card-text class="text-center">
-            <img :src="qrCode" alt="QR Code" v-if="qrCode" style="max-width: 100%;"/>
+            <img
+              :src="qrCode"
+              alt="QR Code"
+              v-if="qrCode"
+              style="max-width: 100%;"
+            />
             <v-text-field
               v-model="token"
               label="Verification Code"
@@ -28,7 +33,9 @@
           <v-card-actions>
             <v-spacer></v-spacer>
             <v-btn text @click="setupDialog = false">Cancel</v-btn>
-            <v-btn color="primary" @click="verifyAndEnable">Verify & Enable</v-btn>
+            <v-btn color="primary" @click="verifyAndEnable"
+              >Verify & Enable</v-btn
+            >
           </v-card-actions>
         </v-card>
       </v-dialog>
@@ -37,7 +44,7 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from "axios";
 
 export default {
   data() {
@@ -45,7 +52,7 @@ export default {
       isEnabled: false, // This should be fetched from user profile
       setupDialog: false,
       qrCode: null,
-      token: ''
+      token: ""
     };
   },
   created() {
@@ -53,32 +60,44 @@ export default {
   },
   methods: {
     checkStatus() {
-      axios.get('/api/auth/me').then(response => {
+      axios.get("/api/auth/me").then(response => {
         this.isEnabled = response.data.is_2fa_enabled;
       });
     },
     setup2FA() {
-      axios.post('/api/auth/2fa/generate').then(response => {
-        this.qrCode = response.data.qr_code;
-        this.setupDialog = true;
-      }).catch(err => {
-        this.$emit('notify', { message: 'Error generating 2FA: ' + err.response.data.detail, color: 'error' });
-      });
+      axios
+        .post("/api/auth/2fa/generate")
+        .then(response => {
+          this.qrCode = response.data.qr_code;
+          this.setupDialog = true;
+        })
+        .catch(err => {
+          this.$emit("notify", {
+            message: "Error generating 2FA: " + err.response.data.detail,
+            color: "error"
+          });
+        });
     },
     verifyAndEnable() {
-      axios.post('/api/auth/2fa/enable', { token: this.token }).then(() => {
-        this.isEnabled = true;
-        this.setupDialog = false;
-        this.$emit('notify', { message: '2FA Enabled', color: 'success' });
-      }).catch(err => {
-        this.$emit('notify', { message: 'Verification failed: ' + err.response.data.detail, color: 'error' });
-      });
+      axios
+        .post("/api/auth/2fa/enable", { token: this.token })
+        .then(() => {
+          this.isEnabled = true;
+          this.setupDialog = false;
+          this.$emit("notify", { message: "2FA Enabled", color: "success" });
+        })
+        .catch(err => {
+          this.$emit("notify", {
+            message: "Verification failed: " + err.response.data.detail,
+            color: "error"
+          });
+        });
     },
     disable2FA() {
-      if (confirm('Are you sure you want to disable 2FA?')) {
-        axios.post('/api/auth/2fa/disable').then(() => {
+      if (confirm("Are you sure you want to disable 2FA?")) {
+        axios.post("/api/auth/2fa/disable").then(() => {
           this.isEnabled = false;
-          this.$emit('notify', { message: '2FA Disabled', color: 'success' });
+          this.$emit("notify", { message: "2FA Disabled", color: "success" });
         });
       }
     }

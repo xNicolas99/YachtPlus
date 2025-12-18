@@ -34,7 +34,7 @@
                   Update
                 </v-tab>
                 <v-tab class="text-left">
-                   <v-icon left class="mr-1">mdi-email</v-icon>SMTP
+                  <v-icon left class="mr-1">mdi-email</v-icon>SMTP
                 </v-tab>
                 <v-tab class="text-left">
                   <v-icon left class="mr-1">mdi-shield-lock</v-icon>Security
@@ -77,7 +77,11 @@
         <v-card-text>Version: {{ version }}</v-card-text>
       </v-card>
 
-      <v-snackbar v-model="snackbar.show" :color="snackbar.color" timeout="3000">
+      <v-snackbar
+        v-model="snackbar.show"
+        :color="snackbar.color"
+        timeout="3000"
+      >
         {{ snackbar.message }}
       </v-snackbar>
     </v-container>
@@ -109,8 +113,8 @@ export default {
       version: process.env.VUE_APP_VERSION || "unreleased",
       snackbar: {
         show: false,
-        message: '',
-        color: 'info'
+        message: "",
+        color: "info"
       }
     };
   },

@@ -35,10 +35,7 @@
           required
           outlined
         ></v-text-field>
-        <v-checkbox
-          v-model="settings.use_tls"
-          label="Use TLS"
-        ></v-checkbox>
+        <v-checkbox v-model="settings.use_tls" label="Use TLS"></v-checkbox>
       </v-form>
     </v-card-text>
     <v-card-actions>
@@ -68,22 +65,22 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from "axios";
 
 export default {
   data() {
     return {
       valid: false,
       settings: {
-        server: '',
+        server: "",
         port: 587,
-        username: '',
-        password: '',
-        sender_email: '',
+        username: "",
+        password: "",
+        sender_email: "",
         use_tls: true
       },
       testDialog: false,
-      testRecipient: ''
+      testRecipient: ""
     };
   },
   created() {
@@ -91,29 +88,50 @@ export default {
   },
   methods: {
     fetchSettings() {
-      axios.get('/api/settings/smtp/').then(response => {
-        this.settings = response.data;
-      }).catch(err => {
-        console.error(err);
-      });
+      axios
+        .get("/api/settings/smtp/")
+        .then(response => {
+          this.settings = response.data;
+        })
+        .catch(err => {
+          console.error(err);
+        });
     },
     saveSettings() {
-      axios.post('/api/settings/smtp/', this.settings).then(() => {
-        this.$emit('notify', { message: 'SMTP Settings Saved', color: 'success' });
-      }).catch(err => {
-        this.$emit('notify', { message: 'Error saving settings: ' + err.response.data.detail, color: 'error' });
-      });
+      axios
+        .post("/api/settings/smtp/", this.settings)
+        .then(() => {
+          this.$emit("notify", {
+            message: "SMTP Settings Saved",
+            color: "success"
+          });
+        })
+        .catch(err => {
+          this.$emit("notify", {
+            message: "Error saving settings: " + err.response.data.detail,
+            color: "error"
+          });
+        });
     },
     testEmail() {
       this.testDialog = true;
     },
     sendTest() {
-      axios.post('/api/settings/smtp/test', { recipient: this.testRecipient }).then(() => {
-        this.$emit('notify', { message: 'Test email sent', color: 'success' });
-        this.testDialog = false;
-      }).catch(err => {
-        this.$emit('notify', { message: 'Error sending email: ' + err.response.data.detail, color: 'error' });
-      });
+      axios
+        .post("/api/settings/smtp/test", { recipient: this.testRecipient })
+        .then(() => {
+          this.$emit("notify", {
+            message: "Test email sent",
+            color: "success"
+          });
+          this.testDialog = false;
+        })
+        .catch(err => {
+          this.$emit("notify", {
+            message: "Error sending email: " + err.response.data.detail,
+            color: "error"
+          });
+        });
     }
   }
 };

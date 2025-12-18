@@ -282,37 +282,39 @@ router.beforeEach(async (to, from, next) => {
   // Check auth and setup status if not already known
   // Note: authCheck action updates both isAuthenticated and isSetup
 
-  if (store.getters['auth/isSetup'] === true) {
-     // If we think it's setup, but maybe we haven't checked properly yet?
-     // The default state is true, so we should check if we haven't actually checked?
-     // But let's assume the App.vue or main.js calls AUTH_CHECK which calls CHECK_SETUP.
-     // To be safe, we can wait for a check or just proceed.
-     // Ideally, we await the check here if it's the first load.
-  }
-
   // Ensure we have the latest status
-  if (!store.state.auth.status) { // checks if initial load
-     await store.dispatch('auth/AUTH_CHECK');
+  // Skip check if we are already going to login and we haven't checked yet
+  // However, we need to know if it is Setup.
+  // Ideally, AUTH_CHECK handles 401 gracefully now, so it shouldn't loop.
+  // But to be safe and efficient:
+  if (!store.state.auth.status) {
+    if (to.path === "/login") {
+      // If we are going to login, we might still want to check setup status?
+      // But AUTH_CHECK does that.
+      // Let's call it, but since we fixed AUTH_CHECK to not redirect on 401, it is safe.
+      // However, if we want to optimize:
+    }
+    await store.dispatch("auth/AUTH_CHECK");
   }
 
-  const isSetup = store.getters['auth/isSetup'];
-  const isLoggedIn = store.getters['auth/isAuthenticated'];
+  const isSetup = store.getters["auth/isSetup"];
+  const isLoggedIn = store.getters["auth/isAuthenticated"];
 
   if (!isSetup) {
-    if (to.path !== '/setup') {
-      next('/setup');
+    if (to.path !== "/setup") {
+      next("/setup");
     } else {
       next();
     }
   } else {
     // System is setup
-    if (to.path === '/setup') {
+    if (to.path === "/setup") {
       // Cannot access setup if already setup
-      next('/login');
-    } else if (!isLoggedIn && to.path !== '/login') {
-      next('/login');
-    } else if (isLoggedIn && (to.path === '/login' || to.path === '/setup')) {
-      next('/');
+      next("/login");
+    } else if (!isLoggedIn && to.path !== "/login") {
+      next("/login");
+    } else if (isLoggedIn && (to.path === "/login" || to.path === "/setup")) {
+      next("/");
     } else {
       next();
     }

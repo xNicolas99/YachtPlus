@@ -62,7 +62,12 @@
                     outlined
                     autofocus
                   />
-                  <v-btn class="float-right" @click="onSubmit2FA()" color="primary">Verify</v-btn>
+                  <v-btn
+                    class="float-right"
+                    @click="onSubmit2FA()"
+                    color="primary"
+                    >Verify</v-btn
+                  >
                 </v-form>
               </div>
             </v-card-text>
@@ -83,7 +88,7 @@ import darkLogo from "@/assets/logo.svg";
 import { ValidationObserver, ValidationProvider } from "vee-validate";
 import { mapActions } from "vuex";
 import { themeLogo } from "../../config.js";
-import axios from 'axios';
+import axios from "axios";
 
 export default {
   components: {
@@ -96,9 +101,9 @@ export default {
       password: "",
       show: false,
       requires2FA: false,
-      otpToken: '',
+      otpToken: "",
       errorSnackbar: false,
-      errorMessage: ''
+      errorMessage: ""
     };
   },
   methods: {
@@ -110,33 +115,35 @@ export default {
     async onSubmit() {
       // We will handle the login request manually here to intercept 2FA requirement
       try {
-        const response = await axios.post('/api/auth/login_cookie', {
+        const response = await axios.post("/api/auth/login_cookie", {
           user: {
             username: this.username,
             password: this.password
           }
         });
 
-        if (response.data.login === '2fa_required') {
+        if (response.data.login === "2fa_required") {
           this.requires2FA = true;
-        } else if (response.data.login === 'successful') {
-           // Dispatch action to update state, but we already called API
-           // So we might need to adjust the Vuex action or just commit directly
-           // Assuming AUTH_REQUEST does the API call usually.
-           // Let's manually trigger the success path in Vuex or reload
-           this.$store.commit("auth/AUTH_SUCCESS", response);
-           this.$router.push("/");
+        } else if (response.data.login === "successful") {
+          // Dispatch action to update state, but we already called API
+          // So we might need to adjust the Vuex action or just commit directly
+          // Assuming AUTH_REQUEST does the API call usually.
+          // Let's manually trigger the success path in Vuex or reload
+          this.$store.commit("auth/AUTH_SUCCESS", response);
+          this.$router.push("/");
         }
       } catch (err) {
-        this.errorMessage = err.response ? err.response.data.detail : "Login failed";
+        this.errorMessage = err.response
+          ? err.response.data.detail
+          : "Login failed";
         this.errorSnackbar = true;
         this.$store.commit("auth/AUTH_ERROR");
       }
     },
 
     async onSubmit2FA() {
-       try {
-        const response = await axios.post('/api/auth/login_cookie', {
+      try {
+        const response = await axios.post("/api/auth/login_cookie", {
           user: {
             username: this.username,
             password: this.password
@@ -144,12 +151,14 @@ export default {
           otp_token: this.otpToken
         });
 
-        if (response.data.login === 'successful') {
-           this.$store.commit("auth/AUTH_SUCCESS", response);
-           this.$router.push("/");
+        if (response.data.login === "successful") {
+          this.$store.commit("auth/AUTH_SUCCESS", response);
+          this.$router.push("/");
         }
       } catch (err) {
-        this.errorMessage = err.response ? err.response.data.detail : "Verification failed";
+        this.errorMessage = err.response
+          ? err.response.data.detail
+          : "Verification failed";
         this.errorSnackbar = true;
       }
     },
