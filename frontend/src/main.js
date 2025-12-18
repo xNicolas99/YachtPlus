@@ -24,6 +24,11 @@ function createAxiosResponseInterceptor() {
   const interceptor = axios.interceptors.response.use(
     response => response,
     error => {
+      // Check if the request explicitly asks to skip the refresh logic
+      if (error.config && error.config.skipAuthRefresh) {
+        return Promise.reject(error);
+      }
+
       if (error.response.status !== 401) {
         return Promise.reject(error);
       }
