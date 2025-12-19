@@ -100,10 +100,13 @@ export default {
         const timeSinceActivity = now - this.lastActivity;
 
         // If active (within limit) OR if on Logs page (where we assume monitoring is active)
-        if (timeSinceActivity <= this.INACTIVITY_LIMIT || this.$route.name === "Logs") {
+        if (
+          timeSinceActivity <= this.INACTIVITY_LIMIT ||
+          this.$route.name === "Logs"
+        ) {
           this.refreshToken().catch(err => {
-             console.warn("Token refresh failed", err);
-             // If refresh fails with 401, the interceptor will handle logout
+            console.warn("Token refresh failed", err);
+            // If refresh fails with 401, the interceptor will handle logout
           });
         }
       }, this.REFRESH_INTERVAL);
@@ -180,6 +183,7 @@ html {
 #yacht {
   display: flex;
   width: 100vw;
+  min-height: 100vh;
 }
 .page {
   position: relative;
