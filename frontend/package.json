@@ -1,6 +1,6 @@
 {
   "name": "yachtplus",
-  "version": "0.0.6",
+  "version": "1.2.0",
   "private": true,
   "engines": {
     "node": ">=18"

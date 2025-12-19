@@ -238,9 +238,7 @@ export default {
           }
           this.$store.commit(
             "snackbar/setMessage",
-            deletedNumber +
-              " " +
-              action
+            deletedNumber + " " + action
           );
           this.readNetworks();
         })
