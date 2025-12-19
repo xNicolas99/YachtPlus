@@ -128,6 +128,11 @@ export default {
 
       document.documentElement.style.backgroundColor = bgColor;
       document.body.style.backgroundColor = bgColor;
+      const appElement = document.getElementById("app");
+      if (appElement) {
+        appElement.style.backgroundColor = bgColor;
+        appElement.style.minHeight = "100vh";
+      }
     }
   },
   watch: {
@@ -191,8 +196,11 @@ body {
 .v-application {
   background-color: var(--v-background-base) !important;
 }
-html {
+html, body, #app {
   background-color: var(--v-background-base) !important;
+  min-height: 100vh;
+}
+html {
   overflow-y: auto;
 }
 .animated {
@@ -216,7 +224,7 @@ html {
 }
 
 /* Global Button Styles for Dark Mode Visibility */
-.theme--dark.v-btn:not(.v-btn--flat):not(.v-btn--text):not(.v-btn--outlined) {
+.theme--dark.v-btn:not(.v-btn--flat):not(.v-btn--text):not(.v-btn--outlined):not(.v-btn--icon):not(.v-btn--plain) {
   border: 1px solid rgba(255, 255, 255, 0.2);
 }
 

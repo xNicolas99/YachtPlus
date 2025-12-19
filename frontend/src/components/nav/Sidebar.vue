@@ -13,7 +13,7 @@
     <v-list nav dense>
       <div v-for="(link, i) in links" :key="i">
         <!-- Render divider if present in link object, but only if it's explicitly set to true -->
-        <v-divider v-if="link.divider" class="my-2" />
+        <v-divider v-if="link.divider" class="my-4" />
 
         <v-list-item v-if="!link.subLinks" :to="link.to" exact class="mt-1">
           <v-list-item-icon>
