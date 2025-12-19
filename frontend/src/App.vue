@@ -128,6 +128,9 @@ export default {
 
       document.documentElement.style.backgroundColor = bgColor;
       document.body.style.backgroundColor = bgColor;
+      // Set CSS variable on root for broader access
+      document.documentElement.style.setProperty('--v-background-base', bgColor);
+
       const appElement = document.getElementById("app");
       if (appElement) {
         appElement.style.backgroundColor = bgColor;

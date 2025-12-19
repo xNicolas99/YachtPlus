@@ -11,11 +11,11 @@
     <!-- -->
 
     <v-list nav dense>
-      <div v-for="(link, i) in links" :key="i">
+      <template v-for="(link, i) in links">
         <!-- Render divider if present in link object, but only if it's explicitly set to true -->
-        <v-divider v-if="link.divider" class="my-4" />
+        <v-divider :key="`divider-${i}`" v-if="link.divider" class="my-4" />
 
-        <v-list-item v-if="!link.subLinks" :to="link.to" exact class="mt-1">
+        <v-list-item :key="`item-${i}`" v-if="!link.subLinks" :to="link.to" exact class="mt-1">
           <v-list-item-icon>
             <v-icon>{{ link.icon }}</v-icon>
           </v-list-item-icon>
@@ -25,7 +25,7 @@
 
         <v-list-group
           v-else
-          :key="link.text"
+          :key="`group-${i}`"
           :prepend-icon="link.icon"
           :value="false"
         >
@@ -46,7 +46,7 @@
             <v-list-item-title>{{ sublink.text }}</v-list-item-title>
           </v-list-item>
         </v-list-group>
-      </div>
+      </template>
     </v-list>
     <template v-slot:append>
       <a :href="'https://' + 'yacht.sh'">
