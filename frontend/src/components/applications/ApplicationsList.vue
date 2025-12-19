@@ -1,23 +1,6 @@
 <template lang="html">
   <div class="apps-list component" style="max-width: 90%">
     <v-card color="foreground">
-      <v-fade-transition>
-        <v-progress-linear
-          indeterminate
-          v-if="isLoading && isLoadingValue === 0"
-          color="primary"
-          bottom
-        />
-      </v-fade-transition>
-      <v-fade-transition>
-        <v-progress-linear
-          v-model="isLoadingValue"
-          v-if="isLoadingValue > 0"
-          color="primary"
-          bottom
-        />
-      </v-fade-transition>
-
       <v-card-title class="primary font-weight-bold">
         Apps
         <v-btn class="ml-2" color="secondary" to="/apps/deploy">
@@ -72,8 +55,19 @@
           </v-list>
         </v-menu>
       </v-card-title>
+
       <v-card-subtitle v-if="action">{{ action }} </v-card-subtitle>
+
+      <!-- Error State -->
+      <div v-if="loadError" class="text-center py-4">
+        <v-alert type="error" outlined text>
+          Apps konnten nicht geladen werden. Bitte Seite aktualisieren oder Logs prüfen.
+        </v-alert>
+        <v-btn color="primary" @click="retryLoad">Retry</v-btn>
+      </div>
+
       <v-data-table
+        v-if="!loadError"
         style="width: 99%"
         class="mx-auto foreground"
         :headers="selectedHeaders"
@@ -85,7 +79,18 @@
         :search="search"
         @click:row="handleRowClick"
         single-select
+        :loading="isLoading"
       >
+        <!-- Custom Loading Slot using Skeleton Loader -->
+        <template v-slot:loading>
+          <v-skeleton-loader
+             v-for="n in 5"
+             :key="n"
+             type="table-row"
+             class="my-2"
+          ></v-skeleton-loader>
+        </template>
+
         <template v-slot:item.name="{ item }">
           <div class="namecell">
             <v-menu
@@ -278,6 +283,12 @@
         <template v-slot:item.created="{ item }">
           <span class="CreatedAt"> {{ item.Created | formatDate }} </span>
         </template>
+
+        <!-- No Data slot -->
+        <template v-slot:no-data>
+           <div class="text-center">No Apps Found</div>
+        </template>
+
       </v-data-table>
     </v-card>
   </div>
@@ -293,6 +304,8 @@ export default {
       removeDialog: false,
       selectedApp: null,
       host_ip: location.hostname,
+      loadTimeout: null,
+      loadError: false,
       headers: [],
       headersMap: {
         name: {
@@ -357,7 +370,28 @@ export default {
       return o;
     },
     async refresh() {
-      await this.readApps();
+      await this.loadAppsWithTimeout();
+    },
+    async retryLoad() {
+      this.loadError = false;
+      await this.loadAppsWithTimeout();
+    },
+    async loadAppsWithTimeout() {
+      this.loadError = false;
+      // Start timeout timer (10 seconds)
+      this.loadTimeout = setTimeout(() => {
+        if (this.isLoading) {
+          this.loadError = true;
+        }
+      }, 10000);
+
+      try {
+        await this.readApps();
+      } catch (e) {
+        this.loadError = true;
+      } finally {
+        clearTimeout(this.loadTimeout);
+      }
     }
   },
   computed: {
@@ -366,8 +400,7 @@ export default {
       "isLoading",
       "isLoadingValue",
       "action",
-      "updatable",
-      "isLoadingValue"
+      "updatable"
     ]),
     showHeaders() {
       return this.headers.filter(s => this.selectedHeaders.includes(s));
@@ -378,7 +411,7 @@ export default {
     this.selectedHeaders = this.headers;
   },
   async mounted() {
-    await this.readApps();
+    await this.loadAppsWithTimeout();
   }
 };
 </script>

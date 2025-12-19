@@ -120,6 +120,14 @@ export default {
 
       if (this.inactivityTimer) clearInterval(this.inactivityTimer);
       if (this.refreshTimer) clearInterval(this.refreshTimer);
+    },
+    updateGlobalBackground() {
+      const theme = this.$vuetify.theme.dark ? "dark" : "light";
+      const themes = this.$vuetify.theme.themes[theme];
+      const bgColor = themes.background || (theme === "dark" ? "#0F172A" : "#FFFFFF");
+
+      document.documentElement.style.backgroundColor = bgColor;
+      document.body.style.backgroundColor = bgColor;
     }
   },
   watch: {
@@ -129,7 +137,10 @@ export default {
       } else {
         this.stopActivityTracking();
       }
-    }
+    },
+    "$vuetify.theme.dark": "updateGlobalBackground",
+    "$vuetify.theme.themes.dark.background": "updateGlobalBackground",
+    "$vuetify.theme.themes.light.background": "updateGlobalBackground"
   },
   created() {
     this.authCheck();
@@ -162,11 +173,21 @@ export default {
     if (theme) {
       this.$vuetify.theme.themes = theme;
     }
+    // Apply background color on mount
+    this.$nextTick(() => {
+      this.updateGlobalBackground();
+    });
   }
 };
 </script>
 
 <style>
+/* Reset body margin/padding to prevent white borders */
+body {
+  margin: 0;
+  padding: 0;
+}
+
 .v-application {
   background-color: var(--v-background-base) !important;
 }
@@ -192,5 +213,16 @@ html {
 .component {
   position: absolute;
   min-width: 100%;
+}
+
+/* Global Button Styles for Dark Mode Visibility */
+.theme--dark.v-btn:not(.v-btn--flat):not(.v-btn--text):not(.v-btn--outlined) {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Ensure focus visibility */
+.v-btn:focus {
+  outline: 2px solid var(--v-primary-base);
+  outline-offset: 2px;
 }
 </style>
