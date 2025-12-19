@@ -10,12 +10,14 @@ import axios from "axios";
 import vuetify from "./plugins/vuetify";
 // Form Validation
 import VueUtils from "./plugins/vueutils";
+import notifications from "./plugins/notifications";
 import "./vee-validate";
 import "./registerServiceWorker";
 // Animations
 require("animate.css/animate.compat.css");
 
 Vue.use(VueChatScroll);
+Vue.prototype.$notify = notifications;
 
 Vue.config.productionTip = false;
 
