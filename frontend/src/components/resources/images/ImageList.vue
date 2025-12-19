@@ -16,6 +16,20 @@
             <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on">
               <v-icon>mdi-plus</v-icon>
             </v-btn>
+            <v-tooltip bottom>
+              <template v-slot:activator="{ on, attrs }">
+                <v-btn
+                  class="ml-2"
+                  color="warning"
+                  v-bind="attrs"
+                  v-on="on"
+                  @click="pruneImages"
+                >
+                  <v-icon>mdi-broom</v-icon>
+                </v-btn>
+              </template>
+              <span>Prune Unused Images</span>
+            </v-tooltip>
           </template>
           <v-card color="foreground">
             <v-card-title class="headline" style="word-break: break-all;">
@@ -186,6 +200,7 @@
 </template>
 
 <script>
+import axios from "axios";
 import { mapActions, mapState } from "vuex";
 export default {
   data() {
@@ -241,6 +256,37 @@ export default {
         let _shortid = item.Id.split(":")[1].substring(0, 10);
         return _shortid;
       }
+    },
+    pruneImages() {
+      this.$store.commit("snackbar/setLoading", true);
+      axios({
+        url: "/api/settings/prune/images",
+        method: "GET",
+        responseType: "text/json"
+      })
+        .then(response => {
+          let action = Object.keys(response.data)[0];
+          let deletedNumber = 0;
+          if (response.data[action] != null) {
+            deletedNumber = response.data[action].length;
+          }
+          this.$store.commit(
+            "snackbar/setMessage",
+            deletedNumber +
+              " " +
+              action +
+              ". Space Reclaimed: " +
+              (response.data.SpaceReclaimed || 0) +
+              " Bytes"
+          );
+          this.readImages(); // Refresh list
+        })
+        .catch(err => {
+          this.$store.commit("snackbar/setErr", err);
+        })
+        .finally(() => {
+          this.$store.commit("snackbar/setLoading", false);
+        });
     }
   },
   computed: {
