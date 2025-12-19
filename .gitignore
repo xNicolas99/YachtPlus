@@ -14,3 +14,4 @@ config
 .idea/workspace.xml
 .idea/Yacht.iml
 .DS_Store
+.venv/
