@@ -29,7 +29,7 @@ docker run -d \
   -p 8000:8000 \
   -v /var/run/docker.sock:/var/run/docker.sock \
   -v yachtplus_data:/config \
-  ghcr.io/yacht-sh/yachtplus:latest
+  ghcr.io/xnicolas99/yachtplus:latest
 ```
 
 ### Docker Compose
@@ -40,7 +40,7 @@ Create a `docker-compose.yml` file:
 version: "3"
 services:
   yachtplus:
-    image: ghcr.io/yacht-sh/yachtplus:latest
+    image: ghcr.io/xnicolas99/yachtplus:latest
     container_name: yachtplus
     restart: unless-stopped
     ports:
