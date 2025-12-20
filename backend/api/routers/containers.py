@@ -89,12 +89,12 @@ async def container_exec(
             stdin=True,
             stdout=True,
             stderr=True,
+            privileged=True,
             tty=True,
-            env=["TERM=xterm"]
         )
 
         # Now start it. We need a stream.
-        stream = await exec_instance.start(detach=False)
+        stream = await exec_instance.start(detach=False, tty=True)
 
         if stream is None:
              raise Exception("Failed to start exec stream")
@@ -165,12 +165,12 @@ async def container_exec(
         writer.cancel()
 
     except aiodocker.exceptions.DockerError as e:
-        logger.error(f"Docker error in shell exec: {e}")
-        await websocket.close(code=1011, reason="Docker container error")
+        logger.error(f"Docker exec error: {e}")
+        await websocket.close(code=1011, reason=f"Docker error: {str(e)}")
     except Exception as e:
-        logger.error(f"Unexpected error in shell exec: {e}")
+        logger.error(f"Unexpected error in shell: {e}")
         try:
-             await websocket.close(code=1011, reason="Internal server error")
+             await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
         except:
              pass
     finally:

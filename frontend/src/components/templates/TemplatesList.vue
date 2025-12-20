@@ -98,7 +98,7 @@
 
         <v-tab-item>
            <v-card flat color="foreground" class="pa-4">
-             <DockerHubTemplates />
+             <DockerHubPopular />
            </v-card>
         </v-tab-item>
       </v-tabs-items>
@@ -136,11 +136,11 @@
 
 <script>
 import { mapActions, mapState } from "vuex";
-import DockerHubTemplates from "./DockerHubTemplates.vue";
+import DockerHubPopular from "./DockerHubPopular.vue";
 
 export default {
   components: {
-    DockerHubTemplates
+    DockerHubPopular
   },
   data() {
     return {
