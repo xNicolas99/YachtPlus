@@ -13,10 +13,22 @@ import VueUtils from "./plugins/vueutils";
 import notifications from "./plugins/notifications";
 import "./vee-validate";
 import "./registerServiceWorker";
+
+// Toast Notifications
+import Toast from "vue-toastification";
+import "vue-toastification/dist/index.css";
+
+Vue.use(Toast, {
+  position: "top-right",
+  timeout: 5000,
+  maxToasts: 3
+});
+
 // Animations
 require("animate.css/animate.compat.css");
 
 Vue.use(VueChatScroll);
+// Restore legacy notification plugin for backward compatibility
 Vue.prototype.$notify = notifications;
 
 Vue.config.productionTip = false;
@@ -31,7 +43,7 @@ function createAxiosResponseInterceptor() {
         return Promise.reject(error);
       }
 
-      if (error.response.status !== 401) {
+      if (error.response && error.response.status !== 401) {
         return Promise.reject(error);
       }
 
@@ -45,7 +57,7 @@ function createAxiosResponseInterceptor() {
           return axios(error.response.config);
         })
         .catch(error => {
-          if (error.response.status !== 401) {
+          if (error.response && error.response.status !== 401) {
             return Promise.reject(error);
           } else {
             store.dispatch("auth/AUTH_LOGOUT");
@@ -59,8 +71,6 @@ function createAxiosResponseInterceptor() {
     }
   );
 }
-
-// Vue.component('apexchart', VueApexCharts)
 
 // Call interceptor
 createAxiosResponseInterceptor();
