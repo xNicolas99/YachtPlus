@@ -104,6 +104,40 @@
                 </v-btn>
               </template>
               <v-list color="foreground" dense>
+
+                <!-- Inspect Group -->
+                <v-subheader>Inspect</v-subheader>
+                <v-list-item @click="viewLogs(item)">
+                  <v-list-item-icon>
+                    <v-icon>mdi-text-box-search-outline</v-icon>
+                  </v-list-item-icon>
+                  <v-list-item-title>View Logs</v-list-item-title>
+                </v-list-item>
+
+                <v-tooltip left v-if="item.State.Status !== 'running'">
+                  <template v-slot:activator="{ on, attrs }">
+                    <div v-bind="attrs" v-on="on">
+                      <v-list-item disabled>
+                        <v-list-item-icon>
+                          <v-icon>mdi-console</v-icon>
+                        </v-list-item-icon>
+                        <v-list-item-title>Open Shell</v-list-item-title>
+                      </v-list-item>
+                    </div>
+                  </template>
+                  <span>Container must be running to open shell</span>
+                </v-tooltip>
+                <v-list-item v-else @click="openTerminal(item)">
+                  <v-list-item-icon>
+                    <v-icon>mdi-console</v-icon>
+                  </v-list-item-icon>
+                  <v-list-item-title>Open Shell</v-list-item-title>
+                </v-list-item>
+
+                <v-divider></v-divider>
+
+                <!-- Management Group -->
+                <v-subheader>Management</v-subheader>
                 <v-list-item @click="editClick({ Name: item.name })">
                   <v-list-item-icon>
                     <v-icon>mdi-file-document-edit-outline</v-icon>
@@ -119,7 +153,11 @@
                   </v-list-item-icon>
                   <v-list-item-title>Update</v-list-item-title>
                 </v-list-item>
-                <v-divider />
+
+                <v-divider></v-divider>
+
+                <!-- Control Group -->
+                <v-subheader>Control</v-subheader>
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'start' })"
                 >
@@ -144,7 +182,6 @@
                   </v-list-item-icon>
                   <v-list-item-title>Restart</v-list-item-title>
                 </v-list-item>
-                <v-divider />
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'kill' })"
                 >
@@ -154,6 +191,10 @@
                   <v-list-item-title>Kill</v-list-item-title>
                 </v-list-item>
 
+                <v-divider></v-divider>
+
+                <!-- Danger Zone Group -->
+                <v-subheader class="error--text">Danger Zone</v-subheader>
                 <v-list-item
                   @click="
                     selectedApp = item;
@@ -161,12 +202,14 @@
                   "
                 >
                   <v-list-item-icon>
-                    <v-icon>mdi-delete</v-icon>
+                    <v-icon color="error">mdi-delete</v-icon>
                   </v-list-item-icon>
-                  <v-list-item-title>Remove</v-list-item-title>
+                  <v-list-item-title class="error--text">Remove</v-list-item-title>
                 </v-list-item>
               </v-list>
             </v-menu>
+
+            <!-- Remove Dialog -->
             <v-dialog v-if="selectedApp" v-model="removeDialog" max-width="290">
               <v-card>
                 <v-card-title class="headline" style="word-break: break-all;">
@@ -195,6 +238,7 @@
                 </v-card-actions>
               </v-card>
             </v-dialog>
+
             <span class="nametext ml-1">{{ item.name }}</span>
             <v-tooltip
               right
@@ -291,12 +335,35 @@
 
       </v-data-table>
     </v-card>
+
+    <!-- Logs and Terminal Modals -->
+    <ContainerLogs
+      v-if="selectedContainerId"
+      :visible="logsDialog"
+      :containerId="selectedContainerId"
+      :containerName="selectedContainerName"
+      @close="logsDialog = false"
+    />
+    <ContainerTerminal
+      v-if="selectedContainerId"
+      :visible="terminalDialog"
+      :containerId="selectedContainerId"
+      :containerName="selectedContainerName"
+      @close="terminalDialog = false"
+    />
   </div>
 </template>
 
 <script>
 import { mapActions, mapState } from "vuex";
+import ContainerLogs from "@/components/ContainerLogs.vue";
+import ContainerTerminal from "@/components/ContainerTerminal.vue";
+
 export default {
+  components: {
+    ContainerLogs,
+    ContainerTerminal
+  },
   data() {
     return {
       search: "",
@@ -306,6 +373,13 @@ export default {
       host_ip: location.hostname,
       loadTimeout: null,
       loadError: false,
+
+      // New State for Modals
+      logsDialog: false,
+      terminalDialog: false,
+      selectedContainerId: null,
+      selectedContainerName: null,
+
       headers: [],
       headersMap: {
         name: {
@@ -355,6 +429,16 @@ export default {
     },
     editClick(appName) {
       this.$router.push({ path: `/apps/edit/${appName.Name}` });
+    },
+    viewLogs(item) {
+      this.selectedContainerId = item.Id;
+      this.selectedContainerName = item.name.replace('/', '');
+      this.logsDialog = true;
+    },
+    openTerminal(item) {
+      this.selectedContainerId = item.Id;
+      this.selectedContainerName = item.name.replace('/', '');
+      this.terminalDialog = true;
     },
     convPorts(data) {
       let o = [];

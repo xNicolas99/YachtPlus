@@ -1,4 +1,5 @@
 import axios from "axios";
+import Vue from "vue";
 
 const state = {
   apps: [],
@@ -66,6 +67,9 @@ const actions = {
         commit("setApps", apps);
       })
       .catch(err => {
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.error("Failed to load apps: " + (err.response?.data?.detail || err.message));
+        }
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
@@ -73,32 +77,6 @@ const actions = {
         commit("setAction", "");
       });
   },
-  // async _checkAppUpdate({ commit }, apps) {
-  //   await commit("setLoading", true);
-  //   await commit("setLoadingItems");
-  //   await commit("setAction", "Checking for updates...");
-  //   await Promise.all(
-  //     apps.map(async (_update) => {
-  //       let url = `/api/apps/${_update.name}/updates`;
-  //       await axios
-  //         .get(url)
-  //         .then((response) => {
-  //           let app = response.data;
-  //           if (app.isUpdatable) {
-  //             commit("setUpdatable", app);
-  //             commit("setLoadingItemCompleted", apps.length);
-  //           }
-  //         })
-  //         .catch((err) => {
-  //           commit("snackbar/setErr", err, { root: true });
-  //         })
-  //         .finally(() => {
-  //           commit("setLoading", false);
-  //           commit("setAction", "");
-  //         });
-  //     })
-  //   );
-  // },
   async checkAppUpdate({ commit }, apps) {
     await commit("setLoading", true);
     await commit("setLoadingItems");
@@ -116,10 +94,16 @@ const actions = {
           })
           .catch(err => {
             console.log(err);
+            if (Vue.prototype.$toast) {
+               Vue.prototype.$toast.error("Failed to check updates for " + _app.name);
+            }
             commit("snackbar/setErr", err, { root: true });
           });
       })
     ).then(() => {
+      if (Vue.prototype.$toast) {
+         Vue.prototype.$toast.success("Update check completed");
+      }
       commit("setLoading", false);
       commit("setAction", "");
     });
@@ -137,6 +121,9 @@ const actions = {
           resolve(app);
         })
         .catch(err => {
+          if (Vue.prototype.$toast) {
+             Vue.prototype.$toast.error("Failed to read app " + Name);
+          }
           commit("snackbar/setErr", err, { root: true });
           reject(err);
         });
@@ -144,10 +131,16 @@ const actions = {
   },
   async readAppProcesses({ commit }, Name) {
     const url = `/api/apps/${Name}/processes`;
-    let response = await axios.get(url);
-    if (response) {
-      const processes = response.data;
-      commit("setAppProcesses", processes);
+    try {
+        let response = await axios.get(url);
+        if (response) {
+            const processes = response.data;
+            commit("setAppProcesses", processes);
+        }
+    } catch (err) {
+        if (Vue.prototype.$toast) {
+            Vue.prototype.$toast.error("Failed to read processes for " + Name);
+        }
     }
   },
   async readAppLogs({ commit }, Name) {
@@ -162,22 +155,37 @@ const actions = {
           logs.push(element);
         });
         commit("setAppLogs", logs);
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.success("Logs downloaded for " + Name);
+        }
       })
       .catch(err => {
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.error("Failed to download logs for " + Name);
+        }
         commit("snackbar/setErr", err, { root: true });
       });
   },
   AppUpdate({ commit }, Name) {
     commit("setLoading", true);
     commit("setAction", "Updating " + Name + " ...");
+    if (Vue.prototype.$toast) {
+       Vue.prototype.$toast.info("Update started for " + Name + ", please wait...");
+    }
     const url = `/api/apps/${Name}/update`;
     axios
       .get(url)
       .then(response => {
         const app = response.data;
         commit("setApps", app);
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.success(Name + " updated successfully");
+        }
       })
       .catch(err => {
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.error("Failed to update " + Name);
+        }
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
@@ -189,14 +197,25 @@ const actions = {
   AppAction({ commit }, { Name, Action }) {
     commit("setLoading", true);
     commit("setAction", Action + " " + Name + " ...");
+
+    if (Vue.prototype.$toast) {
+        Vue.prototype.$toast.info(Action.charAt(0).toUpperCase() + Action.slice(1) + "ing " + Name + "...");
+    }
+
     const url = `/api/apps/actions/${Name}/${Action}`;
     axios
       .get(url)
       .then(response => {
         const app = response.data;
         commit("setApps", app);
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.success(Name + " " + Action + "ed successfully");
+        }
       })
       .catch(err => {
+        if (Vue.prototype.$toast) {
+           Vue.prototype.$toast.error("Failed to " + Action + " " + Name + ": " + (err.response?.data?.detail || err.message));
+        }
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {

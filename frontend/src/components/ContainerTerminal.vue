@@ -13,7 +13,7 @@
 
         <v-select
           v-model="selectedShell"
-          :items="['/bin/sh', '/bin/bash', '/bin/ash', '/bin/zsh']"
+          :items="['/bin/sh', '/bin/bash', '/bin/ash', '/bin/zsh', '/usr/bin/fish']"
           dense
           hide-details
           outlined
@@ -23,16 +23,21 @@
           @change="reconnect"
         ></v-select>
 
-        <v-btn icon @click="reconnect">
-          <v-icon>mdi-refresh</v-icon>
-        </v-btn>
+        <v-tooltip bottom>
+           <template v-slot:activator="{ on, attrs }">
+              <v-btn icon @click="reconnect" v-bind="attrs" v-on="on">
+                <v-icon>mdi-refresh</v-icon>
+              </v-btn>
+           </template>
+           <span>Reconnect</span>
+        </v-tooltip>
 
         <v-btn icon @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-toolbar>
 
-      <v-card-text class="flex-grow-1 pa-0 black">
+      <v-card-text class="flex-grow-1 pa-0 black" style="overflow: hidden;">
         <div ref="terminal" style="width: 100%; height: 100%;"></div>
       </v-card-text>
     </v-card>
@@ -55,8 +60,9 @@ export default {
     terminal: null,
     fitAddon: null,
     websocket: null,
-    selectedShell: '/bin/bash',
-    resizeObserver: null
+    selectedShell: '/bin/sh',
+    resizeObserver: null,
+    isConnected: false
   }),
   watch: {
     visible(val) {
@@ -92,7 +98,11 @@ export default {
       this.fitAddon = new FitAddon();
       this.terminal.loadAddon(this.fitAddon);
       this.terminal.open(this.$refs.terminal);
-      this.fitAddon.fit();
+
+      // Delay fit slightly to ensure DOM is ready
+      setTimeout(() => {
+          this.fit();
+      }, 100);
 
       this.connect();
 
@@ -103,6 +113,8 @@ export default {
           this.fit();
       });
       this.resizeObserver.observe(this.$refs.terminal);
+
+      this.terminal.focus();
     },
     connect() {
       if (this.websocket) {
@@ -112,12 +124,22 @@ export default {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
       const port = window.location.port ? `:${window.location.port}` : '';
+      // If served via proxy (e.g. nginx port 8000 -> backend), window.location.port might be empty or 8080.
+      // But typically api is at /api.
+      // The backend endpoint is /api/containers/...
+      // If dev mode: backend on 8000, frontend on 8080. Proxy in vue.config.js handles /api.
+      // But WebSockets don't always go through the dev server proxy correctly if not configured.
+      // However, usually it works if relative path is used but WebSocket constructor needs absolute URL.
 
+      // We should use the same host/port as the page if it's served from same origin (production).
+      // In dev, we might need to point to 8000.
+      // Assuming standard deployment or proxy:
       const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
 
       this.websocket = new WebSocket(wsUrl);
 
       this.websocket.onopen = () => {
+        this.isConnected = true;
         this.terminal.write('\r\n\x1b[32mConnected to ' + this.containerName + '\x1b[0m\r\n');
         this.fit();
         this.terminal.focus();
@@ -136,12 +158,20 @@ export default {
       };
 
       this.websocket.onclose = (event) => {
-        this.terminal.write(`\r\n\x1b[31mDisconnected (Code: ${event.code})\x1b[0m\r\n`);
+        this.isConnected = false;
+        this.terminal.write(`\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`);
+        if (event.code === 1008 || event.code === 1011) {
+             if (this.$toast) this.$toast.error("Connection closed: Container might have stopped.");
+             // Requirement: "Bei Container-Stop während Session: Modal schließen mit Info-Toast"
+             // If we want to auto-close:
+             // this.close();
+        }
       };
 
       this.websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
         this.terminal.write('\r\n\x1b[31mConnection Error\x1b[0m\r\n');
+        if (this.$toast) this.$toast.error("WebSocket connection error");
       };
 
       this.terminal.onData(data => {
@@ -151,9 +181,13 @@ export default {
       });
     },
     fit() {
-        if (this.fitAddon) {
-            this.fitAddon.fit();
-            this.sendResize({ cols: this.terminal.cols, rows: this.terminal.rows });
+        if (this.fitAddon && this.terminal) {
+            try {
+                this.fitAddon.fit();
+                this.sendResize({ cols: this.terminal.cols, rows: this.terminal.rows });
+            } catch (e) {
+                // Ignore fit errors if terminal not visible
+            }
         }
     },
     handleResize() {
@@ -188,6 +222,7 @@ export default {
       if (this.resizeObserver) {
           this.resizeObserver.disconnect();
       }
+      this.isConnected = false;
     }
   },
   beforeDestroy() {
@@ -195,6 +230,3 @@ export default {
   }
 };
 </script>
-
-<style scoped>
-</style>

@@ -28,7 +28,7 @@
           </template>
           <v-list>
             <v-list-item
-              v-for="lines in [100, 500, 1000, 2000]"
+              v-for="lines in [100, 500, 1000, 2000, 5000]"
               :key="lines"
               @click="changeTail(lines)"
             >
@@ -97,8 +97,6 @@
 </template>
 
 <script>
-import { mapState } from "vuex";
-
 export default {
   props: {
     containerId: {
@@ -120,7 +118,7 @@ export default {
       logs: [],
       eventSource: null,
       following: true,
-      tailLines: 500,
+      tailLines: 1000,
       timestamps: true,
       searchQuery: "",
       autoScroll: true
@@ -170,9 +168,21 @@ export default {
 
       this.eventSource.onmessage = event => {
         try {
-            this.logs.push(event.data);
+            let data = event.data;
+            // Parse JSON if necessary
+            if (typeof data === 'string' && data.startsWith('{') && data.includes('"data":')) {
+                try {
+                    const parsed = JSON.parse(data);
+                    if (parsed.data) {
+                        data = parsed.data;
+                    }
+                } catch (e) {
+                    // Not JSON or parse failed, use raw
+                }
+            }
+            this.logs.push(data);
 
-            if (this.logs.length > 5000) {
+            if (this.logs.length > 10000) {
                 this.logs.shift();
             }
         } catch (e) {
@@ -182,7 +192,6 @@ export default {
 
       this.eventSource.onerror = err => {
         console.error("EventSource failed:", err);
-        this.eventSource.close();
       };
     },
     closeLogs() {
@@ -223,6 +232,10 @@ export default {
       document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
+
+      if (this.$toast) {
+          this.$toast.success("Logs downloaded");
+      }
     }
   },
   beforeDestroy() {
@@ -236,5 +249,18 @@ export default {
   background-color: #1e1e1e;
   color: #d4d4d4;
   line-height: 1.5;
+}
+/* Scrollbar styling */
+.logs-output::-webkit-scrollbar {
+  width: 10px;
+}
+.logs-output::-webkit-scrollbar-track {
+  background: #1e1e1e;
+}
+.logs-output::-webkit-scrollbar-thumb {
+  background: #555;
+}
+.logs-output::-webkit-scrollbar-thumb:hover {
+  background: #888;
 }
 </style>
