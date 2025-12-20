@@ -129,6 +129,9 @@ export default {
           // So we might need to adjust the Vuex action or just commit directly
           // Assuming AUTH_REQUEST does the API call usually.
           // Let's manually trigger the success path in Vuex or reload
+          if (response.data.access_token) {
+            localStorage.setItem("token", response.data.access_token);
+          }
           this.$store.commit("auth/AUTH_SUCCESS", response);
           this.$router.push("/");
         }
@@ -152,6 +155,9 @@ export default {
         });
 
         if (response.data.login === "successful") {
+          if (response.data.access_token) {
+            localStorage.setItem("token", response.data.access_token);
+          }
           this.$store.commit("auth/AUTH_SUCCESS", response);
           this.$router.push("/");
         }

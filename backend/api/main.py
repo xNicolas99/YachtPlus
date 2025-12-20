@@ -12,7 +12,7 @@ from api.db.database import SessionLocal, engine
 from api.db.schemas.users import UserCreate
 from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
-from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard
+from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, dockerhub
 from api.routers.setup import setup
 from api.db.crud.templates import read_template_variables, set_template_variables
 from api.services.watchtower import start_scheduler, stop_scheduler
@@ -36,6 +36,11 @@ app.include_router(
 app.include_router(
     templates.router,
     prefix="/templates",
+    tags=["templates"],
+)
+app.include_router(
+    dockerhub.router,
+    prefix="/templates/dockerhub",
     tags=["templates"],
 )
 app.include_router(compose.router, prefix="/compose", tags=["compose"])
