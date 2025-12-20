@@ -170,7 +170,11 @@ def login_cookie(
         record_login_attempt(db, client_ip, user.username, True)
         access_token = create_access_token(data={"sub": _user.username})
         Authorize.set_access_cookies(access_token, response)
-        return {"login": "successful", "username": _user.username}
+        return {
+            "login": "successful",
+            "username": _user.username,
+            "access_token": access_token,
+        }
     else:
         record_login_attempt(db, client_ip, user.username, False)
         raise HTTPException(status_code=400, detail="Invalid Username or Password.")

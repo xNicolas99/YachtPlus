@@ -122,7 +122,7 @@ export default {
       }
 
       // Get auth token from store or localStorage
-      const token = this.$store.state.auth.token || localStorage.getItem('authToken') || localStorage.getItem('access_token_cookie'); // Adjust key as needed
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || this.$store.state.auth.token || localStorage.getItem('authToken') || localStorage.getItem('access_token_cookie');
 
       if (!token) {
         if (this.$toast) this.$toast.error('Authentication required. Please log in again.');
