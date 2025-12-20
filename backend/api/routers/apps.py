@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Request
+from fastapi import APIRouter, Depends, status, Request, BackgroundTasks
 from sse_starlette.sse import EventSourceResponse
 
 from api.db.schemas import apps as schemas
@@ -69,7 +69,7 @@ def get_support_bundle(app_name, Authorize: get_auth_wrapper = Depends(get_auth_
 
 
 @router.get("/actions/{app_name}/{action}")
-def container_actions(app_name, action, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     if action == "start":
         check_permission("perm_start", Authorize, db)
@@ -80,7 +80,7 @@ def container_actions(app_name, action, Authorize: get_auth_wrapper = Depends(ge
     elif action == "kill" or action == "remove":
         check_permission("perm_delete", Authorize, db)
 
-    return actions.app_action(app_name, action)
+    return actions.app_action(app_name, action, background_tasks)
 
 
 @router.post("/deploy", response_model=schemas.DeployLogs)

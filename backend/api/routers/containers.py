@@ -36,26 +36,34 @@ async def get_container_stats(
     auth_check(Authorize)
     return await actions.get_stats(container_id)
 
+from fastapi import Query
+import jwt
+from api.auth.jwt import get_secret_key
+
 @router.websocket("/{container_id}/exec")
 async def container_exec(
     websocket: WebSocket,
     container_id: str,
-    shell: str = "/bin/sh",
-    cols: int = 80,
-    rows: int = 24,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    token: str = Query(None),
+    shell: str = Query("/bin/sh"),
+    cols: int = Query(80),
+    rows: int = Query(24)
 ):
     """
     WebSocket endpoint for container exec (terminal)
     """
+    await websocket.accept()
+
     # Check Auth
     try:
-        auth_check(Authorize)
+        if not token:
+             raise Exception("No token")
+        jwt.decode(token, get_secret_key(), algorithms=["HS256"])
     except Exception as e:
+        print(f"WebSocket Auth Error: {e}")
+        await websocket.send_json({"error": "Unauthorized"})
         await websocket.close(code=1008)
         return
-
-    await websocket.accept()
 
     docker = aiodocker.Docker()
     exec_id = None
