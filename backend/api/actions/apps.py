@@ -308,6 +308,27 @@ def app_action(app_name, action):
     err = None
     dclient = docker.from_env()
     app = dclient.containers.get(app_name)
+
+    # Check for self-action to prevent crash on restart
+    try:
+        bash_command = "head -1 /proc/self/cgroup|cut -d/ -f3"
+        self_id = subprocess.check_output(["bash", "-c", bash_command]).decode("UTF-8").strip()
+    except:
+        self_id = None
+
+    if self_id and (app.id == self_id or app.short_id in self_id) and action == "restart":
+         # Launch restart in background after a delay to allow response to return
+        def delayed_restart(container):
+             time.sleep(2)
+             container.restart()
+
+        import threading
+        t = threading.Thread(target=delayed_restart, args=(app,))
+        t.start()
+
+        # Return success immediately
+        return get_apps()
+
     _action = getattr(app, action)
     if action == "remove":
         try:

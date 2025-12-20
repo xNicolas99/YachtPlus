@@ -42,11 +42,19 @@ async def container_exec(
     container_id: str,
     shell: str = "/bin/sh",
     cols: int = 80,
-    rows: int = 24
+    rows: int = 24,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """
     WebSocket endpoint for container exec (terminal)
     """
+    # Check Auth
+    try:
+        auth_check(Authorize)
+    except Exception as e:
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
 
     docker = aiodocker.Docker()
