@@ -121,20 +121,19 @@ export default {
         this.websocket.close();
       }
 
+      // Get auth token from store or localStorage
+      const token = this.$store.state.auth.token || localStorage.getItem('authToken') || localStorage.getItem('access_token_cookie'); // Adjust key as needed
+
+      if (!token) {
+        if (this.$toast) this.$toast.error('Authentication required. Please log in again.');
+        return;
+      }
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const host = window.location.hostname;
       const port = window.location.port ? `:${window.location.port}` : '';
-      // If served via proxy (e.g. nginx port 8000 -> backend), window.location.port might be empty or 8080.
-      // But typically api is at /api.
-      // The backend endpoint is /api/containers/...
-      // If dev mode: backend on 8000, frontend on 8080. Proxy in vue.config.js handles /api.
-      // But WebSockets don't always go through the dev server proxy correctly if not configured.
-      // However, usually it works if relative path is used but WebSocket constructor needs absolute URL.
 
-      // We should use the same host/port as the page if it's served from same origin (production).
-      // In dev, we might need to point to 8000.
-      // Assuming standard deployment or proxy:
-      const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
+      const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?token=${encodeURIComponent(token)}&shell=${this.selectedShell}`;
 
       this.websocket = new WebSocket(wsUrl);
 
@@ -146,6 +145,18 @@ export default {
       };
 
       this.websocket.onmessage = (event) => {
+        try {
+            // Check if it's a JSON error message
+            const data = JSON.parse(event.data);
+            if (data.error) {
+                if (this.$toast) this.$toast.error(`Shell error: ${data.error}`);
+                this.websocket.close();
+                return;
+            }
+        } catch (e) {
+            // Not JSON, assume terminal output
+        }
+
         if (event.data instanceof Blob) {
             const reader = new FileReader();
             reader.onload = () => {
@@ -160,18 +171,22 @@ export default {
       this.websocket.onclose = (event) => {
         this.isConnected = false;
         this.terminal.write(`\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`);
-        if (event.code === 1008 || event.code === 1011) {
-             if (this.$toast) this.$toast.error("Connection closed: Container might have stopped.");
-             // Requirement: "Bei Container-Stop während Session: Modal schließen mit Info-Toast"
-             // If we want to auto-close:
-             // this.close();
+
+        if (event.code === 1008) {
+             if (this.$toast) this.$toast.error('Unauthorized: Session expired. Please log in again.');
+        } else if (event.code === 1003) {
+             if (this.$toast) this.$toast.warning(`Connection closed: ${event.reason || 'Container not available'}`);
+        } else if (event.code === 1011) {
+             if (this.$toast) this.$toast.error("Internal server error.");
+        } else if (event.code !== 1000) {
+             // Generic close
         }
       };
 
       this.websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
         this.terminal.write('\r\n\x1b[31mConnection Error\x1b[0m\r\n');
-        if (this.$toast) this.$toast.error("WebSocket connection error");
+        if (this.$toast) this.$toast.error("WebSocket connection error. Check if container is running.");
       };
 
       this.terminal.onData(data => {

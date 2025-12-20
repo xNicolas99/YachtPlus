@@ -70,8 +70,10 @@ def check_app_update(app_name):
             status_code=exc.response.status_code, detail=exc.explanation
         )
 
-    if app.attrs["Config"]["Image"]:
-        if _check_updates(app.attrs["Config"]["Image"]):
+    # Safe access to Config and Image
+    config = app.attrs.get("Config")
+    if config and config.get("Image"):
+        if _check_updates(config["Image"]):
             app.attrs.update(conv2dict("isUpdatable", True))
     app.attrs.update(conv2dict("name", app.name))
     app.attrs.update(conv2dict("ports", app.ports))
@@ -304,7 +306,7 @@ Runs an app action (ie. docker stop, docker start, etc.)
 """
 
 
-def app_action(app_name, action):
+def app_action(app_name, action, background_tasks=None):
     err = None
     dclient = docker.from_env()
     app = dclient.containers.get(app_name)
@@ -318,13 +320,17 @@ def app_action(app_name, action):
 
     if self_id and (app.id == self_id or app.short_id in self_id) and action == "restart":
          # Launch restart in background after a delay to allow response to return
-        def delayed_restart(container):
-             time.sleep(2)
-             container.restart()
+        if background_tasks:
+            background_tasks.add_task(app.restart, timeout=10)
+        else:
+             # Fallback if no background_tasks provided (should not happen if router is updated)
+            def delayed_restart(container):
+                 time.sleep(2)
+                 container.restart()
 
-        import threading
-        t = threading.Thread(target=delayed_restart, args=(app,))
-        t.start()
+            import threading
+            t = threading.Thread(target=delayed_restart, args=(app,))
+            t.start()
 
         # Return success immediately
         return get_apps()

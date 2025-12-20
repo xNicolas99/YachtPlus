@@ -235,16 +235,48 @@ async def calculate_cpu_percent(d):
 
 async def calculate_cpu_percent2(d, previous_cpu, previous_system):
     cpu_percent = 0.0
-    cpu_total = float(d["cpu_stats"]["cpu_usage"]["total_usage"])
-    cpu_delta = cpu_total - previous_cpu
-    cpu_system = float(d["cpu_stats"]["system_cpu_usage"])
-    system_delta = cpu_system - previous_system
-    # online_cpus = d["cpu_stats"].get(
-    #     "online_cpus", len(d["cpu_stats"]["cpu_usage"]["percpu_usage"])
-    # )
-    if system_delta > 0.0:
-        # cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0
-        cpu_percent = (cpu_delta / system_delta) * 100.0
+    try:
+        cpu_stats = d.get("cpu_stats", {})
+        precpu_stats = d.get("precpu_stats", {})
+
+        cpu_usage = float(cpu_stats.get("cpu_usage", {}).get("total_usage", 0))
+        precpu_usage = float(precpu_stats.get("cpu_usage", {}).get("total_usage", 0))
+
+        system_cpu_usage = float(cpu_stats.get("system_cpu_usage", 0))
+        presystem_cpu_usage = float(precpu_stats.get("system_cpu_usage", 0))
+
+        # Check for online CPUs
+        online_cpus = cpu_stats.get("online_cpus")
+        if not online_cpus:
+            percpu_usage = cpu_stats.get("cpu_usage", {}).get("percpu_usage", [])
+            online_cpus = len(percpu_usage) if percpu_usage else 1
+
+        # Use previous values if passed (this function signature suggests we are calculating delta from persisted state
+        # but the logic inside process_app_stats calls this with prev_cpu accumulators.
+        # However, typically docker stats have precpu_stats inside the json.
+        # If we use the arguments passed:
+        cpu_total = cpu_usage
+        cpu_system = system_cpu_usage
+
+        cpu_delta = cpu_total - previous_cpu
+        system_delta = cpu_system - previous_system
+
+        # If previous_cpu is 0 (first run), we might fallback to precpu_stats from the payload if available
+        if previous_cpu == 0 and previous_system == 0:
+            cpu_delta = cpu_usage - precpu_usage
+            system_delta = system_cpu_usage - presystem_cpu_usage
+
+        if system_delta > 0.0 and cpu_delta > 0.0:
+            cpu_percent = (cpu_delta / system_delta) * float(online_cpus) * 100.0
+
+        # Sanity check
+        cpu_percent = max(0.0, min(cpu_percent, 100.0 * float(online_cpus)))
+
+    except Exception as e:
+        print(f"Error calculating CPU: {e}")
+        cpu_total = 0.0
+        cpu_system = 0.0
+
     return cpu_percent, cpu_system, cpu_total
 
 
