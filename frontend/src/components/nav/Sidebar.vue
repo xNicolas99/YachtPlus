@@ -73,7 +73,7 @@ export default {
         icon: "mdi-folder"
       },
       {
-        text: "Projects",
+        text: "Docker-Compose",
         to: "/projects",
         icon: "mdi-book-open"
       },
