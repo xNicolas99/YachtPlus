@@ -1,7 +1,7 @@
 <template>
   <v-app-bar app clipped-left color="secondary">
     <img :src="themeLogo()" class="main-logo" />
-    <v-toolbar-title class="ml-2">Yacht</v-toolbar-title>
+    <v-toolbar-title class="ml-2">YachtPlus</v-toolbar-title>
     <v-toolbar-title class="mx-auto font-weight-bold hidden-sm-and-down">
       {{ $route.name }}
     </v-toolbar-title>

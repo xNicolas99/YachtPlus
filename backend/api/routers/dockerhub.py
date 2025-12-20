@@ -1,6 +1,9 @@
 import httpx
 from fastapi import APIRouter, Query
 from datetime import datetime, timedelta
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -28,8 +31,10 @@ async def fetch_docker_hub_repo(namespace: str, name: str):
                 _cache[cache_key] = data
                 _cache_expiry[cache_key] = datetime.now() + timedelta(hours=1)
                 return data
+            else:
+                 logger.error(f"Docker Hub API Error for {cache_key}: Status {response.status_code}")
         except Exception as e:
-            print(f"Error fetching Docker Hub data for {cache_key}: {e}")
+            logger.error(f"Error fetching Docker Hub data for {cache_key}: {e}")
             pass
 
     return None
@@ -112,7 +117,9 @@ async def search_docker_hub(query: str = Query(..., min_length=2)):
                         for item in data.get("results", [])
                     ]
                 }
+            else:
+                 logger.error(f"Docker Hub Search API Error: Status {response.status_code}")
         except Exception as e:
-             print(f"Docker Hub Search Error: {e}")
+             logger.error(f"Docker Hub Search Error: {e}")
 
     return {"results": []}

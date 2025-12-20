@@ -1,72 +1,59 @@
-This project is based on Yacht-sh/Yacht by wickedyoda, which is licensed under the Creative Commons Attribution 4.0 International License.
-
-Original source: https://github.com/Yacht-sh/Yacht Copyright (c) 2025 wickedyoda
-
----
-
 # YachtPlus
 
-**YachtPlus** is a container management UI designed to simplify the deployment and management of Docker containers. It provides a user-friendly interface for managing templates, applications, and server settings.
+YachtPlus is a container management UI with a focus on templates and 1-click deployments.
 
 ## Features
 
-*   **Dashboard**: Visualize CPU and memory usage of your containers.
-*   **Templates**: Easily deploy applications using predefined templates.
-*   **User Management**: Secure authentication with granular permissions.
-*   **Two-Factor Authentication (2FA)**: Enhanced security for administrator accounts.
-*   **Dark Mode**: Built-in dark theme for comfortable viewing.
-*   **Projects**: Manage Docker Compose projects directly from the UI.
+- **Vue 2 + FastAPI**: Built with a robust modern stack.
+- **Docker Management**: Manage containers, images, volumes, and networks properly.
+- **Docker-Compose Support**: Create and manage Docker Compose projects (formerly "Projects") directly from the UI.
+- **Templates**: One-click deployment of popular applications using templates (Docker Hub integration).
+- **Resources**: View and manage server resources.
 
 ## Installation
 
-### Docker CLI
-
-You can run YachtPlus using the following command:
-
-```bash
-docker run -d \
-  --name yachtplus \
-  -p 8000:8000 \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v yachtplus_data:/config \
-  ghcr.io/xnicolas99/yachtplus:latest
-```
-
-### Docker Compose
-
-Create a `docker-compose.yml` file:
+### Recommended: Docker Compose
 
 ```yaml
 version: "3"
 services:
   yachtplus:
-    image: ghcr.io/xnicolas99/yachtplus:latest
+    image: ghcr.io/yachtplus/yachtplus:devel
     container_name: yachtplus
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - 8000:8000
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - yachtplus_data:/config
-    # Optional: Set PUID/PGID if needed for permissions
-    # environment:
-    #   - PUID=1000
-    #   - PGID=1000
-
-volumes:
-  yachtplus_data:
+      - ./config:/config
 ```
 
-Then run:
+Run `docker-compose up -d`.
+
+### Initial Setup
+
+1. Open `http://<your-ip>:8000`.
+2. Follow the setup wizard to create an administrator account.
+3. **Important**: 2FA is required for the admin account.
+
+## Development
+
+### Backend (FastAPI)
 
 ```bash
-docker compose up -d
+cd backend
+pip install -r requirements.txt
+python main.py
 ```
 
-## Getting Started
+### Frontend (Vue.js)
 
-1.  Open your browser and navigate to `http://<your-server-ip>:8000`.
-2.  You will be redirected to the **Setup** wizard.
-3.  Follow the instructions to create your administrator account and configure Two-Factor Authentication (2FA).
-    *   *Note: 2FA is mandatory for the initial administrator account.*
-4.  Once setup is complete, you can log in and start managing your containers!
+```bash
+cd frontend
+npm install
+npm run serve
+```
+
+## License
+
+MIT

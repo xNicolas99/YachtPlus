@@ -1,10 +1,15 @@
-from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query
 from sse_starlette.sse import EventSourceResponse
-from api.auth.jwt import get_auth_wrapper
+from api.auth.jwt import get_auth_wrapper, get_secret_key
 from api.auth.auth import auth_check
 import api.actions.containers as actions
 import asyncio
 import aiodocker
+import logging
+import jwt
+import json
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -36,10 +41,6 @@ async def get_container_stats(
     auth_check(Authorize)
     return await actions.get_stats(container_id)
 
-from fastapi import Query
-import jwt
-from api.auth.jwt import get_secret_key
-
 @router.websocket("/{container_id}/exec")
 async def container_exec(
     websocket: WebSocket,
@@ -60,7 +61,7 @@ async def container_exec(
              raise Exception("No token")
         jwt.decode(token, get_secret_key(), algorithms=["HS256"])
     except Exception as e:
-        print(f"WebSocket Auth Error: {e}")
+        logger.error(f"WebSocket Auth Error: {e}")
         await websocket.send_json({"error": "Unauthorized"})
         await websocket.close(code=1008)
         return
@@ -79,16 +80,17 @@ async def container_exec(
                  await websocket.close(code=1008, reason="Container not running")
                  return
         except Exception as e:
+            logger.error(f"Container not found error: {e}")
             await websocket.close(code=1008, reason="Container not found")
             return
 
         exec_instance = await container.exec(
-            Cmd=[shell],
-            AttachStdin=True,
-            AttachStdout=True,
-            AttachStderr=True,
-            Tty=True,
-            Env=["TERM=xterm"]
+            cmd=[shell],
+            stdin=True,
+            stdout=True,
+            stderr=True,
+            tty=True,
+            env=["TERM=xterm"]
         )
 
         # Now start it. We need a stream.
@@ -99,9 +101,9 @@ async def container_exec(
 
         # We need to handle resizing.
         try:
-            await exec_instance.resize(width=cols, height=rows)
+            await exec_instance.resize(w=cols, h=rows)
         except Exception as e:
-            print(f"Resize error: {e}")
+            logger.error(f"Resize error: {e}")
 
         # Task to read from docker and send to websocket
         async def read_from_docker():
@@ -116,7 +118,7 @@ async def container_exec(
                     if msg.data:
                          await websocket.send_bytes(msg.data)
             except Exception as e:
-                print(f"Read from docker error: {e}")
+                logger.error(f"Read from docker error: {e}")
 
         # Task to read from websocket and write to docker
         async def write_to_docker():
@@ -131,11 +133,10 @@ async def container_exec(
                         try:
                             cmd = None
                             if input_data.startswith("{"):
-                                import json
                                 cmd = json.loads(input_data)
 
                             if cmd and cmd.get("type") == "resize":
-                                await exec_instance.resize(width=cmd["cols"], height=cmd["rows"])
+                                await exec_instance.resize(w=cmd["cols"], h=cmd["rows"])
                                 continue
                         except:
                             pass
@@ -152,7 +153,7 @@ async def container_exec(
             except WebSocketDisconnect:
                 pass
             except Exception as e:
-                print(f"Write to docker error: {e}")
+                logger.error(f"Write to docker error: {e}")
 
         # Run tasks
         reader = asyncio.create_task(read_from_docker())
@@ -163,11 +164,15 @@ async def container_exec(
         reader.cancel()
         writer.cancel()
 
+    except aiodocker.exceptions.DockerError as e:
+        logger.error(f"Docker error in shell exec: {e}")
+        await websocket.close(code=1011, reason="Docker container error")
     except Exception as e:
-        print(f"Exec Error: {e}")
+        logger.error(f"Unexpected error in shell exec: {e}")
         try:
-            await websocket.close(code=1011)
+             await websocket.close(code=1011, reason="Internal server error")
         except:
-            pass # Socket might be already closed
+             pass
     finally:
-        await docker.close()
+        if docker:
+            await docker.close()
