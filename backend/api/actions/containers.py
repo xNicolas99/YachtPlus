@@ -44,9 +44,21 @@ async def get_stats(container_id: str):
             raise HTTPException(status_code=409, detail="Container is not running")
 
         try:
-            stats = await container.stats(stream=False)
+            # Use stream=True to get valid precpu_stats for accurate CPU calculation
+            stats_stream = container.stats(stream=True)
+            # Get 2 samples for delta calculation
+            sample1 = await stats_stream.__anext__()
+            sample2 = await stats_stream.__anext__()
+            # Close stream explicitly (though garbage collection usually handles it)
+            # aiodocker stream doesn't have aclose(), we just stop iterating
         except aiodocker.exceptions.DockerError as e:
              raise HTTPException(status_code=500, detail=str(e))
+        except StopAsyncIteration:
+             raise HTTPException(status_code=500, detail="Could not fetch stats stream")
+
+        # Use sample2 as the current stats, sample1 as previous
+        stats = sample2
+        prev_stats = sample1
 
         # Calculate Memory
         mem_current = 0
@@ -63,7 +75,8 @@ async def get_stats(container_id: str):
         cpu_percent = 0.0
         try:
             cpu_stats = stats.get("cpu_stats", {})
-            precpu_stats = stats.get("precpu_stats", {})
+            # Use prev_stats from the stream instead of internal 'precpu_stats' which is often empty in first sample
+            precpu_stats = prev_stats.get("cpu_stats", {})
 
             cpu_usage = cpu_stats.get("cpu_usage", {})
             pre_cpu_usage = precpu_stats.get("cpu_usage", {})

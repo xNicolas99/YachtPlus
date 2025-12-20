@@ -338,14 +338,12 @@
 
     <!-- Logs and Terminal Modals -->
     <ContainerLogs
-      v-if="selectedContainerId"
       :visible="logsDialog"
       :containerId="selectedContainerId"
       :containerName="selectedContainerName"
       @close="logsDialog = false"
     />
     <ContainerTerminal
-      v-if="selectedContainerId"
       :visible="terminalDialog"
       :containerId="selectedContainerId"
       :containerName="selectedContainerName"
