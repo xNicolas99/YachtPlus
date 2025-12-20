@@ -74,12 +74,15 @@ async def container_exec(
         # Ensure container exists
         try:
             container = await docker.containers.get(container_id)
+            container_info = await container.show()
+            if container_info['State']['Status'] != 'running':
+                 await websocket.close(code=1008, reason="Container not running")
+                 return
         except Exception as e:
             await websocket.close(code=1008, reason="Container not found")
             return
 
-        exec_create_resp = await docker.exec.create(
-            container_id,
+        exec_instance = await container.exec(
             Cmd=[shell],
             AttachStdin=True,
             AttachStdout=True,
@@ -88,15 +91,17 @@ async def container_exec(
             Env=["TERM=xterm"]
         )
 
-        exec_id = exec_create_resp["Id"]
-
         # Now start it. We need a stream.
-        # The `start` method in aiodocker returns a `Stream` object if detach=False.
-        stream = await docker.exec.start(exec_id, tty=True, detach=False)
+        stream = await exec_instance.start(detach=False)
+
+        if stream is None:
+             raise Exception("Failed to start exec stream")
 
         # We need to handle resizing.
-        # aiodocker `exec.resize(exec_id, w, h)`
-        await docker.exec.resize(exec_id, width=cols, height=rows)
+        try:
+            await exec_instance.resize(width=cols, height=rows)
+        except Exception as e:
+            print(f"Resize error: {e}")
 
         # Task to read from docker and send to websocket
         async def read_from_docker():
@@ -111,7 +116,7 @@ async def container_exec(
                     if msg.data:
                          await websocket.send_bytes(msg.data)
             except Exception as e:
-                pass
+                print(f"Read from docker error: {e}")
 
         # Task to read from websocket and write to docker
         async def write_to_docker():
@@ -130,7 +135,7 @@ async def container_exec(
                                 cmd = json.loads(input_data)
 
                             if cmd and cmd.get("type") == "resize":
-                                await docker.exec.resize(exec_id, width=cmd["cols"], height=cmd["rows"])
+                                await exec_instance.resize(width=cmd["cols"], height=cmd["rows"])
                                 continue
                         except:
                             pass
@@ -147,7 +152,7 @@ async def container_exec(
             except WebSocketDisconnect:
                 pass
             except Exception as e:
-                pass
+                print(f"Write to docker error: {e}")
 
         # Run tasks
         reader = asyncio.create_task(read_from_docker())
@@ -159,6 +164,10 @@ async def container_exec(
         writer.cancel()
 
     except Exception as e:
-        await websocket.close(code=1011)
+        print(f"Exec Error: {e}")
+        try:
+            await websocket.close(code=1011)
+        except:
+            pass # Socket might be already closed
     finally:
         await docker.close()
