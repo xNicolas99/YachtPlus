@@ -10,10 +10,21 @@
         />
       </v-fade-transition>
       <v-card-title class="primary font-weight-bold">
-        Projects
-        <v-btn class="ml-2" color="secondary" to="/projects/_/edit">
-          <v-icon>mdi-plus</v-icon>
-        </v-btn>
+        Compose Stacks
+        <v-tooltip bottom>
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn
+              class="ml-2"
+              color="secondary"
+              to="/projects/_/edit"
+              v-bind="attrs"
+              v-on="on"
+            >
+              <v-icon>mdi-plus</v-icon>
+            </v-btn>
+          </template>
+          <span>Add Compose Stack</span>
+        </v-tooltip>
         <v-spacer />
         <v-text-field
           v-model="search"
@@ -222,10 +233,10 @@
     <v-dialog v-if="selectedProject" v-model="deleteDialog" max-width="400">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
-          Delete {{ selectedProject["name"] }} project?
+          Delete {{ selectedProject["name"] }} stack?
         </v-card-title>
         <v-card-text>
-          The project directory and all files within it will be permanently
+          The stack directory and all files within it will be permanently
           deleted. This action cannot be revoked.
         </v-card-text>
         <v-card-actions>
@@ -241,7 +252,7 @@
               deleteDialog = false;
             "
           >
-            Delete
+            Delete Stack
           </v-btn>
         </v-card-actions>
       </v-card>
