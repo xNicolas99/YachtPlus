@@ -77,13 +77,17 @@
 
             <v-card-actions>
               <v-row dense no-gutters class="caption grey--text">
-                <v-col cols="6" class="d-flex align-center">
+                <v-col cols="4" class="d-flex align-center">
                   <v-icon x-small class="mr-1">mdi-download</v-icon>
                   {{ formatNumber(image.pull_count) }}
                 </v-col>
-                <v-col cols="6" class="d-flex align-center">
+                <v-col cols="4" class="d-flex align-center">
                   <v-icon x-small class="mr-1">mdi-star</v-icon>
                   {{ formatNumber(image.star_count) }}
+                </v-col>
+                <v-col cols="4" class="d-flex align-center" v-if="image.last_updated">
+                  <v-icon x-small class="mr-1">mdi-calendar-clock</v-icon>
+                  {{ formatDate(image.last_updated) }}
                 </v-col>
               </v-row>
               <v-spacer></v-spacer>
@@ -116,13 +120,17 @@
           <p class="body-1">{{ selectedImage.description }}</p>
 
           <v-row class="mb-2">
-            <v-col cols="6">
+            <v-col cols="4">
               <v-icon>mdi-star</v-icon>
               {{ formatNumber(selectedImage.star_count) }} Stars
             </v-col>
-            <v-col cols="6">
+            <v-col cols="4">
               <v-icon>mdi-download</v-icon>
               {{ formatNumber(selectedImage.pull_count) }} Pulls
+            </v-col>
+            <v-col cols="4" v-if="selectedImage.last_updated">
+              <v-icon>mdi-calendar-clock</v-icon>
+              {{ formatDate(selectedImage.last_updated) }}
             </v-col>
           </v-row>
 
@@ -208,6 +216,19 @@ export default {
       if (num >= 1000) return (num / 1000).toFixed(1) + "K";
       return num.toString();
     },
+    formatDate(dateString) {
+      if (!dateString) return "N/A";
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString(undefined, {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      } catch (e) {
+        return dateString;
+      }
+    },
     async fetchImages() {
       this.loading = true;
       try {
@@ -271,7 +292,8 @@ export default {
         const parts = image.full_name.replace("ghcr.io/", "").split("/");
         return `https://github.com/${parts[0]}?tab=packages`; // Best effort
       } else if (image.source === "linuxserver") {
-        return `https://fleet.linuxserver.io/image/${image.name}`;
+        if (image.github_url) return image.github_url;
+        return `https://docs.linuxserver.io/images/docker-${image.name}`;
       }
       return "#";
     }

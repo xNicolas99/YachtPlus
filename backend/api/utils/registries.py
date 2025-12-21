@@ -109,7 +109,8 @@ async def fetch_dockerhub_image_info(client: httpx.AsyncClient, image_name: str)
                 "is_official": data.get("is_official", False),
                 "full_name": f"{data.get('namespace')}/{data.get('name')}",
                 "logo_url": None, # Docker Hub API doesn't easily expose this publicly without auth sometimes
-                "source": "dockerhub"
+                "source": "dockerhub",
+                "last_updated": data.get("last_updated")
             }
     except Exception as e:
         logger.error(f"Error fetching {image_name}: {e}")
@@ -155,7 +156,8 @@ async def fetch_ghcr_popular() -> List[Dict]:
                         "is_official": False,
                         "full_name": f"ghcr.io/{image}",
                         "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr"
+                        "source": "ghcr",
+                        "last_updated": data.get("updated_at")
                     })
                 else:
                     # Fallback if API fails (auth limits)
@@ -168,7 +170,8 @@ async def fetch_ghcr_popular() -> List[Dict]:
                         "is_official": False,
                         "full_name": f"ghcr.io/{image}",
                         "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr"
+                        "source": "ghcr",
+                        "last_updated": None
                     })
             except Exception as e:
                 logger.error(f"Error fetching GHCR {image}: {e}")
@@ -177,35 +180,36 @@ async def fetch_ghcr_popular() -> List[Dict]:
 
 async def fetch_linuxserver_popular() -> List[Dict]:
     """
-    Fetch from LinuxServer.io Fleet API.
-    https://fleet.linuxserver.io/api/v1/images
+    Fetch from LinuxServer.io API.
+    https://api.linuxserver.io/api/v1/images
     """
-    url = "https://fleet.linuxserver.io/api/v1/images"
+    url = "https://api.linuxserver.io/api/v1/images"
     result = []
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(url, timeout=10.0)
             if resp.status_code == 200:
                 data = resp.json()
-                # data['data'] is list
-                images = data.get('data', [])
-                # Sort by pulls? They have 'pulls' field.
-                images.sort(key=lambda x: x.get('pulls', 0), reverse=True)
+                # data['data']['repositories']['linuxserver'] is the list
+                images = data.get('data', {}).get('repositories', {}).get('linuxserver', [])
+
+                # Sort by monthly pulls (descending)
+                images.sort(key=lambda x: x.get('monthly_pulls', 0) or 0, reverse=True)
 
                 for img in images[:50]: # Top 50
-                    # img structure: { "name": "plex", "github_user": "linuxserver", "pulls": 123, "stars": 123, "description": ... }
-                    # Docker Hub image usually
-                    repo = img.get('repository', {}).get('name') # e.g. linuxserver/plex
+                    # img structure: { "name": "plex", "monthly_pulls": 123, "stars": 123, "description": ..., "version_timestamp": ... }
                     result.append({
                         "name": img.get('name'),
                         "namespace": "linuxserver",
                         "description": img.get('description', ""),
-                        "pull_count": img.get('pulls', 0),
+                        "pull_count": img.get('monthly_pulls', 0),
                         "star_count": img.get('stars', 0),
                         "is_official": False,
-                        "full_name": repo or f"linuxserver/{img.get('name')}",
-                        "logo_url": img.get('logo_url') or "https://www.linuxserver.io/img/logo.png",
-                        "source": "linuxserver"
+                        "full_name": f"linuxserver/{img.get('name')}",
+                        "logo_url": "https://www.linuxserver.io/img/logo.png", # The API doesn't seem to return a logo URL for the image itself
+                        "source": "linuxserver",
+                        "last_updated": img.get('version_timestamp'),
+                        "github_url": img.get('github_url')
                     })
     except Exception as e:
         logger.error(f"Error fetching LSIO images: {e}")
@@ -248,7 +252,8 @@ async def search_dockerhub(query: str) -> List[Dict]:
                         "is_official": item.get("is_official", False),
                         "full_name": f"{item.get('namespace')}/{item.get('name')}",
                         "logo_url": None,
-                        "source": "dockerhub"
+                        "source": "dockerhub",
+                        "last_updated": item.get("last_updated")
                     })
     except Exception as e:
         logger.error(f"Error searching Docker Hub: {e}")
@@ -277,7 +282,8 @@ async def search_ghcr(query: str) -> List[Dict]:
                         "is_official": False,
                         "full_name": f"ghcr.io/{item.get('owner', {}).get('login')}/{item.get('name')}",
                         "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr"
+                        "source": "ghcr",
+                        "last_updated": item.get("updated_at")
                     })
     except Exception as e:
         pass
@@ -304,7 +310,8 @@ async def search_ghcr(query: str) -> List[Dict]:
                         "is_official": False,
                         "full_name": f"ghcr.io/{full_name}",
                         "logo_url": item.get("owner", {}).get("avatar_url") or "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr"
+                        "source": "ghcr",
+                        "last_updated": item.get("updated_at")
                     })
     except Exception as e:
         pass
