@@ -97,10 +97,14 @@ async def container_exec(
              raise Exception("Failed to start exec stream")
 
         # We need to handle resizing.
-        try:
-            await exec_instance.resize(w=cols, h=rows)
-        except Exception as e:
-            logger.error(f"Resize error: {e}")
+        # Run resize in background to avoid blocking initial connection
+        async def resize_exec():
+            try:
+                await exec_instance.resize(w=cols, h=rows)
+            except Exception as e:
+                logger.error(f"Resize error: {e}")
+
+        asyncio.create_task(resize_exec())
 
         # Task to read from docker and send to websocket
         async def read_from_docker():
