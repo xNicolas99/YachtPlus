@@ -93,7 +93,9 @@ export default {
         theme: {
           background: '#000000',
           foreground: '#ffffff'
-        }
+        },
+        convertEol: true, // Helpful for some shell outputs
+        disableStdin: false // Ensure input is allowed (default)
       });
 
       this.fitAddon = new FitAddon();
@@ -133,18 +135,24 @@ export default {
 
       this.terminal.focus();
     },
-    handleContextPaste(e) {
+    async handleContextPaste(e) {
       e.preventDefault();
-      navigator.clipboard.readText()
-        .then(text => {
-           if (text && this.terminal) {
-             this.terminal.paste(text);
-           }
-        })
-        .catch(err => {
-           console.error('Failed to read clipboard: ', err);
-           if (this.$toast) this.$toast.error('Failed to paste from clipboard. Check permissions.');
-        });
+
+      // Try using the Clipboard API
+      if (navigator.clipboard && navigator.clipboard.readText) {
+          try {
+              const text = await navigator.clipboard.readText();
+              if (text && this.terminal) {
+                  this.terminal.paste(text);
+              }
+          } catch (err) {
+              console.error('Failed to read clipboard: ', err);
+              if (this.$toast) this.$toast.error('Failed to paste. Clipboard permission denied?');
+          }
+      } else {
+          // Fallback or notice
+          if (this.$toast) this.$toast.error('Clipboard API not supported in this context (requires HTTPS or localhost).');
+      }
     },
     connect() {
       if (this.websocket) {
@@ -175,17 +183,23 @@ export default {
       };
 
       this.websocket.onmessage = (event) => {
+        // Attempt to parse JSON only for error handling
+        let isJsonError = false;
         try {
-            // Check if it's a JSON error message
-            const data = JSON.parse(event.data);
-            if (data.error) {
-                if (this.$toast) this.$toast.error(`Shell error: ${data.error}`);
-                this.websocket.close();
-                return;
+            if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
+                const data = JSON.parse(event.data);
+                if (data.error) {
+                    isJsonError = true;
+                    if (this.$toast) this.$toast.error(`Shell error: ${data.error}`);
+                    this.websocket.close();
+                    return;
+                }
             }
         } catch (e) {
-            // Not JSON, assume terminal output
+            // Not JSON or parse error, treat as terminal output
         }
+
+        if (isJsonError) return;
 
         if (event.data instanceof Blob) {
             const reader = new FileReader();
@@ -200,7 +214,10 @@ export default {
 
       this.websocket.onclose = (event) => {
         this.isConnected = false;
-        this.terminal.write(`\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`);
+        // Check if terminal still exists before writing
+        if (this.terminal) {
+            this.terminal.write(`\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`);
+        }
 
         if (event.code === 1008) {
              if (this.$toast) this.$toast.error('Unauthorized: Session expired. Please log in again.');
@@ -208,14 +225,14 @@ export default {
              if (this.$toast) this.$toast.warning(`Connection closed: ${event.reason || 'Container not available'}`);
         } else if (event.code === 1011) {
              if (this.$toast) this.$toast.error("Internal server error.");
-        } else if (event.code !== 1000) {
-             // Generic close
         }
       };
 
       this.websocket.onerror = (error) => {
         console.error('WebSocket error:', error);
-        this.terminal.write('\r\n\x1b[31mConnection Error\x1b[0m\r\n');
+        if (this.terminal) {
+            this.terminal.write('\r\n\x1b[31mConnection Error\x1b[0m\r\n');
+        }
         if (this.$toast) this.$toast.error("WebSocket connection error. Check if container is running.");
       };
 
@@ -248,7 +265,9 @@ export default {
         }
     },
     reconnect() {
-        this.terminal.clear();
+        if (this.terminal) {
+            this.terminal.clear();
+        }
         this.connect();
     },
     close() {
