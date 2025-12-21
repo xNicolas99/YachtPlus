@@ -91,6 +91,7 @@ async def container_exec(
             stderr=True,
             privileged=True,
             tty=True,
+            env=["TERM=xterm"]
         )
 
         # Now start it. We need a stream.
@@ -116,6 +117,7 @@ async def container_exec(
                     # msg is bytes?
                     # xterm expects string or bytes.
                     if msg.data:
+                         logger.debug(f"OUT: {msg.data}")
                          await websocket.send_bytes(msg.data)
             except Exception as e:
                 logger.error(f"Read from docker error: {e}")
@@ -142,6 +144,7 @@ async def container_exec(
                             pass
 
                         # Send to docker
+                        logger.debug(f"IN: {input_data.encode()}")
                         await stream.write_in(input_data.encode())
 
                     elif "bytes" in data:

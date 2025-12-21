@@ -13,7 +13,13 @@
 
         <v-select
           v-model="selectedShell"
-          :items="['/bin/sh', '/bin/bash', '/bin/ash', '/bin/zsh', '/usr/bin/fish']"
+          :items="[
+            '/bin/sh',
+            '/bin/bash',
+            '/bin/ash',
+            '/bin/zsh',
+            '/usr/bin/fish'
+          ]"
           dense
           hide-details
           outlined
@@ -24,12 +30,12 @@
         ></v-select>
 
         <v-tooltip bottom>
-           <template v-slot:activator="{ on, attrs }">
-              <v-btn icon @click="reconnect" v-bind="attrs" v-on="on">
-                <v-icon>mdi-refresh</v-icon>
-              </v-btn>
-           </template>
-           <span>Reconnect</span>
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn icon @click="reconnect" v-bind="attrs" v-on="on">
+              <v-icon>mdi-refresh</v-icon>
+            </v-btn>
+          </template>
+          <span>Reconnect</span>
         </v-tooltip>
 
         <v-btn icon @click="close">
@@ -45,9 +51,9 @@
 </template>
 
 <script>
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+import { Terminal } from "xterm";
+import { FitAddon } from "xterm-addon-fit";
+import "xterm/css/xterm.css";
 
 export default {
   props: {
@@ -60,7 +66,7 @@ export default {
     terminal: null,
     fitAddon: null,
     websocket: null,
-    selectedShell: '/bin/sh',
+    selectedShell: "/bin/sh",
     resizeObserver: null,
     isConnected: false,
     copyTimeout: null
@@ -78,7 +84,7 @@ export default {
     },
     dialog(val) {
       if (!val) {
-        this.$emit('close');
+        this.$emit("close");
       }
     }
   },
@@ -91,8 +97,8 @@ export default {
         fontSize: 14,
         fontFamily: 'Menlo, Monaco, "Courier New", monospace',
         theme: {
-          background: '#000000',
-          foreground: '#ffffff'
+          background: "#000000",
+          foreground: "#ffffff"
         },
         convertEol: true, // Helpful for some shell outputs
         disableStdin: false // Ensure input is allowed (default)
@@ -104,16 +110,16 @@ export default {
 
       // Delay fit slightly to ensure DOM is ready
       setTimeout(() => {
-          this.fit();
+        this.fit();
       }, 100);
 
       this.connect();
 
-      window.addEventListener('resize', this.handleResize);
+      window.addEventListener("resize", this.handleResize);
       this.terminal.onResize(this.sendResize);
 
       this.resizeObserver = new ResizeObserver(() => {
-          this.fit();
+        this.fit();
       });
       this.resizeObserver.observe(this.$refs.terminal);
 
@@ -121,17 +127,20 @@ export default {
       this.terminal.onSelectionChange(() => {
         if (this.copyTimeout) clearTimeout(this.copyTimeout);
         this.copyTimeout = setTimeout(() => {
-            const selection = this.terminal.getSelection();
-            if (selection) {
-              navigator.clipboard.writeText(selection).catch(err => {
-                 console.error('Failed to copy text: ', err);
-              });
-            }
+          const selection = this.terminal.getSelection();
+          if (selection) {
+            navigator.clipboard.writeText(selection).catch(err => {
+              console.error("Failed to copy text: ", err);
+            });
+          }
         }, 200);
       });
 
       // Right-Click Paste
-      this.$refs.terminal.addEventListener('contextmenu', this.handleContextPaste);
+      this.$refs.terminal.addEventListener(
+        "contextmenu",
+        this.handleContextPaste
+      );
 
       this.terminal.focus();
     },
@@ -140,18 +149,22 @@ export default {
 
       // Try using the Clipboard API
       if (navigator.clipboard && navigator.clipboard.readText) {
-          try {
-              const text = await navigator.clipboard.readText();
-              if (text && this.terminal) {
-                  this.terminal.paste(text);
-              }
-          } catch (err) {
-              console.error('Failed to read clipboard: ', err);
-              if (this.$toast) this.$toast.error('Failed to paste. Clipboard permission denied?');
+        try {
+          const text = await navigator.clipboard.readText();
+          if (text && this.terminal) {
+            this.terminal.paste(text);
           }
+        } catch (err) {
+          console.error("Failed to read clipboard: ", err);
+          if (this.$toast)
+            this.$toast.error("Failed to paste. Clipboard permission denied?");
+        }
       } else {
-          // Fallback or notice
-          if (this.$toast) this.$toast.error('Clipboard API not supported in this context (requires HTTPS or localhost).');
+        // Fallback or notice
+        if (this.$toast)
+          this.$toast.error(
+            "Clipboard API not supported in this context (requires HTTPS or localhost)."
+          );
       }
     },
     connect() {
@@ -160,80 +173,104 @@ export default {
       }
 
       // Get auth token from store or localStorage
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token') || this.$store.state.auth.token || localStorage.getItem('authToken') || localStorage.getItem('access_token_cookie');
+      const token =
+        localStorage.getItem("token") ||
+        sessionStorage.getItem("token") ||
+        this.$store.state.auth.token ||
+        localStorage.getItem("authToken") ||
+        localStorage.getItem("access_token_cookie");
 
       if (!token) {
-        if (this.$toast) this.$toast.error('Authentication required. Please log in again.');
+        if (this.$toast)
+          this.$toast.error("Authentication required. Please log in again.");
         return;
       }
 
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.hostname;
-      const port = window.location.port ? `:${window.location.port}` : '';
+      const port = window.location.port ? `:${window.location.port}` : "";
 
-      const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?token=${encodeURIComponent(token)}&shell=${this.selectedShell}`;
+      const wsUrl = `${protocol}//${host}${port}/api/containers/${
+        this.containerId
+      }/exec?token=${encodeURIComponent(token)}&shell=${this.selectedShell}`;
 
       this.websocket = new WebSocket(wsUrl);
 
       this.websocket.onopen = () => {
         this.isConnected = true;
-        this.terminal.write('\r\n\x1b[32mConnected to ' + this.containerName + '\x1b[0m\r\n');
+        this.terminal.write(
+          "\r\n\x1b[32mConnected to " + this.containerName + "\x1b[0m\r\n"
+        );
         this.fit();
         this.terminal.focus();
       };
 
-      this.websocket.onmessage = (event) => {
+      this.websocket.onmessage = event => {
         // Attempt to parse JSON only for error handling
         let isJsonError = false;
         try {
-            if (typeof event.data === 'string' && event.data.trim().startsWith('{')) {
-                const data = JSON.parse(event.data);
-                if (data.error) {
-                    isJsonError = true;
-                    if (this.$toast) this.$toast.error(`Shell error: ${data.error}`);
-                    this.websocket.close();
-                    return;
-                }
+          if (
+            typeof event.data === "string" &&
+            event.data.trim().startsWith("{")
+          ) {
+            const data = JSON.parse(event.data);
+            if (data.error) {
+              isJsonError = true;
+              if (this.$toast) this.$toast.error(`Shell error: ${data.error}`);
+              this.websocket.close();
+              return;
             }
+          }
         } catch (e) {
-            // Not JSON or parse error, treat as terminal output
+          // Not JSON or parse error, treat as terminal output
         }
 
         if (isJsonError) return;
 
         if (event.data instanceof Blob) {
-            const reader = new FileReader();
-            reader.onload = () => {
-                this.terminal.write(reader.result);
-            };
-            reader.readAsText(event.data);
+          const reader = new FileReader();
+          reader.onload = () => {
+            this.terminal.write(reader.result);
+          };
+          reader.readAsText(event.data);
         } else {
-            this.terminal.write(event.data);
+          this.terminal.write(event.data);
         }
       };
 
-      this.websocket.onclose = (event) => {
+      this.websocket.onclose = event => {
         this.isConnected = false;
         // Check if terminal still exists before writing
         if (this.terminal) {
-            this.terminal.write(`\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`);
+          this.terminal.write(
+            `\r\n\x1b[31mConnection lost (Code: ${event.code})\x1b[0m\r\n`
+          );
         }
 
         if (event.code === 1008) {
-             if (this.$toast) this.$toast.error('Unauthorized: Session expired. Please log in again.');
+          if (this.$toast)
+            this.$toast.error(
+              "Unauthorized: Session expired. Please log in again."
+            );
         } else if (event.code === 1003) {
-             if (this.$toast) this.$toast.warning(`Connection closed: ${event.reason || 'Container not available'}`);
+          if (this.$toast)
+            this.$toast.warning(
+              `Connection closed: ${event.reason || "Container not available"}`
+            );
         } else if (event.code === 1011) {
-             if (this.$toast) this.$toast.error("Internal server error.");
+          if (this.$toast) this.$toast.error("Internal server error.");
         }
       };
 
-      this.websocket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      this.websocket.onerror = error => {
+        console.error("WebSocket error:", error);
         if (this.terminal) {
-            this.terminal.write('\r\n\x1b[31mConnection Error\x1b[0m\r\n');
+          this.terminal.write("\r\n\x1b[31mConnection Error\x1b[0m\r\n");
         }
-        if (this.$toast) this.$toast.error("WebSocket connection error. Check if container is running.");
+        if (this.$toast)
+          this.$toast.error(
+            "WebSocket connection error. Check if container is running."
+          );
       };
 
       this.terminal.onData(data => {
@@ -243,32 +280,37 @@ export default {
       });
     },
     fit() {
-        if (this.fitAddon && this.terminal) {
-            try {
-                this.fitAddon.fit();
-                this.sendResize({ cols: this.terminal.cols, rows: this.terminal.rows });
-            } catch (e) {
-                // Ignore fit errors if terminal not visible
-            }
+      if (this.fitAddon && this.terminal) {
+        try {
+          this.fitAddon.fit();
+          this.sendResize({
+            cols: this.terminal.cols,
+            rows: this.terminal.rows
+          });
+        } catch (e) {
+          // Ignore fit errors if terminal not visible
         }
+      }
     },
     handleResize() {
-        this.fit();
+      this.fit();
     },
     sendResize(size) {
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-            this.websocket.send(JSON.stringify({
-                type: 'resize',
-                cols: size.cols,
-                rows: size.rows
-            }));
-        }
+      if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+        this.websocket.send(
+          JSON.stringify({
+            type: "resize",
+            cols: size.cols,
+            rows: size.rows
+          })
+        );
+      }
     },
     reconnect() {
-        if (this.terminal) {
-            this.terminal.clear();
-        }
-        this.connect();
+      if (this.terminal) {
+        this.terminal.clear();
+      }
+      this.connect();
     },
     close() {
       this.dialog = false;
@@ -281,7 +323,10 @@ export default {
       if (this.terminal) {
         // Remove context menu listener
         if (this.$refs.terminal) {
-            this.$refs.terminal.removeEventListener('contextmenu', this.handleContextPaste);
+          this.$refs.terminal.removeEventListener(
+            "contextmenu",
+            this.handleContextPaste
+          );
         }
         this.terminal.dispose();
         this.terminal = null;
@@ -289,9 +334,9 @@ export default {
       if (this.copyTimeout) {
         clearTimeout(this.copyTimeout);
       }
-      window.removeEventListener('resize', this.handleResize);
+      window.removeEventListener("resize", this.handleResize);
       if (this.resizeObserver) {
-          this.resizeObserver.disconnect();
+        this.resizeObserver.disconnect();
       }
       this.isConnected = false;
     }

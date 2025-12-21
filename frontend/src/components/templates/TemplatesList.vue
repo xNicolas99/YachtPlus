@@ -44,8 +44,8 @@
             >
               <template slot="no-data">
                 <div>
-                  No templates available. <a href="/#/templates/new">Add</a> one to
-                  view information and launch apps from here.
+                  No templates available. <a href="/#/templates/new">Add</a> one
+                  to view information and launch apps from here.
                 </div>
               </template>
               <template v-slot:item.title="{ item }">
@@ -97,9 +97,9 @@
         </v-tab-item>
 
         <v-tab-item>
-           <v-card flat color="foreground" class="pa-4">
-             <DockerHubPopular />
-           </v-card>
+          <v-card flat color="foreground" class="pa-4">
+            <RegistryBrowser />
+          </v-card>
         </v-tab-item>
       </v-tabs-items>
     </v-card>
@@ -136,11 +136,11 @@
 
 <script>
 import { mapActions, mapState } from "vuex";
-import DockerHubPopular from "./DockerHubPopular.vue";
+import RegistryBrowser from "./RegistryBrowser.vue";
 
 export default {
   components: {
-    DockerHubPopular
+    RegistryBrowser
   },
   data() {
     return {

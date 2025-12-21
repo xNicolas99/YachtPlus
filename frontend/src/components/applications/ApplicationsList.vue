@@ -61,7 +61,8 @@
       <!-- Error State -->
       <div v-if="loadError" class="text-center py-4">
         <v-alert type="error" outlined text>
-          Apps konnten nicht geladen werden. Bitte Seite aktualisieren oder Logs prüfen.
+          Apps konnten nicht geladen werden. Bitte Seite aktualisieren oder Logs
+          prüfen.
         </v-alert>
         <v-btn color="primary" @click="retryLoad">Retry</v-btn>
       </div>
@@ -84,10 +85,10 @@
         <!-- Custom Loading Slot using Skeleton Loader -->
         <template v-slot:loading>
           <v-skeleton-loader
-             v-for="n in 5"
-             :key="n"
-             type="table-row"
-             class="my-2"
+            v-for="n in 5"
+            :key="n"
+            type="table-row"
+            class="my-2"
           ></v-skeleton-loader>
         </template>
 
@@ -104,7 +105,6 @@
                 </v-btn>
               </template>
               <v-list color="foreground" dense>
-
                 <!-- Inspect Group -->
                 <v-subheader>Inspect</v-subheader>
                 <v-list-item @click="viewLogs(item)">
@@ -204,7 +204,9 @@
                   <v-list-item-icon>
                     <v-icon color="error">mdi-delete</v-icon>
                   </v-list-item-icon>
-                  <v-list-item-title class="error--text">Remove</v-list-item-title>
+                  <v-list-item-title class="error--text"
+                    >Remove</v-list-item-title
+                  >
                 </v-list-item>
               </v-list>
             </v-menu>
@@ -330,9 +332,8 @@
 
         <!-- No Data slot -->
         <template v-slot:no-data>
-           <div class="text-center">No Apps Found</div>
+          <div class="text-center">No Apps Found</div>
         </template>
-
       </v-data-table>
     </v-card>
 
@@ -430,12 +431,12 @@ export default {
     },
     viewLogs(item) {
       this.selectedContainerId = item.Id;
-      this.selectedContainerName = item.name.replace('/', '');
+      this.selectedContainerName = item.name.replace("/", "");
       this.logsDialog = true;
     },
     openTerminal(item) {
       this.selectedContainerId = item.Id;
-      this.selectedContainerName = item.name.replace('/', '');
+      this.selectedContainerName = item.name.replace("/", "");
       this.terminalDialog = true;
     },
     convPorts(data) {
