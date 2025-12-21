@@ -41,7 +41,7 @@
       >
         <template slot="no-data">
           <div>
-            No Projects available.
+            No Compose available.
           </div>
         </template>
         <template v-slot:item.name="{ item }">
