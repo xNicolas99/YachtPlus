@@ -17,7 +17,9 @@
           :key="index"
           class="caption font-weight-medium mr-2"
         >
-          <v-icon x-small :color="item.color">{{ item.icon || 'mdi-circle' }}</v-icon>
+          <v-icon x-small :color="item.color">{{
+            item.icon || "mdi-circle"
+          }}</v-icon>
           {{ item.label }}: {{ item.count }}
         </div>
       </div>
@@ -51,6 +53,6 @@ export default {
 }
 .v-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 </style>

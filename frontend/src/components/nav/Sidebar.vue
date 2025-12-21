@@ -15,7 +15,13 @@
         <!-- Render divider if present in link object, but only if it's explicitly set to true -->
         <v-divider :key="`divider-${i}`" v-if="link.divider" class="my-4" />
 
-        <v-list-item :key="`item-${i}`" v-if="!link.subLinks" :to="link.to" exact class="mt-1">
+        <v-list-item
+          :key="`item-${i}`"
+          v-if="!link.subLinks"
+          :to="link.to"
+          exact
+          class="mt-1"
+        >
           <v-list-item-icon>
             <v-icon>{{ link.icon }}</v-icon>
           </v-list-item-icon>
@@ -48,8 +54,7 @@
         </v-list-group>
       </template>
     </v-list>
-    <template v-slot:append>
-    </template>
+    <template v-slot:append> </template>
   </v-navigation-drawer>
 </template>
 

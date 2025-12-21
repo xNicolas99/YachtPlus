@@ -17,7 +17,9 @@
               <v-icon>{{ following ? "mdi-pause" : "mdi-play" }}</v-icon>
             </v-btn>
           </template>
-          <span>{{ following ? "Pause Auto-scroll" : "Resume Auto-scroll" }}</span>
+          <span>{{
+            following ? "Pause Auto-scroll" : "Resume Auto-scroll"
+          }}</span>
         </v-tooltip>
 
         <v-menu offset-y>
@@ -83,13 +85,18 @@
           class="logs-output flex-grow-1 pa-4 black white--text"
           style="overflow-y: auto; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;"
         >
-          <div v-if="filteredLogs.length === 0 && logs.length > 0" class="grey--text">
+          <div
+            v-if="filteredLogs.length === 0 && logs.length > 0"
+            class="grey--text"
+          >
             No logs match your search.
           </div>
           <div v-else-if="logs.length === 0" class="grey--text">
             Waiting for logs...
           </div>
-          <div v-for="(line, index) in filteredLogs" :key="index">{{ line }}</div>
+          <div v-for="(line, index) in filteredLogs" :key="index">
+            {{ line }}
+          </div>
         </div>
       </v-card-text>
     </v-card>
@@ -168,25 +175,29 @@ export default {
 
       this.eventSource.onmessage = event => {
         try {
-            let data = event.data;
-            // Parse JSON if necessary
-            if (typeof data === 'string' && data.startsWith('{') && data.includes('"data":')) {
-                try {
-                    const parsed = JSON.parse(data);
-                    if (parsed.data) {
-                        data = parsed.data;
-                    }
-                } catch (e) {
-                    // Not JSON or parse failed, use raw
-                }
+          let data = event.data;
+          // Parse JSON if necessary
+          if (
+            typeof data === "string" &&
+            data.startsWith("{") &&
+            data.includes('"data":')
+          ) {
+            try {
+              const parsed = JSON.parse(data);
+              if (parsed.data) {
+                data = parsed.data;
+              }
+            } catch (e) {
+              // Not JSON or parse failed, use raw
             }
-            this.logs.push(data);
+          }
+          this.logs.push(data);
 
-            if (this.logs.length > 10000) {
-                this.logs.shift();
-            }
+          if (this.logs.length > 10000) {
+            this.logs.shift();
+          }
         } catch (e) {
-            console.error("Error parsing log line", e);
+          console.error("Error parsing log line", e);
         }
       };
 
@@ -234,7 +245,7 @@ export default {
       document.body.removeChild(element);
 
       if (this.$toast) {
-          this.$toast.success("Logs downloaded");
+        this.$toast.success("Logs downloaded");
       }
     }
   },

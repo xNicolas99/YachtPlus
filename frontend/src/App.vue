@@ -124,12 +124,16 @@ export default {
     updateGlobalBackground() {
       const theme = this.$vuetify.theme.dark ? "dark" : "light";
       const themes = this.$vuetify.theme.themes[theme];
-      const bgColor = themes.background || (theme === "dark" ? "#0F172A" : "#FFFFFF");
+      const bgColor =
+        themes.background || (theme === "dark" ? "#0F172A" : "#FFFFFF");
 
       document.documentElement.style.backgroundColor = bgColor;
       document.body.style.backgroundColor = bgColor;
       // Set CSS variable on root for broader access
-      document.documentElement.style.setProperty('--v-background-base', bgColor);
+      document.documentElement.style.setProperty(
+        "--v-background-base",
+        bgColor
+      );
 
       const appElement = document.getElementById("app");
       if (appElement) {
@@ -199,7 +203,9 @@ body {
 .v-application {
   background-color: var(--v-background-base) !important;
 }
-html, body, #app {
+html,
+body,
+#app {
   background-color: var(--v-background-base) !important;
   min-height: 100vh;
 }

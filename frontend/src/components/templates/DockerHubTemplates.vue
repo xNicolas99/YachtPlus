@@ -1,6 +1,5 @@
 <template>
   <div class="dockerhub-templates">
-
     <!-- Search Bar -->
     <v-row class="mb-4">
       <v-col cols="12">
@@ -21,8 +20,14 @@
 
     <!-- Loading State -->
     <div v-if="loading" class="text-center py-5">
-      <v-progress-circular indeterminate color="primary" size="64"></v-progress-circular>
-      <div class="mt-3 caption grey--text">Fetching data from Docker Hub...</div>
+      <v-progress-circular
+        indeterminate
+        color="primary"
+        size="64"
+      ></v-progress-circular>
+      <div class="mt-3 caption grey--text">
+        Fetching data from Docker Hub...
+      </div>
     </div>
 
     <!-- Search Results -->
@@ -31,7 +36,10 @@
         Search Results for "{{ searchQuery }}"
       </h3>
 
-      <div v-if="searchResults.length === 0" class="text-center py-5 grey--text">
+      <div
+        v-if="searchResults.length === 0"
+        class="text-center py-5 grey--text"
+      >
         No results found.
       </div>
 
@@ -51,7 +59,11 @@
 
     <!-- Popular Images (Default View) -->
     <div v-else>
-      <div v-for="(images, category) in popularImages" :key="category" class="mb-6">
+      <div
+        v-for="(images, category) in popularImages"
+        :key="category"
+        class="mb-6"
+      >
         <h3 class="text-capitalize mb-2 primary--text font-weight-bold">
           <v-icon left color="primary">{{ getCategoryIcon(category) }}</v-icon>
           {{ category }}
@@ -74,11 +86,11 @@
 </template>
 
 <script>
-import axios from 'axios';
+import axios from "axios";
 
 // Sub-component for Image Card to reduce code duplication
 const ImageCard = {
-  props: ['image'],
+  props: ["image"],
   template: `
     <v-card hover outlined height="100%" class="d-flex flex-column">
       <v-card-title class="subtitle-1 font-weight-bold text-truncate d-block pb-1">
@@ -116,15 +128,15 @@ const ImageCard = {
   `,
   methods: {
     formatNumber(num) {
-      if (!num) return '0';
+      if (!num) return "0";
       if (num >= 1000000000) {
-         return (num / 1000000000).toFixed(1).replace(/\.0$/, '') + 'G';
+        return (num / 1000000000).toFixed(1).replace(/\.0$/, "") + "G";
       }
       if (num >= 1000000) {
-         return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        return (num / 1000000).toFixed(1).replace(/\.0$/, "") + "M";
       }
       if (num >= 1000) {
-         return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k';
+        return (num / 1000).toFixed(1).replace(/\.0$/, "") + "k";
       }
       return num.toString();
     }
@@ -140,7 +152,7 @@ export default {
     return {
       popularImages: {},
       searchResults: [],
-      searchQuery: '',
+      searchQuery: "",
       loading: false,
       debounceTimer: null
     };
@@ -149,7 +161,7 @@ export default {
     async fetchPopularImages() {
       this.loading = true;
       try {
-        const response = await axios.get('/api/templates/dockerhub/popular');
+        const response = await axios.get("/api/templates/dockerhub/popular");
         this.popularImages = response.data;
       } catch (error) {
         console.error("Failed to fetch popular images:", error);
@@ -161,43 +173,45 @@ export default {
       }
     },
     handleSearchInput(val) {
-        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+      if (this.debounceTimer) clearTimeout(this.debounceTimer);
 
-        if (!val || val.length < 2) {
-            this.searchResults = [];
-            return;
-        }
+      if (!val || val.length < 2) {
+        this.searchResults = [];
+        return;
+      }
 
-        this.debounceTimer = setTimeout(() => {
-            this.searchDockerHub(val);
-        }, 500); // 500ms debounce
+      this.debounceTimer = setTimeout(() => {
+        this.searchDockerHub(val);
+      }, 500); // 500ms debounce
     },
     async searchDockerHub(query) {
-        this.loading = true;
-        try {
-            const response = await axios.get(`/api/templates/dockerhub/search?query=${encodeURIComponent(query)}`);
-            this.searchResults = response.data.results;
-        } catch (error) {
-            console.error("Search failed:", error);
-             if (this.$toast) {
-                this.$toast.error("Docker Hub search failed.");
-            }
-        } finally {
-            this.loading = false;
+      this.loading = true;
+      try {
+        const response = await axios.get(
+          `/api/templates/dockerhub/search?query=${encodeURIComponent(query)}`
+        );
+        this.searchResults = response.data.results;
+      } catch (error) {
+        console.error("Search failed:", error);
+        if (this.$toast) {
+          this.$toast.error("Docker Hub search failed.");
         }
+      } finally {
+        this.loading = false;
+      }
     },
     getCategoryIcon(category) {
       const icons = {
-        security: 'mdi-shield-lock',
-        qol: 'mdi-emoticon-happy',
-        multimedia: 'mdi-movie-open',
-        stream: 'mdi-broadcast'
+        security: "mdi-shield-lock",
+        qol: "mdi-emoticon-happy",
+        multimedia: "mdi-movie-open",
+        stream: "mdi-broadcast"
       };
-      return icons[category] || 'mdi-docker';
+      return icons[category] || "mdi-docker";
     },
     deployImage(imageName) {
       this.$router.push({
-        path: '/apps/deploy',
+        path: "/apps/deploy",
         query: { image: imageName }
       });
     }
