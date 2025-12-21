@@ -75,10 +75,6 @@ async def container_exec(
         # Ensure container exists
         try:
             container = await docker.containers.get(container_id)
-            container_info = await container.show()
-            if container_info['State']['Status'] != 'running':
-                 await websocket.close(code=1008, reason="Container not running")
-                 return
         except Exception as e:
             logger.error(f"Container not found error: {e}")
             await websocket.close(code=1008, reason="Container not found")

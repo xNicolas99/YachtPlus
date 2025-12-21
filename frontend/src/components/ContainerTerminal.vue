@@ -38,6 +38,15 @@
           <span>Reconnect</span>
         </v-tooltip>
 
+        <v-tooltip bottom>
+          <template v-slot:activator="{ on, attrs }">
+            <v-btn icon @click="pasteFromClipboard" v-bind="attrs" v-on="on">
+              <v-icon>mdi-content-paste</v-icon>
+            </v-btn>
+          </template>
+          <span>Paste</span>
+        </v-tooltip>
+
         <v-btn icon @click="close">
           <v-icon>mdi-close</v-icon>
         </v-btn>
@@ -129,11 +138,9 @@ export default {
         this.copyTimeout = setTimeout(() => {
           const selection = this.terminal.getSelection();
           if (selection) {
-            navigator.clipboard.writeText(selection).catch(err => {
-              console.error("Failed to copy text: ", err);
-            });
+            this.handleCopy(selection);
           }
-        }, 200);
+        }, 800);
       });
 
       // Right-Click Paste
@@ -144,28 +151,45 @@ export default {
 
       this.terminal.focus();
     },
-    async handleContextPaste(e) {
-      e.preventDefault();
-
-      // Try using the Clipboard API
+    async handleCopy(text) {
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        if (this.$toast) this.$toast.success("Copied to clipboard!");
+      } catch (err) {
+        // Fallback for HTTP
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        try {
+          document.execCommand("copy");
+          if (this.$toast) this.$toast.success("Copied to clipboard!");
+        } catch (e) {
+          console.error("Failed to copy", e);
+        }
+        document.body.removeChild(textarea);
+      }
+    },
+    async pasteFromClipboard() {
       if (navigator.clipboard && navigator.clipboard.readText) {
         try {
           const text = await navigator.clipboard.readText();
           if (text && this.terminal) {
-            this.terminal.paste(text);
+             // Paste via terminal's handler which sends data to backend
+             this.terminal.paste(text);
           }
         } catch (err) {
-          console.error("Failed to read clipboard: ", err);
-          if (this.$toast)
-            this.$toast.error("Failed to paste. Clipboard permission denied?");
+           if (this.$toast) this.$toast.info("Please use Ctrl+V to paste.");
         }
       } else {
-        // Fallback or notice
-        if (this.$toast)
-          this.$toast.error(
-            "Clipboard API not supported in this context (requires HTTPS or localhost)."
-          );
+        // Fallback notice
+        if (this.$toast) this.$toast.info("Please use Ctrl+V to paste.");
       }
+    },
+    async handleContextPaste(e) {
+      e.preventDefault();
+      await this.pasteFromClipboard();
     },
     connect() {
       if (this.websocket) {
@@ -274,6 +298,7 @@ export default {
       };
 
       this.terminal.onData(data => {
+        // Local echo is disabled. Data is sent to backend.
         if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
           this.websocket.send(data);
         }
