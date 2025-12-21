@@ -1,14 +1,23 @@
 # YachtPlus
 
-YachtPlus is a container management UI with a focus on templates and 1-click deployments.
+YachtPlus is a container management UI with a focus on templates and 1-click deployments. It is an independent project based on the original `yacht-sh`.
 
 ## Features
 
 - **Vue 2 + FastAPI**: Built with a robust modern stack.
 - **Docker Management**: Manage containers, images, volumes, and networks properly.
-- **Docker-Compose Support**: Create and manage Docker Compose projects (formerly "Projects") directly from the UI.
+- **Docker-Compose Support**: Create and manage Docker Compose projects directly from the UI.
 - **Templates**: One-click deployment of popular applications using templates (Docker Hub integration).
 - **Resources**: View and manage server resources.
+
+## Security
+
+YachtPlus includes several security enhancements:
+
+- **2FA Enforcement**: Two-Factor Authentication (2FA) is mandatory for the administrator account to ensure secure access.
+- **Fail2Ban-style Protection**: Automatically blocks IP addresses after 5 failed login attempts within 15 minutes.
+- **Private IP Restriction**: By default, the system blocks access from non-private IP addresses to prevent accidental exposure to the public internet.
+- **Secure Defaults**: No default credentials; the system requires a fresh setup upon first launch.
 
 ## Installation
 
