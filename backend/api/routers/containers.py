@@ -94,7 +94,7 @@ async def container_exec(
         )
 
         # Now start it. We need a stream.
-        stream = await exec_instance.start(detach=False)
+        stream = exec_instance.start(detach=False)
 
         if stream is None:
              raise Exception("Failed to start exec stream")
