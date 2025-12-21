@@ -49,7 +49,7 @@
           >
             <v-card-title class="d-flex align-start">
               <v-avatar size="40" class="mr-3" tile>
-                <img v-if="image.logo_url" :src="image.logo_url" alt="logo" />
+                <img v-if="image.logo_url" :src="image.logo_url" alt="logo" @error="image.logo_url = null" />
                 <v-icon v-else x-large>mdi-docker</v-icon>
               </v-avatar>
               <div>
@@ -106,7 +106,7 @@
       <v-card v-if="selectedImage">
         <v-card-title>
           <v-avatar size="32" class="mr-2" tile>
-            <img v-if="selectedImage.logo_url" :src="selectedImage.logo_url" />
+            <img v-if="selectedImage.logo_url" :src="selectedImage.logo_url" @error="selectedImage.logo_url = null" />
             <v-icon v-else>mdi-docker</v-icon>
           </v-avatar>
           {{ selectedImage.full_name }}

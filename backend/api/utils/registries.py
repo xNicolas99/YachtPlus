@@ -206,7 +206,7 @@ async def fetch_linuxserver_popular() -> List[Dict]:
                         "star_count": img.get('stars', 0),
                         "is_official": False,
                         "full_name": f"linuxserver/{img.get('name')}",
-                        "logo_url": "https://www.linuxserver.io/img/logo.png", # The API doesn't seem to return a logo URL for the image itself
+                        "logo_url": img.get('project_logo') or "https://www.linuxserver.io/img/logo.png",
                         "source": "linuxserver",
                         "last_updated": img.get('version_timestamp'),
                         "github_url": img.get('github_url')
