@@ -5,6 +5,7 @@ from api.settings import Settings
 import aiodocker
 import docker
 from docker.errors import APIError
+from docker.utils import parse_repository_tag
 import json
 from fastapi import HTTPException
 
@@ -388,9 +389,18 @@ def _check_updates(tag):
         # Safely get RepoDigests, defaulting to empty list if missing
         repo_digests = current.attrs.get("RepoDigests") or []
 
+        # Parse the repo name from the tag to filter relevant digests
+        try:
+            repo_name, _ = parse_repository_tag(tag)
+        except Exception:
+            repo_name = tag.split(":")[0]
+
+        # Filter RepoDigests to only those matching the current repo
+        relevant_digests = [d for d in repo_digests if d.startswith(repo_name + "@")]
+
         # Check if the registry digest matches any of the local digests exactly
         if any(
-            registry_digest == extract_hash(i) for i in repo_digests
+            registry_digest == extract_hash(i) for i in relevant_digests
         ):
             return False
         else:
