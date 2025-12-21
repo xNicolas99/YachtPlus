@@ -140,7 +140,7 @@ export default {
           if (selection) {
             this.handleCopy(selection);
           }
-        }, 800);
+        }, 100);
       });
 
       // Right-Click Paste
@@ -160,11 +160,16 @@ export default {
         // Fallback for HTTP
         const textarea = document.createElement("textarea");
         textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        textarea.style.top = "0";
         document.body.appendChild(textarea);
+        textarea.focus();
         textarea.select();
         try {
-          document.execCommand("copy");
-          if (this.$toast) this.$toast.success("Copied to clipboard!");
+          const successful = document.execCommand("copy");
+          if (successful && this.$toast)
+            this.$toast.success("Copied to clipboard!");
         } catch (e) {
           console.error("Failed to copy", e);
         }
