@@ -5,28 +5,28 @@ from typing import List, Dict
 router = APIRouter(prefix="/dockerhub", tags=["dockerhub"])
 
 POPULAR_IMAGES = {
-    "Security": [
+    "security": [
         "linuxserver/wireguard",
         "kylemanna/openvpn",
         "linuxserver/fail2ban",
         "linuxserver/authelia",
         "vaultwarden/server",
     ],
-    "QoL": [
+    "qol": [
         "linuxserver/heimdall",
         "portainer/portainer-ce",
         "netdata/netdata",
         "grafana/grafana",
         "prom/prometheus",
     ],
-    "Multimedia": [
+    "multimedia": [
         "linuxserver/plex",
         "linuxserver/jellyfin",
         "linuxserver/sonarr",
         "linuxserver/radarr",
         "linuxserver/lidarr",
     ],
-    "Stream": [
+    "stream": [
         "owncast/owncast",
         "blue-ocean/nginx-rtmp",
         "tiangolo/nginx-rtmp",
