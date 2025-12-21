@@ -62,7 +62,8 @@ export default {
     websocket: null,
     selectedShell: '/bin/sh',
     resizeObserver: null,
-    isConnected: false
+    isConnected: false,
+    copyTimeout: null
   }),
   watch: {
     visible(val) {
@@ -114,7 +115,36 @@ export default {
       });
       this.resizeObserver.observe(this.$refs.terminal);
 
+      // Auto-Copy on Selection with Debounce
+      this.terminal.onSelectionChange(() => {
+        if (this.copyTimeout) clearTimeout(this.copyTimeout);
+        this.copyTimeout = setTimeout(() => {
+            const selection = this.terminal.getSelection();
+            if (selection) {
+              navigator.clipboard.writeText(selection).catch(err => {
+                 console.error('Failed to copy text: ', err);
+              });
+            }
+        }, 200);
+      });
+
+      // Right-Click Paste
+      this.$refs.terminal.addEventListener('contextmenu', this.handleContextPaste);
+
       this.terminal.focus();
+    },
+    handleContextPaste(e) {
+      e.preventDefault();
+      navigator.clipboard.readText()
+        .then(text => {
+           if (text && this.terminal) {
+             this.terminal.paste(text);
+           }
+        })
+        .catch(err => {
+           console.error('Failed to read clipboard: ', err);
+           if (this.$toast) this.$toast.error('Failed to paste from clipboard. Check permissions.');
+        });
     },
     connect() {
       if (this.websocket) {
@@ -230,8 +260,15 @@ export default {
         this.websocket = null;
       }
       if (this.terminal) {
+        // Remove context menu listener
+        if (this.$refs.terminal) {
+            this.$refs.terminal.removeEventListener('contextmenu', this.handleContextPaste);
+        }
         this.terminal.dispose();
         this.terminal = null;
+      }
+      if (this.copyTimeout) {
+        clearTimeout(this.copyTimeout);
       }
       window.removeEventListener('resize', this.handleResize);
       if (this.resizeObserver) {
