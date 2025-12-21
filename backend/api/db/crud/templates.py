@@ -180,8 +180,17 @@ def add_template(db: Session, template: models.Template):
         db.commit()
     except IntegrityError as err:
         db.rollback()
-        # If the template already exists, we return the existing one.
-        # This makes the "Add Template" operation idempotent.
+        # Check if the conflict is due to the Title
+        existing_title = (
+            db.query(models.Template).filter(models.Template.title == template.title).first()
+        )
+        if existing_title:
+            raise HTTPException(
+                status_code=409, detail="Template with this title already exists."
+            )
+
+        # If the template URL already exists, we return the existing one.
+        # This makes the "Add Template" operation idempotent for URLs.
         return get_template(db=db, url=template.url)
 
     return get_template(db=db, url=template.url)
