@@ -11,11 +11,7 @@
       </v-col>
     </v-row>
 
-    <v-tabs v-model="activeCategory" color="primary">
-      <v-tab v-for="category in categories" :key="category">
-        {{ category }}
-      </v-tab>
-    </v-tabs>
+    <!-- Removed v-tabs and category handling -->
 
     <v-row class="mt-4">
       <v-col v-for="image in filteredImages" :key="image.full_name"
@@ -50,6 +46,9 @@
     <v-row v-if="loading" justify="center" class="mt-4">
       <v-progress-circular indeterminate color="primary" />
     </v-row>
+    <v-row v-else-if="!loading && filteredImages.length === 0" justify="center" class="mt-4">
+      <v-alert type="info">No images found.</v-alert>
+    </v-row>
   </v-container>
 </template>
 
@@ -61,21 +60,16 @@ export default {
   data() {
     return {
       search: '',
-      activeCategory: 0,
-      categories: ['Security', 'QoL', 'Multimedia', 'Stream'],
-      imagesData: {},
+      imagesData: [], // Changed to array
       loading: false,
     };
   },
   computed: {
-    currentCategory() {
-      return this.categories[this.activeCategory];
-    },
     filteredImages() {
-      const categoryImages = this.imagesData[this.currentCategory] || [];
-      if (!this.search) return categoryImages;
+      // imagesData is now a flat array
+      if (!this.search) return this.imagesData;
       const searchLower = this.search.toLowerCase();
-      return categoryImages.filter(img =>
+      return this.imagesData.filter(img =>
         img.full_name.toLowerCase().includes(searchLower) ||
         img.description.toLowerCase().includes(searchLower)
       );
@@ -86,7 +80,19 @@ export default {
       this.loading = true;
       try {
         const response = await axios.get('/api/dockerhub/popular');
-        this.imagesData = response.data;
+        // Flatten the response object values into a single array
+        const data = response.data;
+        let allImages = [];
+        if (typeof data === 'object' && !Array.isArray(data)) {
+            Object.values(data).forEach(categoryImages => {
+                if (Array.isArray(categoryImages)) {
+                    allImages = allImages.concat(categoryImages);
+                }
+            });
+        } else if (Array.isArray(data)) {
+            allImages = data;
+        }
+        this.imagesData = allImages;
       } catch (error) {
         console.error('Error:', error);
         if (this.$toast) {
