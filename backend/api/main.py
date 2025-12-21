@@ -38,7 +38,7 @@ app.include_router(
     prefix="/templates",
     tags=["templates"],
 )
-app.include_router(dockerhub.router, prefix="/templates")
+app.include_router(dockerhub.router)
 app.include_router(compose.router, prefix="/compose", tags=["compose"])
 app.include_router(app_settings.router, prefix="/settings", tags=["settings"])
 app.include_router(setup.router, prefix="/setup", tags=["setup"])
