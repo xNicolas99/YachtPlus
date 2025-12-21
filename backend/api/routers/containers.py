@@ -91,7 +91,7 @@ async def container_exec(
             stderr=True,
             privileged=True,
             tty=True,
-            env=["TERM=xterm"]
+            environment=["TERM=xterm"]
         )
 
         # Now start it. We need a stream.
