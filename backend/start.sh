@@ -1,34 +1,57 @@
 #!/bin/sh
 set -e
 
+# Non-Root Transition Logic
+# DOCKER_GID can be passed from host (e.g. $(getent group docker | cut -d: -f3))
+if [ -z "${DOCKER_GID}" ]; then
+    echo "DOCKER_GID not set. Defaulting to 999 (standard docker group)."
+    DOCKER_GID=999
+fi
+
+# Create or modify the docker group to match the host's GID
+if ! getent group ${DOCKER_GID} > /dev/null 2>&1; then
+    echo "Creating docker group with GID ${DOCKER_GID}"
+    groupadd -g ${DOCKER_GID} docker_host_group
+else
+    # If group exists (maybe 'docker' already exists with different GID, or another group uses this GID)
+    GROUP_NAME=$(getent group ${DOCKER_GID} | cut -d: -f1)
+    echo "Group with GID ${DOCKER_GID} already exists: ${GROUP_NAME}"
+    # If the group name is not 'docker', we might want to use it anyway.
+fi
+
+# Add appuser to the group with DOCKER_GID
+# We find the group name associated with the GID
+TARGET_GROUP=$(getent group ${DOCKER_GID} | cut -d: -f1)
+echo "Adding appuser to group ${TARGET_GROUP}"
+usermod -aG ${TARGET_GROUP} appuser
+
+# Set permissions for /var/run/docker.sock if it exists
+if [ -S /var/run/docker.sock ]; then
+    # We shouldn't chown the socket as it belongs to root on host usually,
+    # but inside container it appears as root:root (or root:group).
+    # Since we added appuser to the group matching the socket's GID (hopefully),
+    # access should work.
+    echo "Docker socket found."
+else
+    echo "Warning: /var/run/docker.sock not found."
+fi
+
 # Create config directories if they don't exist
+# We are currently root, so we should make sure they are owned by appuser
 mkdir -p /config/compose
+chown -R appuser:appuser /config
 
-# Start Nginx
+# Switch to appuser for execution
+echo "Switching to appuser..."
+
+# Start Nginx (running in background as appuser)
+# Nginx is configured to listen on 8080 and use /var/run/nginx for pid
 echo "Starting Nginx..."
-nginx
-
-# Ensure config directory exists
-mkdir -p /config/compose
-
-# Start Backend
-# Determine if we should run with Uvicorn (dev) or Gunicorn (prod)
-# For now, we follow the nginx.conf expectation: upstream unix:/tmp/gunicorn.sock
-# So we must use Gunicorn binding to that socket.
+gosu appuser nginx
 
 echo "Starting Gunicorn..."
-# Ensure /tmp exists (it should)
-# Run Gunicorn binding to unix socket and also maybe TCP for debugging?
-# nginx.conf says: upstream api_server { server unix:/tmp/gunicorn.sock fail_timeout=0; }
-# So we bind to unix:/tmp/gunicorn.sock
-
-# We need to find where the app object is. It is in api.main:app
-# We are in /api directory (based on Dockerfile WORKDIR)
-
-# Note: The original Dockerfile had CMD ["python3", "app.py"] which was wrong.
-# The original nginx.conf expects a unix socket at /tmp/gunicorn.sock.
-
-exec gunicorn api.main:app \
+# Exec Gunicorn as appuser
+exec gosu appuser gunicorn api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
     --bind unix:/tmp/gunicorn.sock \

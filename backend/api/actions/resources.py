@@ -284,8 +284,30 @@ def delete_network(network_id):
 def prune_resources(resource):
     dclient = docker.from_env()
     action = getattr(dclient, resource)
+
+    deleted_resource = None
+
     if resource == "images":
-        deleted_resource = action.prune(filters={"dangling": False})
+        # Docker SDK returns {'ImagesDeleted': [...], 'SpaceReclaimed': int}
+        # If ImagesDeleted is None, it means no images were deleted.
+        try:
+            deleted_resource = action.prune(filters={"dangling": False})
+        except Exception as e:
+            # Fallback or error handling
+            print(f"Error pruning images: {e}")
+            return {"count": 0, "space_reclaimed": 0}
+
     else:
-        deleted_resource = action.prune()
+        # Other resources (containers, networks, volumes)
+        try:
+            deleted_resource = action.prune()
+        except Exception as e:
+            print(f"Error pruning {resource}: {e}")
+            return {"count": 0, "space_reclaimed": 0}
+
+    # If space is 0 or missing, ensure it is 0.
+    if deleted_resource:
+        if "SpaceReclaimed" not in deleted_resource:
+            deleted_resource["SpaceReclaimed"] = 0
+
     return deleted_resource

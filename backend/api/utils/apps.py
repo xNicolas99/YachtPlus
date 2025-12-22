@@ -8,6 +8,7 @@ from docker.errors import APIError
 from docker.utils import parse_repository_tag
 import json
 from fastapi import HTTPException
+import os
 
 settings = Settings()
 
@@ -70,12 +71,44 @@ def conv_volumes2data(data):
     db = SessionLocal()
     t_variables = db.query(models.TemplateVariables).all()
 
+    # Determine whitelist
+    # Default to /config only
+    whitelist_str = os.environ.get("VOLUME_WHITELIST", "/config")
+    # Parse into a list of allowed prefixes
+    allowed_paths = [p.strip() for p in whitelist_str.split(",") if p.strip()]
+
+    # Always allow docker socket if explicitly requested and whitelisted?
+    # Actually, if the user puts /var/run/docker.sock in VOLUME_WHITELIST env, it is allowed.
+    # If not, it is blocked.
+    # Strict by default means only /config is in there.
+
     for volume in data:
         if volume.bind:
+            # Substitute template variables
             for t_var in t_variables:
                 if t_var.variable in volume.bind:
                     new_path = volume.bind.replace(t_var.variable, t_var.replacement)
                     volume.bind = new_path
+
+            # Whitelist Check
+            # Check if the bind path starts with any of the allowed paths
+            is_allowed = False
+            for allowed in allowed_paths:
+                # Ensure we match directories correctly (e.g. /conf vs /config)
+                # If allowed is /config, we match /config, /config/, /config/subdir
+                # But not /conf
+
+                # Check for exact match or subdirectory
+                if volume.bind == allowed or volume.bind.startswith(allowed.rstrip('/') + '/'):
+                    is_allowed = True
+                    break
+
+            if not is_allowed:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Volume mount prohibited: {volume.bind}. Allowed paths: {allowed_paths}"
+                )
+
     volume_data = dict((d.bind, {"bind": d.container, "mode": "rw"}) for d in data)
 
     return volume_data
