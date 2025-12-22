@@ -41,13 +41,20 @@ fi
 mkdir -p /config/compose
 chown -R appuser:appuser /config
 
-# Ensure Nginx log permissions
+
 mkdir -p /var/log/nginx
 touch /var/log/nginx/access.log /var/log/nginx/error.log
 chown -R appuser:appuser /var/log/nginx
 
 # Switch to appuser for execution
 echo "Switching to appuser..."
+
+# Start tailing logs in the background to forward them to stdout/stderr
+# We use 'gosu appuser' to ensure the tail process runs as appuser (though reading is fine as root)
+# Actually, tailing as root is fine.
+echo "Starting log forwarder..."
+tail -F /var/log/nginx/access.log /var/log/nginx/error.log &
+TAIL_PID=$!
 
 # Start Nginx (running in background as appuser)
 # Nginx is configured to listen on 8080 and use /var/run/nginx for pid
@@ -58,13 +65,14 @@ gosu appuser nginx
 sleep 2
 if ! pgrep nginx > /dev/null; then
     echo "Error: Nginx failed to start!"
-    echo "Printing Nginx error log (if available):"
-    cat /var/log/nginx/error.log || true
+
     exit 1
 fi
 
 echo "Starting Gunicorn..."
 # Exec Gunicorn as appuser
+# Note: This replaces the shell process, so the tail background job becomes an orphan
+# (which is usually fine in Docker as init picks it up, or it dies when container dies).
 exec gosu appuser gunicorn api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
