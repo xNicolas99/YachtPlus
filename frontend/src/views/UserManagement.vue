@@ -209,7 +209,7 @@ export default {
           this.loading = false;
         })
         .catch(err => {
-          console.log("Error loading users or endpoint missing", err);
+          this.notify("Error loading users: " + err.message, "error");
           this.loading = false;
         });
     },

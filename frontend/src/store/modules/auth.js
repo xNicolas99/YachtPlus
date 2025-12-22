@@ -79,7 +79,7 @@ const actions = {
           resolve(resp);
         })
         .catch(error => {
-          console.log(error);
+          console.error(error);
           commit(AUTH_CLEAR);
         });
     });
@@ -102,7 +102,7 @@ const actions = {
           resolve(resp);
         })
         .catch(error => {
-          console.log(error);
+          console.error(error);
           commit(AUTH_CLEAR);
         });
     });

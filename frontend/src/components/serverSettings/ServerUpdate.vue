@@ -78,7 +78,6 @@ export default {
       })
         .then(response => {
           this.isLoading = false;
-          console.log(response.data);
           this.setMessage(
             "Yacht is updating now. You will be logged out to complete the update."
           );

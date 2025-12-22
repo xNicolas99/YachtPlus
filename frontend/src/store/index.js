@@ -19,8 +19,6 @@ export default new Vuex.Store({
   mutations: {
     // setTemplates(state, templates) {
     //   state.templates = templates;
-    //   console.log(templates);
-    //   console.log(state.templates);
     // }
   },
   actions: {
@@ -30,7 +28,6 @@ export default new Vuex.Store({
     //     .get(url)
     //     .then(response => {
     //       let templates = response.data.data;
-    //       console.log(templates);
     //       commit("setTemplates", templates);
     //     });
     // }
