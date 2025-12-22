@@ -41,7 +41,7 @@ fi
 mkdir -p /config/compose
 chown -R appuser:appuser /config
 
-# Ensure Nginx log permissions and create files
+
 mkdir -p /var/log/nginx
 touch /var/log/nginx/access.log /var/log/nginx/error.log
 chown -R appuser:appuser /var/log/nginx
@@ -65,9 +65,7 @@ gosu appuser nginx
 sleep 2
 if ! pgrep nginx > /dev/null; then
     echo "Error: Nginx failed to start!"
-    echo "Nginx error log content:"
-    cat /var/log/nginx/error.log || true
-    kill $TAIL_PID
+
     exit 1
 fi
 
