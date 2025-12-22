@@ -41,62 +41,12 @@
           md="6"
           lg="4"
         >
-          <v-card
-            hover
+          <ImageCard
+            :image="image"
             @click="showDetails(image)"
-            class="d-flex flex-column"
-            height="100%"
-          >
-            <v-card-title class="d-flex align-start">
-              <v-avatar size="40" class="mr-3" tile>
-                <img v-if="image.logo_url" :src="image.logo_url" alt="logo" @error="image.logo_url = null" />
-                <v-icon v-else x-large>mdi-docker</v-icon>
-              </v-avatar>
-              <div>
-                <div
-                  class="subtitle-1 font-weight-bold"
-                  style="word-break: break-all; line-height: 1.2"
-                >
-                  {{ image.name }}
-                </div>
-                <div class="caption grey--text">{{ image.namespace }}</div>
-              </div>
-              <v-spacer></v-spacer>
-              <v-chip x-small color="primary" v-if="image.is_official"
-                >Official</v-chip
-              >
-            </v-card-title>
-
-            <v-card-text class="flex-grow-1">
-              <div class="text-truncate-2" :title="image.description">
-                {{ image.description || "No description available." }}
-              </div>
-            </v-card-text>
-
-            <v-divider></v-divider>
-
-            <v-card-actions>
-              <v-row dense no-gutters class="caption grey--text">
-                <v-col cols="4" class="d-flex align-center">
-                  <v-icon x-small class="mr-1">mdi-download</v-icon>
-                  {{ formatNumber(image.pull_count) }}
-                </v-col>
-                <v-col cols="4" class="d-flex align-center">
-                  <v-icon x-small class="mr-1">mdi-star</v-icon>
-                  {{ formatNumber(image.star_count) }}
-                </v-col>
-                <v-col cols="4" class="d-flex align-center" v-if="image.last_updated">
-                  <v-icon x-small class="mr-1">mdi-calendar-clock</v-icon>
-                  {{ formatDate(image.last_updated) }}
-                </v-col>
-              </v-row>
-              <v-spacer></v-spacer>
-              <v-btn text color="primary" small @click.stop="deploy(image)"
-                >Deploy</v-btn
-              >
-              <v-btn text small @click.stop="showDetails(image)">Details</v-btn>
-            </v-card-actions>
-          </v-card>
+            @deploy="deploy(image)"
+            @details="showDetails(image)"
+          />
         </v-col>
       </v-row>
     </v-card>
@@ -106,7 +56,13 @@
       <v-card v-if="selectedImage">
         <v-card-title>
           <v-avatar size="32" class="mr-2" tile>
-            <img v-if="selectedImage.logo_url" :src="selectedImage.logo_url" @error="selectedImage.logo_url = null" />
+            <!-- Use cached logo logic? Or just replicate logic here? -->
+            <!-- For simplicity and to fix the modal logo too, I'll use the util here or just reuse the logic inline since it is one image -->
+            <img
+              :src="modalLogoSrc"
+              @error="handleModalLogoError"
+              v-if="modalLogoSrc"
+            />
             <v-icon v-else>mdi-docker</v-icon>
           </v-avatar>
           {{ selectedImage.full_name }}
@@ -174,9 +130,14 @@
 
 <script>
 import axios from "axios";
+import ImageCard from "./ImageCard.vue";
+import { getImageLogoWithFallbacks } from "@/utils/imageLogos";
 
 export default {
   name: "RegistryBrowser",
+  components: {
+    ImageCard
+  },
   data() {
     return {
       activeRegistryIndex: 0,
@@ -188,7 +149,11 @@ export default {
       selectedImage: null,
       tags: [],
       loadingTags: false,
-      searchDebounce: null
+      searchDebounce: null,
+      // Modal logo logic
+      modalLogoSrc: null,
+      modalLogoSources: [],
+      modalLogoIndex: 0
     };
   },
   computed: {
@@ -206,9 +171,38 @@ export default {
     activeRegistryIndex() {
       this.search = "";
       this.fetchImages();
+    },
+    selectedImage(newVal) {
+      if (newVal) {
+        this.initModalLogo(newVal);
+      }
     }
   },
   methods: {
+    initModalLogo(image) {
+      const { sources, fallback } = getImageLogoWithFallbacks(
+        image.full_name,
+        image.source
+      );
+      this.modalLogoSources = [...sources];
+      this.modalLogoIndex = 0;
+      this.modalLogoSrc = this.modalLogoSources[0] || fallback;
+    },
+    handleModalLogoError() {
+      this.modalLogoIndex++;
+      if (this.modalLogoIndex < this.modalLogoSources.length) {
+        this.modalLogoSrc = this.modalLogoSources[this.modalLogoIndex];
+      } else {
+        const { fallback } = getImageLogoWithFallbacks(
+          this.selectedImage.full_name,
+          this.selectedImage.source
+        );
+         if (this.modalLogoSrc === fallback) {
+             return;
+        }
+        this.modalLogoSrc = fallback;
+      }
+    },
     formatNumber(num) {
       if (num === undefined || num === null) return "0";
       if (num >= 1000000000) return (num / 1000000000).toFixed(1) + "B";
@@ -221,9 +215,9 @@ export default {
       try {
         const date = new Date(dateString);
         return date.toLocaleDateString(undefined, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
+          year: "numeric",
+          month: "short",
+          day: "numeric"
         });
       } catch (e) {
         return dateString;
