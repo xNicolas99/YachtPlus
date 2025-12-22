@@ -1,5 +1,5 @@
 # Build Vue.js frontend
-FROM node:16-alpine as build-stage
+FROM node:20-alpine as build-stage
 
 ARG VUE_APP_VERSION
 ENV VUE_APP_VERSION=${VUE_APP_VERSION}
@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     curl \
     ruby-dev \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker Compose 2.x as a standalone binary
@@ -56,15 +57,15 @@ COPY --from=build-stage /app/dist /app
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # Expose ports
-EXPOSE 8000
+EXPOSE 8080
 
-# Create user and group 'abc' for Nginx
-# On Debian, addgroup/adduser syntax differs slightly from Alpine but this should work or be adapted
-RUN groupadd -r abc && useradd -r -g abc abc
+# Create user 'appuser' (UID 1000)
+RUN groupadd -r appuser -g 1000 && \
+    useradd -u 1000 -r -g appuser -s /bin/bash -c "App User" appuser
 
-# Create Nginx temp directories and set permissions
-RUN mkdir -p /var/www/client_body_temp /var/www/proxy_temp && \
-    chown -R abc:abc /var/www
+# Create directories and set permissions for appuser
+RUN mkdir -p /config /var/www/client_body_temp /var/www/proxy_temp /var/run/nginx && \
+    chown -R appuser:appuser /api /app /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx
 
 # Start script
 COPY backend/start.sh /start.sh
