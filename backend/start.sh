@@ -41,6 +41,11 @@ fi
 mkdir -p /config/compose
 chown -R appuser:appuser /config
 
+# Ensure Nginx log permissions
+mkdir -p /var/log/nginx
+touch /var/log/nginx/access.log /var/log/nginx/error.log
+chown -R appuser:appuser /var/log/nginx
+
 # Switch to appuser for execution
 echo "Switching to appuser..."
 
@@ -48,6 +53,15 @@ echo "Switching to appuser..."
 # Nginx is configured to listen on 8080 and use /var/run/nginx for pid
 echo "Starting Nginx..."
 gosu appuser nginx
+
+# Check if Nginx started
+sleep 2
+if ! pgrep nginx > /dev/null; then
+    echo "Error: Nginx failed to start!"
+    echo "Printing Nginx error log (if available):"
+    cat /var/log/nginx/error.log || true
+    exit 1
+fi
 
 echo "Starting Gunicorn..."
 # Exec Gunicorn as appuser
