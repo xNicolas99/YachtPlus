@@ -37,9 +37,9 @@ class LabelSchema(BaseModel):
 
 
 class DeployForm(BaseModel):
-    name: str
-    image: str
-    restart_policy: str
+    name: Optional[str]
+    image: Optional[str]
+    restart_policy: Optional[str]
     notes: Optional[str]
     command: Optional[List[str]]
     ports: Optional[List[PortsSchema]]
