@@ -37,9 +37,9 @@ class LabelSchema(BaseModel):
 
 
 class DeployForm(BaseModel):
-    name: str
-    image: str
-    restart_policy: str
+    name: Optional[str]
+    image: Optional[str]
+    restart_policy: Optional[str]
     notes: Optional[str]
     command: Optional[List[str]]
     ports: Optional[List[PortsSchema]]
@@ -51,7 +51,7 @@ class DeployForm(BaseModel):
     cap_add: Optional[List[str]]
     network_mode: Optional[str]
     network: Optional[str]
-    cpus: Optional[int]
+    cpus: Optional[float]
     mem_limit: Optional[str]
     edit: Optional[bool]
     id: Optional[str]

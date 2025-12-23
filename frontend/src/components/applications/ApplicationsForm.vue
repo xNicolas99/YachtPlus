@@ -1110,6 +1110,43 @@ export default {
           edit: true,
           id: app.Id
         };
+      } else if (this.$route.query.image) {
+        // Handle deployment from Registry Browser (Unified Search)
+        const image = this.$route.query.image;
+        this.form.image = image;
+        // Generate a name from the image (e.g. "nginx" from "library/nginx")
+        const namePart = image.split('/').pop().split(':')[0];
+        this.form.name = namePart;
+        this.form.restart_policy = "unless-stopped"; // Default for new deploys
+        this.form.network = "bridge"; // Default network
+        this.form.network_mode = undefined; // Clear mode to allow network selection
+
+        // Attempt to fetch image config (ports/volumes) from backend
+        this.isLoading = true;
+        try {
+          const { data } = await axios.get('/api/registries/inspect', { params: { image: image } });
+          if (data) {
+            // Map Ports
+            if (data.ExposedPorts) {
+              this.form.ports = Object.keys(data.ExposedPorts).map(p => {
+                const [port, proto] = p.split('/');
+                return { cport: port, hport: port, proto: proto || 'tcp' };
+              });
+            }
+            // Map Volumes
+            if (data.Volumes) {
+              // Generate a random string for unique volume names
+              const rand = Math.random().toString(36).substring(2, 8);
+              this.form.volumes = Object.keys(data.Volumes).map(v => {
+                return { container: v, bind: `yacht_${namePart}_${rand}_${v.replace(/\//g, '_')}` };
+              });
+            }
+          }
+        } catch (e) {
+          console.error("Failed to inspect remote image", e);
+        } finally {
+          this.isLoading = false;
+        }
       }
     }
   },
