@@ -4,6 +4,8 @@ services:
     image: ghcr.io/yachtplus/yachtplus:devel
     container_name: yachtplus
     restart: unless-stopped
+    environment:
+      - DOCKER_GID=${DOCKER_GID:-}
     ports:
       - "8000:8080"
     volumes:
