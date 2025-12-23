@@ -243,14 +243,26 @@ async def search_dockerhub(query: str) -> List[Dict]:
             if resp.status_code == 200:
                 data = resp.json()
                 for item in data.get('results', []):
-                     result.append({
-                        "name": item.get("name"),
-                        "namespace": item.get("namespace"),
-                        "description": item.get("description", "")[:200],
+                    # Parse repo_name to get namespace and name
+                    repo_name = item.get("repo_name")
+                    if repo_name and '/' in repo_name:
+                        namespace, name = repo_name.split('/', 1)
+                    else:
+                        namespace = "library"
+                        name = repo_name
+
+                    description = item.get("short_description")
+                    if not description:
+                        description = "No description available."
+
+                    result.append({
+                        "name": name,
+                        "namespace": namespace,
+                        "description": description[:200],
                         "pull_count": item.get("pull_count", 0),
                         "star_count": item.get("star_count", 0),
                         "is_official": item.get("is_official", False),
-                        "full_name": f"{item.get('namespace')}/{item.get('name')}",
+                        "full_name": repo_name,
                         "logo_url": None,
                         "source": "dockerhub",
                         "last_updated": item.get("last_updated")
