@@ -31,7 +31,7 @@ services:
     container_name: yachtplus
     restart: unless-stopped
     ports:
-      - 8000:8000
+      - 8000:8080
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/config

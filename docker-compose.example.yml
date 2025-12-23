@@ -1,0 +1,11 @@
+version: "3"
+services:
+  yachtplus:
+    image: ghcr.io/yachtplus/yachtplus:devel
+    container_name: yachtplus
+    restart: unless-stopped
+    ports:
+      - "8000:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/config
