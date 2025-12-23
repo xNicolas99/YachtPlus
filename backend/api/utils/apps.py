@@ -1,6 +1,7 @@
 import api.db.models.containers as models
 from api.db.database import SessionLocal
 from api.settings import Settings
+import api.db.schemas.apps as schemas
 
 import aiodocker
 import docker
@@ -12,7 +13,7 @@ import os
 
 settings = Settings()
 
-# For Deploy Form
+# ... (Existing code kept as is) ...
 
 # Input Format:
 # [
@@ -458,3 +459,135 @@ def conv_cpus2data(cpus):
         return cpus * 10 ** 9
     else:
         return None
+
+def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployForm:
+    """
+    Merges template defaults into the form if fields are missing or empty.
+    Prioritizes the form (user overrides).
+    """
+    # Simple fields: if missing/empty in form, take from template
+    if not form.name and template_item.name:
+        form.name = template_item.name
+    # Fallback to title if name is missing in template (unlikely but safe)
+    if not form.name and template_item.title:
+        form.name = template_item.title.lower().replace(" ", "-")
+
+    if not form.image and template_item.image:
+        form.image = template_item.image
+
+    # Restart Policy: form -> template -> default
+    if not form.restart_policy:
+        if template_item.restart_policy:
+            form.restart_policy = template_item.restart_policy
+        else:
+             form.restart_policy = "unless-stopped"
+
+    if not form.network_mode and template_item.network_mode:
+        form.network_mode = template_item.network_mode
+
+    if not form.network and template_item.network:
+        form.network = template_item.network
+
+    if form.cpus is None and template_item.cpus:
+        # Template cpus might be stored differently, assuming int/float compatibility
+        try:
+             form.cpus = int(float(template_item.cpus))
+        except:
+             pass
+
+    if not form.mem_limit and template_item.mem_limit:
+        form.mem_limit = str(template_item.mem_limit)
+
+    # Complex fields (Lists)
+    # Strategy: If form list is EMPTY, use template list.
+    # If form list is populated, assume user intention (replace/override).
+
+    def transform_db_ports(db_ports):
+        # Transform DB JSON ports back to List[PortsSchema]
+        # Example DB: {'80/tcp': [{'HostPort': '8080'}]}
+        res = []
+        if isinstance(db_ports, dict):
+            for cport_proto, bindings in db_ports.items():
+                cport, proto = cport_proto.split('/')
+                if bindings:
+                     for bind in bindings:
+                         hport = bind.get('HostPort', '')
+                         res.append(schemas.PortsSchema(
+                             cport=cport,
+                             proto=proto,
+                             hport=hport,
+                             label=""
+                         ))
+                else:
+                    # No host binding
+                    res.append(schemas.PortsSchema(
+                             cport=cport,
+                             proto=proto,
+                             hport=None,
+                             label=""
+                         ))
+        elif isinstance(db_ports, list):
+             # Maybe it's a list of strings "80:80"
+             for p in db_ports:
+                 if isinstance(p, str):
+                     parts = p.split(':')
+                     if len(parts) == 2:
+                         res.append(schemas.PortsSchema(hport=parts[0], cport=parts[1].split('/')[0], proto='tcp', label=""))
+        return res
+
+    if not form.ports and template_item.ports:
+        form.ports = transform_db_ports(template_item.ports)
+
+    # Volumes
+    # DB: [{'container': '/data', 'bind': '/mnt/data'}] (List of dicts)
+    if not form.volumes and template_item.volumes:
+        # Assuming simple mapping
+        v_list = []
+        for v in template_item.volumes:
+            if isinstance(v, dict):
+                v_list.append(schemas.VolumesSchema(
+                    container=v.get('container', ''),
+                    bind=v.get('bind', '')
+                ))
+        form.volumes = v_list
+
+    # Env
+    # DB: [{'name': 'VAR', 'default': 'val', 'label': '...'}]
+    if not form.env and template_item.env:
+        e_list = []
+        for e in template_item.env:
+             if isinstance(e, dict):
+                 e_list.append(schemas.EnvSchema(
+                     name=e.get('name', ''),
+                     default=e.get('default', '') or e.get('set', ''), # 'set' is used in some templates
+                     label=e.get('label', ''),
+                     description=e.get('description', '')
+                 ))
+        form.env = e_list
+
+    # Labels, Sysctls, CapAdd, Devices, Command -> similar logic
+    if not form.labels and template_item.labels:
+         l_list = []
+         # Check if dict or list
+         if isinstance(template_item.labels, dict):
+             for k, v in template_item.labels.items():
+                 l_list.append(schemas.LabelSchema(label=k, value=v))
+         elif isinstance(template_item.labels, list):
+             for l in template_item.labels:
+                 if isinstance(l, dict):
+                     l_list.append(schemas.LabelSchema(label=l.get('label',''), value=l.get('value','')))
+         form.labels = l_list
+
+    # Sysctls
+    if not form.sysctls and template_item.sysctls:
+        s_list = []
+        if isinstance(template_item.sysctls, dict):
+            for k, v in template_item.sysctls.items():
+                s_list.append(schemas.SysctlsSchema(name=k, value=v))
+        form.sysctls = s_list
+
+    # Cap Add
+    if not form.cap_add and template_item.cap_add:
+        form.cap_add = template_item.cap_add
+
+    return form
