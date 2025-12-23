@@ -45,6 +45,17 @@ Run `docker-compose up -d`.
 2. Follow the setup wizard to create an administrator account.
 3. **Important**: 2FA is required for the admin account.
 
+### Important Configuration Notes
+
+- **Volume Mounts**: You **must** mount `/var/run/docker.sock` and `/config` for the application to function correctly. Without these, you will encounter errors accessing the dashboard or managing apps.
+- **DOCKER_GID**: If you experience permission errors accessing the Docker socket (e.g. logs not showing, apps not listing), you may need to pass the `DOCKER_GID` environment variable matching your host's docker group ID.
+  ```yaml
+  environment:
+    - PUID=1000
+    - PGID=1000
+    - DOCKER_GID=999 # Change to your host's docker group ID
+  ```
+
 ## Development
 
 ### Backend (FastAPI)
