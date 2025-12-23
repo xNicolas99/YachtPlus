@@ -453,6 +453,18 @@
         </v-stepper-content>
       </v-stepper-items>
     </v-stepper>
+    <v-card v-if="conflictErrors.length > 0" class="mt-5 error">
+      <v-card-title>
+        Deployment Conflicts
+      </v-card-title>
+      <v-card-text>
+        <ul>
+          <li v-for="(error, index) in conflictErrors" :key="index">
+            {{ error.message }}
+          </li>
+        </ul>
+      </v-card-text>
+    </v-card>
     <v-card color="primary" class="mt-5">
       <v-card-title>
         Advanced
@@ -829,6 +841,7 @@ export default {
         cpus: undefined,
         mem_limit: undefined
       },
+      conflictErrors: [],
       network_modes: ["bridge", "none", "host"],
       isLoading: false,
       cap_options: [
@@ -869,7 +882,8 @@ export default {
       readApp: "apps/readApp"
     }),
     ...mapMutations({
-      setErr: "snackbar/setErr"
+      setErr: "snackbar/setErr",
+      setMessage: "snackbar/setMessage"
     }),
     addCommand() {
       this.form.command.push("");
@@ -1009,7 +1023,14 @@ export default {
     },
     submitFormData() {
       const payload = { ...this.form };
+
+      // Add template_id if we are deploying from a template
+      if (this.$route.params.appId) {
+        payload.template_id = this.$route.params.appId;
+      }
+
       this.isLoading = true;
+      this.conflictErrors = []; // Clear previous errors
       const url = `/api/apps/deploy`;
       axios
         .post(url, payload)
@@ -1020,7 +1041,18 @@ export default {
         .catch(err => {
           this.isLoading = false;
           this.deployStep = 1;
-          this.setErr(err);
+
+          if (err.response && err.response.status === 409 && err.response.data && err.response.data.conflicts) {
+            this.conflictErrors = err.response.data.conflicts;
+            this.setErr({
+                response: {
+                    statusText: "Conflict",
+                    data: { detail: "Please check the conflicts below." }
+                }
+            });
+          } else {
+            this.setErr(err);
+          }
         });
     },
     async populateNetworks() {
