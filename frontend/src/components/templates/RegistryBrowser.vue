@@ -2,6 +2,7 @@
   <v-container fluid>
     <!-- Registry Tabs -->
     <v-tabs v-model="activeRegistryIndex" background-color="primary" dark>
+      <v-tab key="all">All Registries</v-tab>
       <v-tab key="dockerhub">Docker Hub</v-tab>
       <v-tab key="ghcr">GitHub (GHCR)</v-tab>
       <v-tab key="linuxserver">LinuxServer.io</v-tab>
@@ -18,6 +19,7 @@
             outlined
             dense
             @input="handleSearch"
+            @keydown.enter="fetchImages"
           ></v-text-field>
         </v-col>
       </v-row>
@@ -36,17 +38,30 @@
       <v-row v-else>
         <v-col
           v-for="image in images"
-          :key="image.full_name"
+          :key="image.full_name + image.source"
           cols="12"
           md="6"
           lg="4"
         >
-          <ImageCard
-            :image="image"
-            @click="showDetails(image)"
-            @deploy="deploy(image)"
-            @details="showDetails(image)"
-          />
+          <!-- Wrapper to inject badge/source if needed -->
+          <div style="position: relative">
+            <ImageCard
+              :image="image"
+              @click="showDetails(image)"
+              @deploy="deploy(image)"
+              @details="showDetails(image)"
+            />
+            <!-- Badge Overlay -->
+            <v-chip
+              small
+              :color="getBadgeColor(image.source)"
+              text-color="white"
+              style="position: absolute; top: 10px; right: 10px; z-index: 2"
+            >
+              <v-icon left x-small>{{ getBadgeIcon(image.source) }}</v-icon>
+              {{ getBadgeText(image.source) }}
+            </v-chip>
+          </div>
         </v-col>
       </v-row>
     </v-card>
@@ -56,8 +71,6 @@
       <v-card v-if="selectedImage">
         <v-card-title>
           <v-avatar size="32" class="mr-2" tile>
-            <!-- Use cached logo logic? Or just replicate logic here? -->
-            <!-- For simplicity and to fix the modal logo too, I'll use the util here or just reuse the logic inline since it is one image -->
             <img
               :src="modalLogoSrc"
               @error="handleModalLogoError"
@@ -141,7 +154,7 @@ export default {
   data() {
     return {
       activeRegistryIndex: 0,
-      registries: ["dockerhub", "ghcr", "linuxserver"],
+      registries: ["all", "dockerhub", "ghcr", "linuxserver"],
       search: "",
       images: [],
       loading: false,
@@ -157,9 +170,6 @@ export default {
     };
   },
   computed: {
-    activeRegistry() {
-      return this.registries[this.activeRegistryIndex];
-    },
     currentRegistryName() {
       return this.registries[this.activeRegistryIndex];
     },
@@ -169,7 +179,15 @@ export default {
   },
   watch: {
     activeRegistryIndex() {
-      this.search = "";
+      // Clear images immediately to fix Bug #4
+      this.images = [];
+      // Do not clear search if switching tabs to allow searching same query on other registries?
+      // User request said: "Beim Wechsel zwischen Tabs werden alte Ergebnisse geleert"
+      // But for Unified Search, it might be nice to keep the query.
+      // I'll keep the search query but trigger a new fetch.
+      // If the user meant "clear everything", I should clear search too.
+      // But usually retaining search query is better UX.
+      // I will re-fetch.
       this.fetchImages();
     },
     selectedImage(newVal) {
@@ -179,6 +197,42 @@ export default {
     }
   },
   methods: {
+    getBadgeColor(source) {
+      switch (source) {
+        case "dockerhub":
+          return "blue darken-2";
+        case "ghcr":
+          return "green darken-2";
+        case "linuxserver":
+          return "orange darken-2";
+        default:
+          return "grey";
+      }
+    },
+    getBadgeIcon(source) {
+      switch (source) {
+        case "dockerhub":
+          return "mdi-docker";
+        case "ghcr":
+          return "mdi-package-variant";
+        case "linuxserver":
+          return "mdi-linux";
+        default:
+          return "mdi-help-circle";
+      }
+    },
+    getBadgeText(source) {
+      switch (source) {
+        case "dockerhub":
+          return "Docker Hub";
+        case "ghcr":
+          return "GHCR";
+        case "linuxserver":
+          return "LinuxServer";
+        default:
+          return source;
+      }
+    },
     initModalLogo(image) {
       const { sources, fallback } = getImageLogoWithFallbacks(
         image.full_name,
@@ -197,8 +251,8 @@ export default {
           this.selectedImage.full_name,
           this.selectedImage.source
         );
-         if (this.modalLogoSrc === fallback) {
-             return;
+        if (this.modalLogoSrc === fallback) {
+          return;
         }
         this.modalLogoSrc = fallback;
       }
@@ -223,20 +277,47 @@ export default {
         return dateString;
       }
     },
-    async fetchImages() {
-      this.loading = true;
+    async fetchRegistryImages(registry, query) {
       try {
-        const registry = this.currentRegistryName;
         let url = "/api/registries/popular";
         let params = { registry: registry };
-
-        if (this.search) {
+        if (query) {
           url = "/api/registries/search";
-          params.query = this.search;
+          params.query = query;
         }
-
         const response = await axios.get(url, { params });
-        this.images = response.data;
+        return response.data;
+      } catch (error) {
+        console.error(`Error fetching ${registry}:`, error);
+        return [];
+      }
+    },
+    async fetchImages() {
+      this.loading = true;
+      this.images = []; // Clear immediately
+      try {
+        const registry = this.currentRegistryName;
+
+        if (registry === "all") {
+          // Unified Search
+          const queries = ["dockerhub", "ghcr", "linuxserver"];
+          const results = await Promise.all(
+            queries.map(r => this.fetchRegistryImages(r, this.search))
+          );
+
+          let allImages = [];
+          results.forEach(res => {
+              if(Array.isArray(res)) allImages = allImages.concat(res);
+          });
+
+          // Sort by pull count (descending)
+          allImages.sort((a, b) => (b.pull_count || 0) - (a.pull_count || 0));
+          this.images = allImages;
+
+        } else {
+          // Single Registry Search
+          this.images = await this.fetchRegistryImages(registry, this.search);
+        }
       } catch (error) {
         console.error("Error fetching images:", error);
         if (this.$toast) this.$toast.error("Failed to fetch images");
@@ -256,7 +337,15 @@ export default {
       this.tags = [];
       this.loadingTags = true;
       try {
-        const registry = this.currentRegistryName;
+        // Use the source of the image for fetching tags
+        const registry = image.source || this.currentRegistryName;
+        // If 'all', we must rely on image.source which should be present
+        if(registry === 'all') {
+            console.error("Image source missing for tag fetch");
+            this.loadingTags = false;
+            return;
+        }
+
         const response = await axios.get("/api/registries/tags", {
           params: {
             registry: registry,
@@ -266,7 +355,6 @@ export default {
         this.tags = response.data;
       } catch (error) {
         console.error("Error fetching tags:", error);
-        // Non-critical, just show empty
       } finally {
         this.loadingTags = false;
       }
@@ -282,9 +370,8 @@ export default {
       if (image.source === "dockerhub") {
         return `https://hub.docker.com/r/${image.full_name}`;
       } else if (image.source === "ghcr") {
-        // ghcr.io/namespace/package
         const parts = image.full_name.replace("ghcr.io/", "").split("/");
-        return `https://github.com/${parts[0]}?tab=packages`; // Best effort
+        return `https://github.com/${parts[0]}?tab=packages`;
       } else if (image.source === "linuxserver") {
         if (image.github_url) return image.github_url;
         return `https://docs.linuxserver.io/images/docker-${image.name}`;
