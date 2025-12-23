@@ -181,9 +181,13 @@ def login_cookie(
 
 
 @router.post("/refresh")
-def refresh(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+def refresh(
+    response: Response,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
     current_user = Authorize.get_jwt_subject()
     new_access_token = create_access_token(data={"sub": current_user})
+    Authorize.set_access_cookies(new_access_token, response)
     return {"refresh": "successful", "access_token": new_access_token}
 
 

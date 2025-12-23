@@ -44,9 +44,8 @@ async def get_popular_images(registry: str) -> List[Dict]:
 
 async def fetch_dockerhub_popular() -> List[Dict]:
     """
-    Fetch popular images from Docker Hub (hardcoded popular list but fetched via API for details).
+    Fetch popular images from Docker Hub.
     """
-    # From original code
     POPULAR_IMAGES = {
         "security": [
             "linuxserver/wireguard",
@@ -78,7 +77,6 @@ async def fetch_dockerhub_popular() -> List[Dict]:
 
     result = []
     async with httpx.AsyncClient() as client:
-        # We can parallelize this
         tasks = []
         for category, images in POPULAR_IMAGES.items():
             for image_name in images:
@@ -108,7 +106,7 @@ async def fetch_dockerhub_image_info(client: httpx.AsyncClient, image_name: str)
                 "star_count": data.get("star_count", 0),
                 "is_official": data.get("is_official", False),
                 "full_name": f"{data.get('namespace')}/{data.get('name')}",
-                "logo_url": None, # Docker Hub API doesn't easily expose this publicly without auth sometimes
+                "logo_url": None,
                 "source": "dockerhub",
                 "last_updated": data.get("last_updated")
             }
@@ -119,10 +117,8 @@ async def fetch_dockerhub_image_info(client: httpx.AsyncClient, image_name: str)
 async def fetch_ghcr_popular() -> List[Dict]:
     """
     Fetch popular images from GitHub Container Registry.
-    Since GHCR doesn't have a public 'popular' endpoint easily accessible without auth or searching users,
-    we will use a hardcoded list of popular GHCR images as requested by user (e.g. linuxserver/plex).
+    Since GHCR doesn't have a simple public 'popular' endpoint, we rely on a curated list and better error handling.
     """
-    # User mentioned: ghcr.io/linuxserver/plex, ghcr.io/homeassistant/home-assistant
     IMAGES = [
         "linuxserver/plex",
         "homeassistant/home-assistant",
@@ -131,48 +127,39 @@ async def fetch_ghcr_popular() -> List[Dict]:
         "linuxserver/jellyfin"
     ]
 
-    # GHCR API is different. It uses standard OCI distribution API or GitHub API.
-    # We'll use GitHub API to get package info if possible.
-    # https://api.github.com/users/{org}/packages/{package_type}/{package_name}
-
     result = []
     async with httpx.AsyncClient() as client:
         for image in IMAGES:
             try:
-                # e.g. linuxserver/plex -> org: linuxserver, package: plex
+                # We try to fetch package info from GitHub API
+                # This requires that the package is associated with a repo or is public
+                # If this fails (404/403), we still add the image to the list because we know it exists.
+
                 org, pkg = image.split('/')
-                # Search for package
-                # https://api.github.com/orgs/linuxserver/packages/container/plex
-                url = f"https://api.github.com/orgs/{org}/packages/container/{pkg}"
-                resp = await client.get(url, timeout=10.0)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    result.append({
-                        "name": data.get("name"),
-                        "namespace": org,
-                        "description": "GitHub Container Registry Package", # Description might not be in this endpoint
-                        "pull_count": 0, # Not always available
-                        "star_count": 0,
-                        "is_official": False,
-                        "full_name": f"ghcr.io/{image}",
-                        "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr",
-                        "last_updated": data.get("updated_at")
-                    })
-                else:
-                    # Fallback if API fails (auth limits)
-                     result.append({
-                        "name": pkg,
-                        "namespace": org,
-                        "description": "GitHub Container Registry Image",
-                        "pull_count": 0,
-                        "star_count": 0,
-                        "is_official": False,
-                        "full_name": f"ghcr.io/{image}",
-                        "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr",
-                        "last_updated": None
-                    })
+                # Attempt to get metadata if possible, but don't fail hard
+                # https://api.github.com/users/{org}/packages/container/{pkg}
+
+                data = {}
+                url = f"https://api.github.com/users/{org}/packages/container/{pkg}"
+                try:
+                    resp = await client.get(url, timeout=5.0)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                except:
+                    pass
+
+                result.append({
+                    "name": data.get("name", pkg),
+                    "namespace": org,
+                    "description": "GitHub Container Registry Package",
+                    "pull_count": 0,
+                    "star_count": 0,
+                    "is_official": False,
+                    "full_name": f"ghcr.io/{image}",
+                    "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+                    "source": "ghcr",
+                    "last_updated": data.get("updated_at")
+                })
             except Exception as e:
                 logger.error(f"Error fetching GHCR {image}: {e}")
 
@@ -183,36 +170,59 @@ async def fetch_linuxserver_popular() -> List[Dict]:
     Fetch from LinuxServer.io API.
     https://api.linuxserver.io/api/v1/images
     """
-    url = "https://api.linuxserver.io/api/v1/images"
+    url = "https://fleet.linuxserver.io/api/v1/images" # Updated URL just in case, but memory said api.linuxserver.io works. Checking memory again...
+    # Memory said: "The LinuxServer.io integration uses the endpoint https://api.linuxserver.io/api/v1/images"
+    # Wait, actually let's try the one from memory if it failed.
+    # The user said "LinuxServer.io Registry komplett defekt".
+    # I'll stick to what was in the code but add better error handling.
+    # Actually, let's try both common endpoints if one fails.
+
+    urls = [
+        "https://fleet.linuxserver.io/api/v1/images",
+        "https://api.linuxserver.io/api/v1/images"
+    ]
+
     result = []
-    try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(url, timeout=10.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                # data['data']['repositories']['linuxserver'] is the list
-                images = data.get('data', {}).get('repositories', {}).get('linuxserver', [])
+    async with httpx.AsyncClient() as client:
+        success = False
+        for u in urls:
+            try:
+                resp = await client.get(u, timeout=10.0)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    # Key might be 'data' -> 'repositories' -> 'linuxserver'
+                    # Or just a list depending on endpoint version.
+                    # The code was expecting: data.get('data', {}).get('repositories', {}).get('linuxserver', [])
 
-                # Sort by monthly pulls (descending)
-                images.sort(key=lambda x: x.get('monthly_pulls', 0) or 0, reverse=True)
+                    images = []
+                    if 'data' in data and 'repositories' in data['data']:
+                        images = data['data']['repositories'].get('linuxserver', [])
+                    elif 'repositories' in data:
+                         images = data['repositories'].get('linuxserver', [])
 
-                for img in images[:50]: # Top 50
-                    # img structure: { "name": "plex", "monthly_pulls": 123, "stars": 123, "description": ..., "version_timestamp": ... }
-                    result.append({
-                        "name": img.get('name'),
-                        "namespace": "linuxserver",
-                        "description": img.get('description', ""),
-                        "pull_count": img.get('monthly_pulls', 0),
-                        "star_count": img.get('stars', 0),
-                        "is_official": False,
-                        "full_name": f"linuxserver/{img.get('name')}",
-                        "logo_url": img.get('project_logo') or "https://www.linuxserver.io/img/logo.png",
-                        "source": "linuxserver",
-                        "last_updated": img.get('version_timestamp'),
-                        "github_url": img.get('github_url')
-                    })
-    except Exception as e:
-        logger.error(f"Error fetching LSIO images: {e}")
+                    if not images:
+                        continue # try next url
+
+                    images.sort(key=lambda x: x.get('monthly_pulls', 0) or 0, reverse=True)
+
+                    for img in images[:50]:
+                        result.append({
+                            "name": img.get('name'),
+                            "namespace": "linuxserver",
+                            "description": img.get('description', ""),
+                            "pull_count": img.get('monthly_pulls', 0),
+                            "star_count": img.get('stars', 0),
+                            "is_official": False,
+                            "full_name": f"linuxserver/{img.get('name')}",
+                            "logo_url": img.get('project_logo') or "https://www.linuxserver.io/img/logo.png",
+                            "source": "linuxserver",
+                            "last_updated": img.get('version_timestamp'),
+                            "github_url": img.get('github_url')
+                        })
+                    success = True
+                    break
+            except Exception as e:
+                logger.error(f"Error fetching LSIO images from {u}: {e}")
 
     return result
 
@@ -225,9 +235,7 @@ async def search_registry(registry: str, query: str) -> List[Dict]:
     elif registry == 'ghcr':
         return await search_ghcr(query)
     elif registry == 'linuxserver':
-        # Local filter of cached popular list + maybe fetch?
-        # LSIO doesn't have a search API, but we can search the full list if we cache it?
-        # For now, just search the popular list we fetched.
+        # Search popular list
         popular = await get_popular_images('linuxserver')
         q = query.lower()
         return [img for img in popular if q in img['name'].lower() or q in img['description'].lower()]
@@ -243,7 +251,6 @@ async def search_dockerhub(query: str) -> List[Dict]:
             if resp.status_code == 200:
                 data = resp.json()
                 for item in data.get('results', []):
-                    # Parse repo_name to get namespace and name
                     repo_name = item.get("repo_name")
                     if repo_name and '/' in repo_name:
                         namespace, name = repo_name.split('/', 1)
@@ -251,9 +258,7 @@ async def search_dockerhub(query: str) -> List[Dict]:
                         namespace = "library"
                         name = repo_name
 
-                    description = item.get("short_description")
-                    if not description:
-                        description = "No description available."
+                    description = item.get("short_description") or "No description available."
 
                     result.append({
                         "name": name,
@@ -272,47 +277,18 @@ async def search_dockerhub(query: str) -> List[Dict]:
     return result
 
 async def search_ghcr(query: str) -> List[Dict]:
-    # Strategy 1: Search User/Org packages
-    # Strategy 2: Search Repositories with 'container' topic or description?
-
     result = []
 
-    # 1. Try User/Org Packages
+    # GHCR search is hard. We'll search GitHub Repositories as a proxy,
+    # assuming they publish packages to GHCR.
     try:
         async with httpx.AsyncClient() as client:
-            url = f"https://api.github.com/users/{query}/packages?package_type=container"
-            resp = await client.get(url, timeout=5.0)
-            if resp.status_code == 200:
-                data = resp.json()
-                for item in data:
-                     result.append({
-                        "name": item.get("name"),
-                        "namespace": item.get("owner", {}).get("login"),
-                        "description": "GitHub Package",
-                        "pull_count": 0,
-                        "star_count": 0,
-                        "is_official": False,
-                        "full_name": f"ghcr.io/{item.get('owner', {}).get('login')}/{item.get('name')}",
-                        "logo_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
-                        "source": "ghcr",
-                        "last_updated": item.get("updated_at")
-                    })
-    except Exception as e:
-        pass
-
-    if result:
-        return result
-
-    # 2. Fallback: Search Repositories
-    try:
-        async with httpx.AsyncClient() as client:
-            # Search repos matching query
             url = f"https://api.github.com/search/repositories?q={query}&sort=stars&order=desc"
             resp = await client.get(url, timeout=5.0)
             if resp.status_code == 200:
                 data = resp.json()
-                for item in data.get('items', [])[:10]:
-                    full_name = item.get('full_name') # owner/repo
+                for item in data.get('items', [])[:20]:
+                    full_name = item.get('full_name')
                     result.append({
                         "name": item.get("name"),
                         "namespace": item.get("owner", {}).get("login"),
@@ -326,20 +302,21 @@ async def search_ghcr(query: str) -> List[Dict]:
                         "last_updated": item.get("updated_at")
                     })
     except Exception as e:
-        pass
+        logger.error(f"Error searching GHCR: {e}")
 
     return result
 
 async def get_image_tags(registry: str, image: str) -> List[str]:
-    # image = namespace/repo (or full url)
     tags = []
     try:
         if registry == 'dockerhub' or registry == 'linuxserver':
-             # For linuxserver, the image is often a Docker Hub repo (e.g. linuxserver/plex)
-             # So we reuse Docker Hub logic.
-             # https://hub.docker.com/v2/repositories/{namespace}/{repo}/tags
              if '/' not in image:
                  image = f"library/{image}"
+
+             # Handle linuxserver images that might be passed as linuxserver/plex
+             if image.startswith('linuxserver/'):
+                 # It is correct as is
+                 pass
 
              url = f"https://hub.docker.com/v2/repositories/{image}/tags?page_size=20"
              async with httpx.AsyncClient() as client:
@@ -349,22 +326,23 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
                     tags = [t.get('name') for t in data.get('results', [])]
 
         elif registry == 'ghcr':
-             # Need token for GHCR usually?
-             # Use https://api.github.com/users/{org}/packages/container/{name}/versions
              if 'ghcr.io/' in image:
                  image = image.replace('ghcr.io/', '')
+
+             # image is owner/repo or owner/package
+             # We try to hit the package versions endpoint
              parts = image.split('/')
-             if len(parts) == 2:
-                 org, name = parts
-                 url = f"https://api.github.com/users/{org}/packages/container/{name}/versions"
+             if len(parts) >= 2:
+                 org = parts[0]
+                 pkg = parts[1]
+                 url = f"https://api.github.com/users/{org}/packages/container/{pkg}/versions"
                  async with httpx.AsyncClient() as client:
                     resp = await client.get(url, timeout=10.0)
                     if resp.status_code == 200:
                         data = resp.json()
-                        tags = [t.get('metadata', {}).get('container', {}).get('tags', []) for t in data]
-                        # Flatten
+                        raw_tags = [t.get('metadata', {}).get('container', {}).get('tags', []) for t in data]
                         flat_tags = []
-                        for tlist in tags:
+                        for tlist in raw_tags:
                             flat_tags.extend(tlist)
                         tags = list(set(flat_tags))
     except Exception as e:

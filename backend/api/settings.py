@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = os.environ.get("SECRET_KEY", secrets.token_hex(16))
     ADMIN_PASSWORD: str = os.environ.get("ADMIN_PASSWORD", "pass")
     ADMIN_EMAIL: str = os.environ.get("ADMIN_EMAIL", "admin@yachtplus")
-    ACCESS_TOKEN_EXPIRES: int = os.environ.get("ACCESS_TOKEN_EXPIRES", 900)
+    ACCESS_TOKEN_EXPIRES: int = os.environ.get("ACCESS_TOKEN_EXPIRES", 3600)
     REFRESH_TOKEN_EXPIRES: int = os.environ.get("REFRESH_TOKEN_EXPIRES", 2592000)
     SAME_SITE_COOKIES: str = os.environ.get("SAME_SITE_COOKIES", "lax")
     DISABLE_AUTH: bool = os.environ.get("DISABLE_AUTH", False)
