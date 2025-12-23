@@ -16,10 +16,60 @@ from api.routers import apps, app_settings, compose, resources, templates, users
 from api.routers.setup import setup
 from api.db.crud.templates import read_template_variables, set_template_variables
 from api.services.watchtower import start_scheduler, stop_scheduler
+import docker.errors
+import requests.exceptions
 
 app = FastAPI(root_path="/api")
 
 settings = Settings()
+
+
+@app.exception_handler(docker.errors.DockerException)
+async def docker_exception_handler(request: Request, exc: docker.errors.DockerException):
+    """
+    Handle Docker exceptions gracefully, specifically targeting connection errors
+    likely caused by missing socket mounts or permission issues.
+    """
+    error_str = str(exc)
+
+    # Permission Denied (e.g. user not in docker group)
+    if "Permission denied" in error_str or "PermissionError" in error_str:
+         return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Permission denied while accessing Docker socket. Please ensure the container runs with correct permissions (e.g. DOCKER_GID).",
+                "original_error": error_str
+            },
+        )
+
+    # Missing Socket or Connection Refused
+    if "Connection refused" in error_str or "FileNotFoundError" in error_str or "Error while fetching server API version" in error_str:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "Docker connection failed. Please ensure /var/run/docker.sock is mounted.",
+                "original_error": error_str
+            },
+        )
+
+    # Generic fallback for other Docker errors
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Docker API Error", "original_error": error_str},
+    )
+
+@app.exception_handler(requests.exceptions.ConnectionError)
+async def requests_connection_error_handler(request: Request, exc: requests.exceptions.ConnectionError):
+    """
+    Handle Requests connection errors that might leak from Docker SDK.
+    """
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": "Connection error. This may indicate the Docker socket is not available.",
+            "original_error": str(exc)
+        },
+    )
 
 # Register Routers
 app.include_router(users.router, prefix="/auth", tags=["users"])
