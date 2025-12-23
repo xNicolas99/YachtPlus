@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     procps \
     gosu \
+    procps \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker Compose 2.x as a standalone binary
