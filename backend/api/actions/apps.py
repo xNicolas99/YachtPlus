@@ -32,6 +32,9 @@ import docker
 import aiodocker
 import asyncio
 import aiostream
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 """
@@ -162,12 +165,70 @@ def get_app_logs(app_name):
 
 
 """
+Check for container conflicts before deployment
+"""
+def check_container_conflicts(data: DeployForm):
+    conflicts = []
+    dclient = docker.from_env()
+
+    # Check Name
+    try:
+        c = dclient.containers.get(data.name)
+        # If found, and we are not editing THIS container, it's a conflict
+        if data.edit and data.id == c.id:
+            pass
+        else:
+            conflicts.append({"type": "name", "message": f"Container name '{data.name}' is already in use."})
+    except docker.errors.NotFound:
+        pass
+
+    # Check Ports
+    if data.ports:
+        requested_ports = []
+        for p in data.ports:
+            if p.hport:
+                requested_ports.append((str(p.hport), p.proto))
+
+        if requested_ports:
+            existing_containers = dclient.containers.list()
+            for c in existing_containers:
+                # If editing, skip self
+                if data.edit and data.id == c.id:
+                    continue
+
+                ports_map = c.attrs.get('NetworkSettings', {}).get('Ports', {})
+                if not ports_map: continue
+
+                for c_port_proto, bindings in ports_map.items():
+                    if not bindings: continue
+                    for bind in bindings:
+                        h_port = bind.get('HostPort')
+                        if not h_port: continue
+
+                        proto = c_port_proto.split('/')[1]
+
+                        if (h_port, proto) in requested_ports:
+                             conflicts.append({
+                                 "type": "port",
+                                 "port": h_port,
+                                 "message": f"Host port {h_port}/{proto} is already used by container {c.name}"
+                             })
+
+    return conflicts
+
+"""
 Deploy a new app. Format is available in 
 ../db/schemas/apps.py
 """
 
 
 def deploy_app(template: DeployForm):
+    # Check for conflicts
+    conflicts = check_container_conflicts(template)
+    if conflicts:
+        logger.warning(f"Deployment conflicts for {template.name}: {conflicts}")
+        return {"success": False, "conflicts": conflicts}
+
     try:
         launch = launch_app(
             template.name,
