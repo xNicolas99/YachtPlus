@@ -1,0 +1,92 @@
+import httpx
+import logging
+from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
+
+async def get_image_config(image_name: str) -> Optional[Dict]:
+    """
+    Fetches the image configuration (ExposedPorts, Volumes) from Docker Hub or GHCR.
+    This is a best-effort implementation without authentication for public images.
+    """
+    # Identify registry
+    registry = "dockerhub"
+    if image_name.startswith("ghcr.io/"):
+        registry = "ghcr"
+        image_name = image_name.replace("ghcr.io/", "")
+    elif image_name.startswith("lscr.io/"):
+        registry = "linuxserver" # Effectively DockerHub or GHCR depending on where it points, but usually lscr.io redirects to GHCR/Hub.
+        # But for metadata, we treat it as remote.
+        # Actually lscr.io images are hosted on GHCR/DockerHub.
+        # Let's treat it as DockerHub for now if it looks like one, or try to resolving.
+        # For now, let's assume DockerHub library if no domain.
+        pass
+
+    if registry == "dockerhub":
+        return await _get_dockerhub_config(image_name)
+
+    # GHCR support is more complex without auth token for some endpoints,
+    # but we can try the public manifest endpoint if available.
+    # For now, prioritize DockerHub as requested.
+
+    return None
+
+async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
+    if "/" not in image_name:
+        image_name = f"library/{image_name}"
+
+    # 1. Get Token
+    auth_url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{image_name}:pull"
+    async with httpx.AsyncClient() as client:
+        try:
+            auth_resp = await client.get(auth_url, timeout=5.0)
+            if auth_resp.status_code != 200:
+                return None
+            token = auth_resp.json().get("token")
+
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.docker.distribution.manifest.v2+json"
+            }
+
+            # 2. Get Manifest to find Config Blob Digest
+            # We assume 'latest' tag if not specified, but the image name from UI likely has no tag.
+            # If the user selected a tag, it should be in the image name (e.g. nginx:alpine).
+            # The current UI passes "full_name" which might not have tag.
+            # ApplicationsForm sets image=image_name.
+            # If no tag, we assume latest.
+
+            tag = "latest"
+            if ":" in image_name:
+                image_name, tag = image_name.split(":", 1)
+
+            manifest_url = f"https://registry-1.docker.io/v2/{image_name}/manifests/{tag}"
+            manifest_resp = await client.get(manifest_url, headers=headers, timeout=5.0)
+
+            if manifest_resp.status_code != 200:
+                return None
+
+            manifest = manifest_resp.json()
+            config_digest = manifest.get("config", {}).get("digest")
+
+            if not config_digest:
+                return None
+
+            # 3. Get Config Blob
+            blob_url = f"https://registry-1.docker.io/v2/{image_name}/blobs/{config_digest}"
+            blob_resp = await client.get(blob_url, headers=headers, timeout=5.0)
+
+            if blob_resp.status_code != 200:
+                return None
+
+            config = blob_resp.json()
+            container_config = config.get("config", {}) or config.get("container_config", {})
+
+            return {
+                "ExposedPorts": container_config.get("ExposedPorts", {}),
+                "Volumes": container_config.get("Volumes", {})
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching config for {image_name}: {e}")
+            return None

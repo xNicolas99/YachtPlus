@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, Query
-from typing import List, Dict
+from typing import List, Dict, Optional
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
 import api.utils.registries as registries
+import api.utils.image_inspect as image_inspect
 
 router = APIRouter(prefix="/registries", tags=["registries"])
 
@@ -31,3 +32,14 @@ async def get_tags(
 ):
     auth_check(Authorize)
     return await registries.get_image_tags(registry, image)
+
+@router.get("/inspect")
+async def inspect_image(
+    image: str,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    """
+    Fetch remote image configuration (Ports, Volumes) from registry.
+    """
+    auth_check(Authorize)
+    return await image_inspect.get_image_config(image)

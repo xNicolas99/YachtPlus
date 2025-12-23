@@ -9,8 +9,10 @@ from docker.errors import APIError
 from docker.utils import parse_repository_tag
 import json
 from fastapi import HTTPException
+import logging
 import os
 
+logger = logging.getLogger(__name__)
 settings = Settings()
 
 # ... (Existing code kept as is) ...
@@ -308,7 +310,7 @@ async def calculate_cpu_percent2(d, previous_cpu, previous_system):
         cpu_percent = max(0.0, min(cpu_percent, 100.0 * float(online_cpus)))
 
     except Exception as e:
-        print(f"Error calculating CPU: {e}")
+        logger.error(f"Error calculating CPU: {e}")
         cpu_total = 0.0
         cpu_system = 0.0
 
@@ -347,7 +349,7 @@ def graceful_chain_get(d, *args, default=None):
         try:
             t = t[a]
         except (KeyError, ValueError, TypeError, AttributeError):
-            print("can't get %r from %s", a, t)
+            logger.error("can't get %r from %s", a, t)
             return default
     return t
 
@@ -369,7 +371,7 @@ async def get_app_stats(app_name):
                     line, cpu_total, cpu_system
                 )
             except KeyError as e:
-                print(f"error while getting new CPU stats: {e}, falling back")
+                logger.error(f"error while getting new CPU stats: {e}, falling back")
                 cpu_percent = await calculate_cpu_percent(line)
 
             full_stats = {
@@ -490,8 +492,12 @@ def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployFor
 
     if form.cpus is None and template_item.cpus:
         # Template cpus might be stored differently, assuming int/float compatibility
+        # If float (0.5), we keep it as float.
+        # If int (nano), we might need conversion, but DeployForm now accepts float.
+        # Docker API expects NanoCPUs, so if the template stores "0.5" (cores),
+        # we pass it as float to form, and then `conv_cpus2data` converts it to NanoCPUs later.
         try:
-             form.cpus = int(float(template_item.cpus))
+             form.cpus = float(template_item.cpus)
         except:
              pass
 
