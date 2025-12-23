@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     nginx \
     curl \
-    ruby-dev \
+    procps \
     gosu \
     procps \
     && rm -rf /var/lib/apt/lists/*
@@ -44,9 +44,6 @@ RUN pip3 install --upgrade pip setuptools wheel
 
 # Install Python packages from requirements.txt
 RUN pip3 install -r requirements.txt --no-cache-dir --verbose
-
-# Install SASS via gem
-RUN gem install sass --verbose
 
 # Copy the backend code
 COPY ./backend/ ./

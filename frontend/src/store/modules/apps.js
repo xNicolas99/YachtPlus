@@ -96,7 +96,6 @@ const actions = {
             commit("setLoading", true);
           })
           .catch(err => {
-            console.log(err);
             if (Vue.prototype.$toast) {
               Vue.prototype.$toast.error(
                 "Failed to check updates for " + _app.name

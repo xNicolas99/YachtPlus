@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
@@ -8,8 +8,6 @@ from fastapi.exceptions import HTTPException
 from datetime import datetime
 import secrets
 from api.auth.jwt import create_access_token
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 settings = Settings()
 
@@ -112,11 +110,22 @@ def update_user_by_id(db: Session, user_id: int, user_update: schemas.UserUpdate
     return db_user
 
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    # bcrypt requires bytes
+    if isinstance(plain_password, str):
+        plain_password = plain_password.encode('utf-8')
+    if isinstance(hashed_password, str):
+        hashed_password = hashed_password.encode('utf-8')
+
+    return bcrypt.checkpw(plain_password, hashed_password)
 
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    if isinstance(password, str):
+        password = password.encode('utf-8')
+
+    # gensalt default rounds is 12
+    hashed = bcrypt.hashpw(password, bcrypt.gensalt())
+    return hashed.decode('utf-8')
 
 
 def prune_blacklist(db: Session):
