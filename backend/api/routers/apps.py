@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 
@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import api.actions.apps as actions
 from api.settings import Settings
 from api.auth.auth import auth_check, check_permission
-from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes
+from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
 
 from api.auth.jwt import get_auth_wrapper
 import aiodocker
@@ -84,25 +84,29 @@ def container_actions(app_name, action, background_tasks: BackgroundTasks, Autho
 
     return actions.app_action(app_name, action, background_tasks)
 
-
 @router.post("/deploy", response_model=schemas.DeployLogs)
 def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     # Deploying implies starting/creating
     check_permission("perm_start", Authorize, db)
 
-    # If template_id is provided, we could fetch defaults from DB here.
-    # However, the frontend sends the full config (overrides), so we just use the 'template' object (DeployForm)
-    # which contains everything.
-    # To satisfy the requirement of "loading from DB", we can verify or log,
-    # but for now we trust the payload which claims to be the config.
+    # If template_id is provided, fetch defaults from DB and merge.
+    if template.template_id:
+        try:
+            db_template_item = template_crud.read_app_template(db, template.template_id)
+            if db_template_item:
+                template = merge_template(template, db_template_item)
+        except Exception as e:
+            # If fetching template fails, we proceed with what we have, or log warning
+            print(f"Error merging template: {e}")
+            pass
 
-    # If the user wanted us to MERGE here, we would:
-    # if template.template_id:
-    #     db_template = template_crud.read_app_template(db, template.template_id)
-    #     # Here we could merge db_template with template (request)
+    # Ensure required fields are present after merge
+    if not template.image:
+        raise HTTPException(status_code=422, detail="Image field is required and could not be determined from template.")
+    if not template.name:
+         raise HTTPException(status_code=422, detail="Name field is required.")
 
-    # But since 'template' has all fields (defaults from frontend), we proceed directly.
     result = actions.deploy_app(template=template)
 
     if isinstance(result, dict) and result.get("success") is False:
