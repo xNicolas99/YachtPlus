@@ -75,6 +75,7 @@ export default {
     terminal: null,
     fitAddon: null,
     websocket: null,
+    dataDisposable: null, // To store the listener reference
     selectedShell: "/bin/sh",
     resizeObserver: null,
     isConnected: false,
@@ -197,8 +198,21 @@ export default {
       await this.pasteFromClipboard();
     },
     connect() {
+      // 1. Close old WebSocket connection
       if (this.websocket) {
-        this.websocket.close();
+        this.websocket.close(1000, 'Switching shell or reconnecting');
+        this.websocket = null;
+      }
+
+      // 2. Remove old event listener
+      if (this.dataDisposable) {
+        this.dataDisposable.dispose();
+        this.dataDisposable = null;
+      }
+
+      // 3. Clear terminal (optional but good practice when switching shells)
+      if (this.terminal) {
+        this.terminal.clear();
       }
 
       // Get auth token from store or localStorage
@@ -303,12 +317,15 @@ export default {
           );
       };
 
-      this.terminal.onData(data => {
-        // Local echo is disabled. Data is sent to backend.
-        if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-          this.websocket.send(data);
-        }
-      });
+      // 4. Register new listener and store the disposable
+      if (this.terminal) {
+        this.dataDisposable = this.terminal.onData(data => {
+          // Local echo is disabled. Data is sent to backend.
+          if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+            this.websocket.send(data);
+          }
+        });
+      }
     },
     fit() {
       if (this.fitAddon && this.terminal) {
@@ -338,9 +355,6 @@ export default {
       }
     },
     reconnect() {
-      if (this.terminal) {
-        this.terminal.clear();
-      }
       this.connect();
     },
     close() {
@@ -350,6 +364,10 @@ export default {
       if (this.websocket) {
         this.websocket.close();
         this.websocket = null;
+      }
+      if (this.dataDisposable) {
+        this.dataDisposable.dispose();
+        this.dataDisposable = null;
       }
       if (this.terminal) {
         // Remove context menu listener
