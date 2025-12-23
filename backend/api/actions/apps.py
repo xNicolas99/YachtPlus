@@ -65,9 +65,9 @@ def check_app_update(app_name):
     dclient = docker.from_env()
     try:
         app = dclient.containers.get(app_name)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.status_code, detail=exc.explanation
         )
 
     # Safe access to Config and Image
@@ -89,15 +89,12 @@ properties that aren't in the app attributes
 
 def get_apps():
     apps_list = []
-    try:
-        dclient = docker.from_env()
-    except docker.errors.DockerException as exc:
-        raise HTTPException(status_code=500, detail=exc.args)
+    dclient = docker.from_env()
     try:
         apps = dclient.containers.list(all=True)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.status_code, detail=exc.explanation
         )
     for app in apps:
         attrs = app.attrs
@@ -121,9 +118,9 @@ def get_app(app_name):
     dclient = docker.from_env()
     try:
         app = dclient.containers.get(app_name)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.status_code, detail=exc.explanation
         )
     attrs = app.attrs
 
@@ -194,9 +191,9 @@ def deploy_app(template: DeployForm):
         )
     except HTTPException as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.status_code, detail=exc.explanation
         )
     print("done deploying")
 
@@ -339,16 +336,16 @@ def app_action(app_name, action, background_tasks=None):
     if action == "remove":
         try:
             _action(force=True)
-        except Exception as exc:
+        except docker.errors.APIError as exc:
             raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
+                status_code=exc.status_code, detail=exc.explanation
             )
     else:
         try:
             _action()
-        except Exception as exc:
+        except docker.errors.APIError as exc:
             raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
+                status_code=exc.status_code, detail=exc.explanation
             )
     apps_list = get_apps()
     return apps_list
@@ -364,16 +361,16 @@ def app_update(app_name):
     dclient = docker.from_env()
     try:
         old = dclient.containers.get(app_name)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         print(exc)
-        if exc.response.status_code == 404:
+        if exc.status_code == 404:
             raise HTTPException(
-                status_code=exc.response.status_code,
+                status_code=exc.status_code,
                 detail="Unable to get container ID",
             )
         else:
             raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
+                status_code=exc.status_code, detail=exc.explanation
             )
 
     volumes = {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}}
@@ -385,10 +382,10 @@ def app_update(app_name):
             detach=True,
             volumes=volumes,
         )
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         print(exc)
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.status_code, detail=exc.explanation
         )
 
     print("**** Updating " + old.name + "****")
@@ -413,16 +410,16 @@ def _update_self(background_tasks):
     )
     try:
         yacht = dclient.containers.get(yacht_id)
-    except Exception as exc:
+    except docker.errors.APIError as exc:
         print(exc)
-        if exc.response.status_code == 404:
+        if exc.status_code == 404:
             raise HTTPException(
-                status_code=exc.response.status_code,
+                status_code=exc.status_code,
                 detail="Unable to get Yacht container ID",
             )
         else:
             status_code = 500
-            detail = exc.args[0]
+            detail = exc.explanation
             raise HTTPException(status_code=status_code, detail=detail)
     background_tasks.add_task(update_self_in_background, yacht)
     return {"result": "successful"}

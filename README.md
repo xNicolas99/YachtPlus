@@ -48,12 +48,10 @@ Run `docker-compose up -d`.
 ### Important Configuration Notes
 
 - **Volume Mounts**: You **must** mount `/var/run/docker.sock` and `/config` for the application to function correctly. Without these, you will encounter errors accessing the dashboard or managing apps.
-- **DOCKER_GID**: If you experience permission errors accessing the Docker socket (e.g. logs not showing, apps not listing), you may need to pass the `DOCKER_GID` environment variable matching your host's docker group ID.
+- **DOCKER_GID**: The application attempts to automatically detect the correct Group ID for the Docker socket. However, if you experience permission errors, you can explicitly set `DOCKER_GID` in an `.env` file or your compose file.
   ```yaml
-  environment:
-    - PUID=1000
-    - PGID=1000
-    - DOCKER_GID=999 # Change to your host's docker group ID
+  # .env file
+  DOCKER_GID=999 # Set to $(stat -c '%g' /var/run/docker.sock) on host
   ```
 
 ## Development

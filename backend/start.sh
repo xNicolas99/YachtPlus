@@ -4,8 +4,13 @@ set -e
 # Non-Root Transition Logic
 # DOCKER_GID can be passed from host (e.g. $(getent group docker | cut -d: -f3))
 if [ -z "${DOCKER_GID}" ]; then
-    echo "DOCKER_GID not set. Defaulting to 999 (standard docker group)."
-    DOCKER_GID=999
+    if [ -S /var/run/docker.sock ]; then
+        DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
+        echo "DOCKER_GID not set. Auto-detected from /var/run/docker.sock: ${DOCKER_GID}"
+    else
+        echo "DOCKER_GID not set and socket not found. Defaulting to 999 (standard docker group)."
+        DOCKER_GID=999
+    fi
 fi
 
 # Create or modify the docker group to match the host's GID
