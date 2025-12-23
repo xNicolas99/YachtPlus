@@ -58,6 +58,9 @@ async def container_exec(
     # Check Auth
     try:
         if not token:
+            token = websocket.cookies.get("access_token_cookie")
+
+        if not token:
              raise Exception("No token")
         jwt.decode(token, get_secret_key(), algorithms=["HS256"])
     except Exception as e:

@@ -14,7 +14,8 @@ from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
 from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries
 from api.routers.setup import setup
-from api.db.crud.templates import read_template_variables, set_template_variables
+from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
+from api.db.models.containers import Template
 from api.services.watchtower import start_scheduler, stop_scheduler
 import docker.errors
 import requests.exceptions
@@ -128,6 +129,21 @@ async def startup(db: Session = Depends(get_db)):
             )
             t_var_list.append(template_variables)
         set_template_variables(new_variables=t_var_list, db=SessionLocal())
+
+    # Check for Default Template
+    try:
+        db_session = SessionLocal()
+        templates_exist = get_templates(db_session)
+        if not templates_exist:
+            print("No templates found. Adding default SelfhostedPro template.")
+            default_template = Template(
+                title="SelfhostedPro Templates",
+                url="https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/template.json"
+            )
+            add_template(db_session, default_template)
+        db_session.close()
+    except Exception as e:
+        print(f"Failed to add default template: {e}")
 
 @app.on_event("shutdown")
 def shutdown_event():

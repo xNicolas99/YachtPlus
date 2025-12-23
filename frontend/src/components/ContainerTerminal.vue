@@ -209,19 +209,20 @@ export default {
         localStorage.getItem("authToken") ||
         localStorage.getItem("access_token_cookie");
 
+      // If token is missing, we proceed anyway (cookie-based auth fallback)
       if (!token) {
-        if (this.$toast)
-          this.$toast.error("Authentication required. Please log in again.");
-        return;
+        console.warn("No token found in storage, attempting cookie-based auth.");
       }
 
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.hostname;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      const wsUrl = `${protocol}//${host}${port}/api/containers/${
-        this.containerId
-      }/exec?token=${encodeURIComponent(token)}&shell=${this.selectedShell}`;
+      let wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
+
+      if (token) {
+        wsUrl += `&token=${encodeURIComponent(token)}`;
+      }
 
       this.websocket = new WebSocket(wsUrl);
 
