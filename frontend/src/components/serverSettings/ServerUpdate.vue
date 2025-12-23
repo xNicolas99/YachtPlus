@@ -76,7 +76,7 @@ export default {
         method: "GET",
         responseType: "text/json"
       })
-        .then(response => {
+        .then(() => {
           this.isLoading = false;
           this.setMessage(
             "Yacht is updating now. You will be logged out to complete the update."
