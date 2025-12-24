@@ -10,6 +10,7 @@ from api.db.crud import users as crud
 from api.db.models import users as models
 from api.db.schemas import users as schemas
 from api.utils.security import check_ip_restriction, record_login_attempt
+from api.utils.crypto import decrypt
 import pyotp
 
 router = APIRouter()
@@ -123,10 +124,17 @@ def login(
                     "username": _user.username
                 }
             else:
-                totp = pyotp.TOTP(_user.otp_secret)
-                if not totp.verify(otp_token):
+                try:
+                    secret = decrypt(_user.otp_secret)
+                    totp = pyotp.TOTP(secret)
+                    if not totp.verify(otp_token):
+                        record_login_attempt(db, client_ip, user.username, False)
+                        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+                except Exception as e:
+                    # Log error, do not expose detail
+                    print(f"2FA Verify Error: {e}")
                     record_login_attempt(db, client_ip, user.username, False)
-                    raise HTTPException(status_code=400, detail="Invalid 2FA code")
+                    raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
         # Success
         record_login_attempt(db, client_ip, user.username, True)
@@ -162,10 +170,17 @@ def login_cookie(
         if _user.is_2fa_enabled:
              if not otp_token:
                 return {"login": "2fa_required", "username": _user.username}
-             totp = pyotp.TOTP(_user.otp_secret)
-             if not totp.verify(otp_token):
+
+             try:
+                 secret = decrypt(_user.otp_secret)
+                 totp = pyotp.TOTP(secret)
+                 if not totp.verify(otp_token):
+                     record_login_attempt(db, client_ip, user.username, False)
+                     raise HTTPException(status_code=400, detail="Invalid 2FA code")
+             except Exception as e:
+                 print(f"2FA Verify Error: {e}")
                  record_login_attempt(db, client_ip, user.username, False)
-                 raise HTTPException(status_code=400, detail="Invalid 2FA code")
+                 raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
         record_login_attempt(db, client_ip, user.username, True)
         access_token = create_access_token(data={"sub": _user.username})
