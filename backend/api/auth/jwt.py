@@ -61,11 +61,6 @@ def get_current_user_token(request: Request):
     # Check cookie
     token = request.cookies.get("access_token_cookie")
     if token:
-        # Some frameworks might prefix with Bearer in cookie, usually not but handle if needed.
-        # Here we assume just the token.
-        # But wait, fastapi-jwt-auth (which we replaced) might have used 'access_token_cookie'
-        # We should check how the frontend sends it.
-        # The frontend likely expects the cookie to be set.
         return token
     return None
 
@@ -83,10 +78,6 @@ def get_current_user(token: str = Depends(get_current_user_token)):
         raise credentials_exception
 
     return verify_token(token, credentials_exception)
-
-# Dependency wrapper to mimic the old Authorize style if we want to minimize refactoring,
-# or we can refactor routes to use `Depends(get_current_user)` directly.
-# Given the existing code uses `Authorize: AuthJWT = Depends()`, let's try to adapt.
 
 class AuthWrapper:
     def __init__(self, request: Request):
@@ -110,13 +101,14 @@ class AuthWrapper:
     def set_access_cookies(self, token, response, max_age=None):
         # We need to set the cookie.
         # Using settings from main.py / settings.py
+        # Logic to enable/disable secure flag for LAN vs Prod
         response.set_cookie(
             key="access_token_cookie",
             value=token,
             httponly=True,
             max_age=max_age or int(settings.ACCESS_TOKEN_EXPIRES),
-            samesite="Strict",
-            secure=True
+            samesite=settings.SAME_SITE_COOKIES,
+            secure=settings.SECURE_COOKIES
         )
 
 def get_auth_wrapper(request: Request):

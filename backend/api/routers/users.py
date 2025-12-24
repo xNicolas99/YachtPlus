@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from api.auth.jwt import get_auth_wrapper, create_access_token
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import logging
 
 from api.utils.auth import get_db
 from api.auth.auth import auth_check, check_permission
@@ -15,6 +16,7 @@ import pyotp
 
 router = APIRouter()
 settings = Settings()
+logger = logging.getLogger(__name__)
 
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
@@ -80,14 +82,6 @@ def create_user(
     db: Session = Depends(get_db),
 ):
     auth_check(Authorize)
-    # Check permissions (only admin/superuser can create users?)
-    # For now, allowing existing check to pass if they are authenticated
-    # Ideally should check for 'admin' role or is_superuser
-
-    # Check if creator is superuser if they are setting superuser/active/permissions
-    # For simplicity, we enforce superuser check for user creation via this route if we are managing users.
-    # But self-registration might be a thing? Assuming NO for Yacht (it's a server manager).
-    # So creation should be restricted to Admins.
     username = Authorize.get_jwt_subject()
     creator = crud.get_user_by_name(db, username)
     if not creator or not creator.is_superuser:
@@ -131,8 +125,7 @@ def login(
                         record_login_attempt(db, client_ip, user.username, False)
                         raise HTTPException(status_code=400, detail="Invalid 2FA code")
                 except Exception as e:
-                    # Log error, do not expose detail
-                    print(f"2FA Verify Error: {e}")
+                    logger.error(f"2FA Verify Error: {e}")
                     record_login_attempt(db, client_ip, user.username, False)
                     raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
@@ -178,7 +171,7 @@ def login_cookie(
                      record_login_attempt(db, client_ip, user.username, False)
                      raise HTTPException(status_code=400, detail="Invalid 2FA code")
              except Exception as e:
-                 print(f"2FA Verify Error: {e}")
+                 logger.error(f"2FA Verify Error: {e}")
                  record_login_attempt(db, client_ip, user.username, False)
                  raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
