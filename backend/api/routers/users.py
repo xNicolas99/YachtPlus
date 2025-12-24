@@ -250,7 +250,10 @@ def get_user(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depend
         Authorize.jwt_required()
         current_user_name = Authorize.get_jwt_subject()
         if current_user_name is not None:
-            return crud.get_user_by_name(db=db, username=current_user_name)
+            user = crud.get_user_by_name(db=db, username=current_user_name)
+            if not user:
+                raise HTTPException(status_code=401, detail="User not found or deleted.")
+            return user
         else:
             raise HTTPException(status_code=401, detail="Not logged in.")
 
