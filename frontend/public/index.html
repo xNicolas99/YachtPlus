@@ -61,10 +61,10 @@
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('/service-worker.js')
         .then(function(registration) {
-          console.log('Registration successful, scope is:', registration.scope);
+          // Service worker registered successfully
         })
         .catch(function(error) {
-          console.log('Service worker registration failed, error:', error);
+          console.error('Service worker registration failed:', error);
         });
       }
     </script>

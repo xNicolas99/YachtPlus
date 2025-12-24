@@ -2,6 +2,8 @@ import Vue from "vue";
 import Vuetify from "vuetify/lib";
 import { themeTheme } from "../config.js";
 import "@mdi/font/css/materialdesignicons.css";
+// Ensure font is consistent if relying on local builds or tree shaking
+import "roboto-fontface/css/roboto/roboto-fontface.css";
 
 Vue.use(Vuetify);
 
@@ -9,6 +11,9 @@ function theme() {
   var presetThemes = {
     Default: {
       theme: {
+        options: {
+          customProperties: true
+        },
         themes: {
           dark: {
             primary: "#00E5FF", // Cyan A400 - Modern neon accent
@@ -36,9 +41,6 @@ function theme() {
           }
         },
         dark: true,
-        options: {
-          customProperties: true
-        }
       }
     },
     // Keeping other themes for backward compatibility but default is updated

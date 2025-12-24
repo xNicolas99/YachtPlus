@@ -26,14 +26,15 @@ import Sidebar from "./components/nav/Sidebar";
 import Appbar from "./components/nav/Appbar";
 import Bottombar from "./components/nav/Bottombar";
 import snackbar from "./components/notifications/snackbar";
+
 export default {
   name: "App",
 
   components: {
-    Sidebar: Sidebar,
-    Appbar: Appbar,
-    Bottombar: Bottombar,
-    snackbar: snackbar
+    Sidebar,
+    Appbar,
+    Bottombar,
+    snackbar
   },
   data: () => ({
     refreshTimer: null,
@@ -73,21 +74,14 @@ export default {
         this.$route.name !== "Logs"
       ) {
         this.logout();
-      } else if (timeSinceActivity <= this.INACTIVITY_LIMIT) {
-        // User is active, ensure token is refreshed
-        // We handle refresh in a separate interval, but we could do it here too.
-        // The separate refreshTimer handles the keep-alive.
       }
     },
     handleUserActivity() {
       this.resetInactivityTimer();
     },
     startActivityTracking() {
-      window.addEventListener("mousemove", this.handleUserActivity);
-      window.addEventListener("click", this.handleUserActivity);
-      window.addEventListener("keypress", this.handleUserActivity);
-      window.addEventListener("scroll", this.handleUserActivity);
-      window.addEventListener("touchstart", this.handleUserActivity);
+      const events = ['mousemove', 'click', 'keypress', 'scroll', 'touchstart'];
+      events.forEach(event => window.addEventListener(event, this.handleUserActivity));
 
       // Check for inactivity every minute
       this.inactivityTimer = setInterval(this.checkActivity, 60000);
@@ -106,17 +100,13 @@ export default {
         ) {
           this.refreshToken().catch(err => {
             console.warn("Token refresh failed", err);
-            // If refresh fails with 401, the interceptor will handle logout
           });
         }
       }, this.REFRESH_INTERVAL);
     },
     stopActivityTracking() {
-      window.removeEventListener("mousemove", this.handleUserActivity);
-      window.removeEventListener("click", this.handleUserActivity);
-      window.removeEventListener("keypress", this.handleUserActivity);
-      window.removeEventListener("scroll", this.handleUserActivity);
-      window.removeEventListener("touchstart", this.handleUserActivity);
+      const events = ['mousemove', 'click', 'keypress', 'scroll', 'touchstart'];
+      events.forEach(event => window.removeEventListener(event, this.handleUserActivity));
 
       if (this.inactivityTimer) clearInterval(this.inactivityTimer);
       if (this.refreshTimer) clearInterval(this.refreshTimer);
@@ -140,6 +130,24 @@ export default {
         appElement.style.backgroundColor = bgColor;
         appElement.style.minHeight = "100vh";
       }
+    },
+    loadTheme() {
+      const dark_theme = localStorage.getItem("dark_theme");
+      const theme = JSON.parse(localStorage.getItem("theme"));
+
+      if (dark_theme === "false") {
+        this.$vuetify.theme.dark = false;
+      } else {
+        // Default to dark mode
+        this.$vuetify.theme.dark = true;
+      }
+      if (theme) {
+        this.$vuetify.theme.themes = theme;
+      }
+      // Apply background color
+      this.$nextTick(() => {
+        this.updateGlobalBackground();
+      });
     }
   },
   watch: {
@@ -159,36 +167,7 @@ export default {
     if (this.isLoggedIn) {
       this.startActivityTracking();
     }
-    const dark_theme = localStorage.getItem("dark_theme");
-    const theme = JSON.parse(localStorage.getItem("theme"));
-
-    if (dark_theme == "false") {
-      this.$vuetify.theme.dark = false;
-    } else {
-      // Default to dark mode if not set or set to true
-      this.$vuetify.theme.dark = true;
-    }
-    if (theme) {
-      this.$vuetify.theme.themes = theme;
-    }
-  },
-  mounted() {
-    const dark_theme = localStorage.getItem("dark_theme");
-    const theme = JSON.parse(localStorage.getItem("theme"));
-
-    if (dark_theme == "false") {
-      this.$vuetify.theme.dark = false;
-    } else {
-      // Default to dark mode
-      this.$vuetify.theme.dark = true;
-    }
-    if (theme) {
-      this.$vuetify.theme.themes = theme;
-    }
-    // Apply background color on mount
-    this.$nextTick(() => {
-      this.updateGlobalBackground();
-    });
+    this.loadTheme();
   }
 };
 </script>
@@ -203,30 +182,37 @@ body {
 .v-application {
   background-color: var(--v-background-base) !important;
 }
+
 html,
 body,
 #app {
-  background-color: var(--v-background-base) !important;
+  background-color: var(--v-background-base);
   min-height: 100vh;
 }
+
 html {
   overflow-y: auto;
 }
+
 .animated {
   --animate-duration: 0.3s;
 }
+
 .fast-anim {
   --animate-duration: 0.1s;
 }
+
 #yacht {
   display: flex;
-  width: 100vw;
+  width: 100%; /* Fixed: Changed from 100vw to 100% to prevent horizontal scroll */
   min-height: 100vh;
 }
+
 .page {
   position: relative;
   flex-grow: 1;
 }
+
 .component {
   position: absolute;
   min-width: 100%;
@@ -234,7 +220,7 @@ html {
 
 /* Global Button Styles for Dark Mode Visibility */
 .theme--dark.v-btn:not(.v-btn--flat):not(.v-btn--text):not(.v-btn--outlined):not(.v-btn--icon):not(.v-btn--plain) {
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.15); /* Softened border opacity */
 }
 
 /* Ensure focus visibility */
