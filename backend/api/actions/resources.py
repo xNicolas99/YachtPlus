@@ -1,6 +1,9 @@
 import aiodocker
 from fastapi import HTTPException
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 ### IMAGES ###
 
@@ -9,16 +12,36 @@ async def get_images():
         containers_task = docker.containers.list(all=True)
         images_task = docker.images.list()
 
-        containers, images = await asyncio.gather(containers_task, images_task)
+        results = await asyncio.gather(containers_task, images_task, return_exceptions=True)
+
+        if isinstance(results[0], Exception):
+            logger.error(f"Error fetching containers: {results[0]}")
+            containers = []
+        else:
+            containers = results[0]
+
+        if isinstance(results[1], Exception):
+            logger.error(f"Error fetching images: {results[1]}")
+            images = []
+        else:
+            images = results[1]
 
         used_image_ids = set()
         for container in containers:
-            if 'ImageID' in container:
+            if isinstance(container, dict) and 'ImageID' in container:
                  used_image_ids.add(container['ImageID'])
 
         image_list = []
         for image in images:
+            if not isinstance(image, dict):
+                continue
+
             attrs = image.copy()
+
+            # Robustly handle missing RepoTags or malformed data if necessary
+            # The prompt mentioned "failed image tags", likely referring to None or weird values
+            if 'RepoTags' not in attrs or attrs['RepoTags'] is None:
+                attrs['RepoTags'] = []
 
             is_in_use = attrs.get('Id') in used_image_ids
 
@@ -49,17 +72,34 @@ async def write_image(image_tag):
 async def get_image(image_id):
     async with aiodocker.Docker() as docker:
         containers_task = docker.containers.list(all=True)
+        image_task = docker.images.inspect(image_id)
+
         try:
-            image_task = docker.images.inspect(image_id)
-            containers, image = await asyncio.gather(containers_task, image_task)
-        except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+            results = await asyncio.gather(containers_task, image_task, return_exceptions=True)
+
+            if isinstance(results[0], Exception):
+                 logger.error(f"Error fetching containers: {results[0]}")
+                 containers = []
+            else:
+                 containers = results[0]
+
+            if isinstance(results[1], Exception):
+                 if isinstance(results[1], aiodocker.exceptions.DockerError):
+                     raise HTTPException(status_code=results[1].status, detail=results[1].message)
+                 raise HTTPException(status_code=500, detail=str(results[1]))
+            else:
+                 image = results[1]
+
+        except HTTPException:
+            raise
+        except Exception as exc:
+             raise HTTPException(status_code=500, detail=str(exc))
 
         attrs = image.copy()
 
         used_image_ids = set()
         for container in containers:
-             if 'ImageID' in container:
+             if isinstance(container, dict) and 'ImageID' in container:
                  used_image_ids.add(container['ImageID'])
 
         attrs['inUse'] = attrs.get('Id') in used_image_ids
@@ -98,11 +138,26 @@ async def get_volumes():
         containers_task = docker.containers.list(all=True)
         volumes_task = docker.volumes.list()
 
-        containers, volumes_data = await asyncio.gather(containers_task, volumes_task)
+        results = await asyncio.gather(containers_task, volumes_task, return_exceptions=True)
+
+        if isinstance(results[0], Exception):
+            logger.error(f"Error fetching containers: {results[0]}")
+            containers = []
+        else:
+            containers = results[0]
+
+        if isinstance(results[1], Exception):
+            logger.error(f"Error fetching volumes: {results[1]}")
+            volumes_data = {}
+        else:
+            volumes_data = results[1]
+
         volumes = volumes_data.get('Volumes', []) or []
 
         used_volumes = set()
         for container in containers:
+            if not isinstance(container, dict):
+                continue
             for mount in container.get('Mounts', []):
                  if mount.get('Type') == 'volume':
                      used_volumes.add(mount.get('Name'))
@@ -133,15 +188,42 @@ async def get_volume(volume_name):
         volume_task = docker.volumes.inspect(volume_name)
 
         try:
-            containers, volume = await asyncio.gather(containers_task, volume_task)
-        except aiodocker.exceptions.DockerError as exc:
-             if exc.status == 404:
-                  pass
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+            results = await asyncio.gather(containers_task, volume_task, return_exceptions=True)
+
+            if isinstance(results[0], Exception):
+                 logger.error(f"Error fetching containers: {results[0]}")
+                 containers = []
+            else:
+                 containers = results[0]
+
+            if isinstance(results[1], Exception):
+                 exc = results[1]
+                 if isinstance(exc, aiodocker.exceptions.DockerError):
+                     if exc.status == 404:
+                          pass # Handled by calling code? Original code passed here but then raised anyway?
+                          # Wait, the original code had:
+                          # if exc.status == 404: pass
+                          # raise HTTPException...
+                          # This means it raised exception anyway unless it was 404 where it passed... to what?
+                          # If it passed, `volume` would be undefined.
+                          # I will keep the behavior but ensure `volume` is handled.
+                          # Actually, if 404, we should probably raise 404.
+                     raise HTTPException(status_code=exc.status, detail=exc.message)
+                 raise HTTPException(status_code=500, detail=str(exc))
+            else:
+                 volume = results[1]
+
+        except HTTPException:
+             raise
+
+        # If volume is not defined (because of exception handling above being weird in original), check it.
+        # But here we either have volume or raised exception.
 
         attrs = volume.copy()
         used_volumes = set()
         for container in containers:
+            if not isinstance(container, dict):
+                continue
             for mount in container.get('Mounts', []):
                  if mount.get('Type') == 'volume':
                      used_volumes.add(mount.get('Name'))
@@ -168,10 +250,24 @@ async def get_networks():
         containers_task = docker.containers.list(all=True)
         networks_task = docker.networks.list()
 
-        containers, networks = await asyncio.gather(containers_task, networks_task)
+        results = await asyncio.gather(containers_task, networks_task, return_exceptions=True)
+
+        if isinstance(results[0], Exception):
+            logger.error(f"Error fetching containers: {results[0]}")
+            containers = []
+        else:
+            containers = results[0]
+
+        if isinstance(results[1], Exception):
+            logger.error(f"Error fetching networks: {results[1]}")
+            networks = []
+        else:
+            networks = results[1]
 
         used_network_ids = set()
         for container in containers:
+             if not isinstance(container, dict):
+                 continue
              net_settings = container.get('NetworkSettings', {})
              for net_name, net_conf in net_settings.get('Networks', {}).items():
                  if 'NetworkID' in net_conf:
@@ -179,6 +275,8 @@ async def get_networks():
 
         network_list = []
         for network in networks:
+            if not isinstance(network, dict):
+                continue
             attrs = network.copy()
             attrs['inUse'] = attrs.get('Id') in used_network_ids
 
@@ -245,13 +343,29 @@ async def get_network(network_id):
         network_task = docker.networks.inspect(network_id)
 
         try:
-            containers, network = await asyncio.gather(containers_task, network_task)
-        except aiodocker.exceptions.DockerError as exc:
-            raise HTTPException(status_code=exc.status, detail=exc.message)
+            results = await asyncio.gather(containers_task, network_task, return_exceptions=True)
+            if isinstance(results[0], Exception):
+                 logger.error(f"Error fetching containers: {results[0]}")
+                 containers = []
+            else:
+                 containers = results[0]
+
+            if isinstance(results[1], Exception):
+                 exc = results[1]
+                 if isinstance(exc, aiodocker.exceptions.DockerError):
+                      raise HTTPException(status_code=exc.status, detail=exc.message)
+                 raise HTTPException(status_code=500, detail=str(exc))
+            else:
+                 network = results[1]
+
+        except HTTPException:
+            raise
 
         attrs = network.copy()
         used_network_ids = set()
         for container in containers:
+             if not isinstance(container, dict):
+                 continue
              net_settings = container.get('NetworkSettings', {})
              for net_name, net_conf in net_settings.get('Networks', {}).items():
                  if 'NetworkID' in net_conf:

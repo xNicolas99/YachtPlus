@@ -1,10 +1,12 @@
 from fastapi import HTTPException
 import aiodocker
 import asyncio
+import logging
 from api.utils.compose import find_yml_files
 from api.settings import Settings
 
 settings = Settings()
+logger = logging.getLogger(__name__)
 
 async def get_dashboard_stats():
     """
@@ -13,6 +15,7 @@ async def get_dashboard_stats():
     Optimized for performance:
     - Async parallel fetching of Docker resources
     - Avoids parsing YAML for compose projects (only lists files)
+    - Robust error handling for partial failures
     """
 
     async with aiodocker.Docker() as docker:
@@ -21,12 +24,35 @@ async def get_dashboard_stats():
         volumes_task = docker.volumes.list()
         networks_task = docker.networks.list()
 
-        try:
-            containers, images, volumes_data, networks = await asyncio.gather(
-                containers_task, images_task, volumes_task, networks_task
-            )
-        except Exception as exc:
-             raise HTTPException(status_code=503, detail=f"Docker connection error: {exc}")
+        results = await asyncio.gather(
+            containers_task, images_task, volumes_task, networks_task,
+            return_exceptions=True
+        )
+
+        # Unpack results, handling exceptions for each task
+        if isinstance(results[0], Exception):
+            logger.error(f"Error fetching containers: {results[0]}")
+            containers = []
+        else:
+            containers = results[0]
+
+        if isinstance(results[1], Exception):
+            logger.error(f"Error fetching images: {results[1]}")
+            images = []
+        else:
+            images = results[1]
+
+        if isinstance(results[2], Exception):
+            logger.error(f"Error fetching volumes: {results[2]}")
+            volumes_data = {}
+        else:
+            volumes_data = results[2]
+
+        if isinstance(results[3], Exception):
+            logger.error(f"Error fetching networks: {results[3]}")
+            networks = []
+        else:
+            networks = results[3]
 
         volumes = volumes_data.get('Volumes', []) or []
 
@@ -34,7 +60,8 @@ async def get_dashboard_stats():
         loop = asyncio.get_event_loop()
         project_files = await loop.run_in_executor(None, find_yml_files, settings.COMPOSE_DIR)
         project_names = set(project_files.keys()) if project_files else set()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error finding compose files: {e}")
         project_names = set()
 
     running_count = 0
@@ -47,6 +74,9 @@ async def get_dashboard_stats():
     used_volumes = set()
 
     for c in containers:
+        if not isinstance(c, dict):
+            continue
+
         state = c.get('State', 'stopped')
 
         if state == 'running':
@@ -71,7 +101,9 @@ async def get_dashboard_stats():
         mounts = c.get('Mounts', [])
         for m in mounts:
             if m.get('Type') == 'volume':
-                used_volumes.add(m.get('Name'))
+                name = m.get('Name')
+                if name:
+                    used_volumes.add(name)
 
     total_projects = len(project_names)
     active_projects_count = len(active_projects)
@@ -82,6 +114,9 @@ async def get_dashboard_stats():
     total_size = 0
 
     for i in images:
+        if not isinstance(i, dict):
+            continue
+
         total_size += i.get("Size", 0)
         repo_tags = i.get("RepoTags")
         if not repo_tags or repo_tags == ["<none>:<none>"]:
@@ -100,6 +135,9 @@ async def get_dashboard_stats():
     default_names = {"bridge", "host", "none"}
 
     for n in networks:
+        if not isinstance(n, dict):
+            continue
+
         if n.get('Name') in default_names:
             default_networks += 1
         else:
