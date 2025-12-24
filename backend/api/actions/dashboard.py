@@ -33,7 +33,7 @@ async def get_dashboard_stats():
     try:
         loop = asyncio.get_event_loop()
         project_files = await loop.run_in_executor(None, find_yml_files, settings.COMPOSE_DIR)
-        project_names = set(project_files.keys())
+        project_names = set(project_files.keys()) if project_files else set()
     except Exception:
         project_names = set()
 
@@ -52,7 +52,7 @@ async def get_dashboard_stats():
         if state == 'running':
             running_count += 1
 
-            labels = c.get('Labels', {})
+            labels = c.get('Labels') or {}
             project_label = labels.get("com.docker.compose.project")
             if project_label and project_label in project_names:
                 active_projects.add(project_label)

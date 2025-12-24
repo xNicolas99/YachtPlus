@@ -132,8 +132,13 @@ const actions = {
     return dispatch("CHECK_SETUP").then(() => {
       const url = "/api/auth/me";
       return axios
-        .get(url, { skipAuthRefresh: true })
+        .get(url, { skipAuthRefresh: true, withCredentials: true })
         .then(resp => {
+          // Restore axios defaults for subsequent requests
+          axios.defaults.withCredentials = true;
+          axios.defaults.xsrfCookieName = "csrf_access_token";
+          axios.defaults.xsrfHeaderName = "X-CSRF-TOKEN";
+
           if (resp.data.authDisabled == true) {
             localStorage.setItem("username", resp.data.username);
             commit(AUTH_DISABLED);
