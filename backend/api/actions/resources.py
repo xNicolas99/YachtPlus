@@ -1,313 +1,288 @@
-import docker
+import aiodocker
 from fastapi import HTTPException
+import asyncio
 
 ### IMAGES ###
 
+async def get_images():
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
+        images_task = docker.images.list()
 
-def get_images():
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
-    images = dclient.images.list()
-    image_list = []
-    for image in images:
-        attrs = image.attrs
+        containers, images = await asyncio.gather(containers_task, images_task)
+
+        used_image_ids = set()
         for container in containers:
-            try:
-                if container.image.id in image.id:
-                    attrs.update({"inUse": True})
-            except Exception as exc:
-                if exc.status_code == 404:
-                    pass
-        if attrs.get("inUse") == None:
-            attrs.update({"inUse": False})
+            if 'ImageID' in container:
+                 used_image_ids.add(container['ImageID'])
 
-        image_list.append(attrs)
-    return image_list
+        image_list = []
+        for image in images:
+            attrs = image.copy()
+
+            is_in_use = attrs.get('Id') in used_image_ids
+
+            attrs['inUse'] = is_in_use
+            image_list.append(attrs)
+
+        return image_list
 
 
-def write_image(image_tag):
+async def write_image(image_tag):
     delim = ":"
-    dclient = docker.from_env()
     repo, tag = None, image_tag
     if delim in image_tag:
         repo, tag = tag.split(delim, 1)
     else:
         repo = image_tag
         tag = "latest"
-    image = dclient.images.pull(repo, tag)
-    return get_images()
 
-
-def get_image(image_id):
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
-    image = dclient.images.get(image_id)
-    attrs = image.attrs
-    for container in containers:
+    async with aiodocker.Docker() as docker:
         try:
-            if container.image.id in image.id:
-                attrs.update({"inUse": True})
+            await docker.images.pull(f"{repo}:{tag}")
         except Exception as exc:
-            if exc.status_code == 404:
-                pass
-    if attrs.get("inUse") == None:
-        attrs.update({"inUse": False})
-    return attrs
+             raise HTTPException(status_code=500, detail=str(exc))
+
+    return await get_images()
 
 
-def update_image(image_id):
-    dclient = docker.from_env()
-    if type(image_id) == str:
-        image = dclient.images.get(image_id)
-        new_image = dclient.images.get_registry_data(image.tags[0])
+async def get_image(image_id):
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
         try:
-            new_image.pull()
-        except Exception as exc:
+            image_task = docker.images.inspect(image_id)
+            containers, image = await asyncio.gather(containers_task, image_task)
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
+
+        attrs = image.copy()
+
+        used_image_ids = set()
+        for container in containers:
+             if 'ImageID' in container:
+                 used_image_ids.add(container['ImageID'])
+
+        attrs['inUse'] = attrs.get('Id') in used_image_ids
+        return attrs
+
+
+async def update_image(image_id):
+    async with aiodocker.Docker() as docker:
+        try:
+            image = await docker.images.inspect(image_id)
+            if image.get('RepoTags'):
+                tag = image['RepoTags'][0]
+                await docker.images.pull(tag)
+        except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
+                status_code=exc.status, detail=exc.message
             )
-        return get_image(image_id)
+    return await get_image(image_id)
 
 
-def delete_image(image_id):
-    dclient = docker.from_env()
-    image = dclient.images.get(image_id)
-    try:
-        dclient.images.remove(image_id, force=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
-    return image.attrs
+async def delete_image(image_id):
+    async with aiodocker.Docker() as docker:
+        try:
+             image = await docker.images.inspect(image_id)
+             await docker.images.delete(image_id, force=True)
+             return image
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(
+                status_code=exc.status, detail=exc.message
+            )
 
 
 ### Volumes ###
-def get_volumes():
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
-    volumes = dclient.volumes.list()
-    volume_list = []
-    for volume in volumes:
-        attrs = volume.attrs
+async def get_volumes():
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
+        volumes_task = docker.volumes.list()
+
+        containers, volumes_data = await asyncio.gather(containers_task, volumes_task)
+        volumes = volumes_data.get('Volumes', []) or []
+
+        used_volumes = set()
         for container in containers:
-            try:
-                if any(
-                    d["Source"] == volume.attrs["Mountpoint"]
-                    for d in container.attrs["Mounts"]
-                ):
-                    attrs.update({"inUse": True})
-            except Exception as exc:
-                if exc.status_code == 404:
-                    pass
-        if attrs.get("inUse") == None:
-            attrs.update({"inUse": False})
-        volume_list.append(attrs)
-    return volume_list
+            for mount in container.get('Mounts', []):
+                 if mount.get('Type') == 'volume':
+                     used_volumes.add(mount.get('Name'))
+
+        volume_list = []
+        for volume in volumes:
+            attrs = volume.copy()
+            attrs['inUse'] = attrs.get('Name') in used_volumes
+            volume_list.append(attrs)
+
+        return volume_list
 
 
-def write_volume(volume_name):
-    dclient = docker.from_env()
-    try:
-        volume = dclient.volumes.create(name=volume_name)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
-    return get_volumes()
-
-
-def get_volume(volume_id):
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
-    volume = dclient.volumes.get(volume_id)
-    attrs = volume.attrs
-    for container in containers:
+async def write_volume(volume_name):
+    async with aiodocker.Docker() as docker:
         try:
-            if any(
-                d["Source"] == volume.attrs["Mountpoint"]
-                for d in container.attrs["Mounts"]
-            ):
-                attrs.update({"inUse": True})
-        except Exception as exc:
-            if exc.status_code == 404:
-                pass
-            else:
-                raise HTTPException(
-                    status_code=exc.response.status_code, detail=exc.explanation
-                )
-    if attrs.get("inUse") == None:
-        attrs.update({"inUse": False})
-    return attrs
+            await docker.volumes.create({"Name": volume_name})
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(
+                status_code=exc.status, detail=exc.message
+            )
+    return await get_volumes()
 
 
-def delete_volume(volume_id):
-    dclient = docker.from_env()
-    volume = dclient.volumes.get(volume_id)
-    try:
-        volume.remove(force=True)
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
-    return volume.attrs
+async def get_volume(volume_name):
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
+        volume_task = docker.volumes.inspect(volume_name)
+
+        try:
+            containers, volume = await asyncio.gather(containers_task, volume_task)
+        except aiodocker.exceptions.DockerError as exc:
+             if exc.status == 404:
+                  pass
+             raise HTTPException(status_code=exc.status, detail=exc.message)
+
+        attrs = volume.copy()
+        used_volumes = set()
+        for container in containers:
+            for mount in container.get('Mounts', []):
+                 if mount.get('Type') == 'volume':
+                     used_volumes.add(mount.get('Name'))
+
+        attrs['inUse'] = attrs.get('Name') in used_volumes
+        return attrs
+
+
+async def delete_volume(volume_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            volume = await docker.volumes.inspect(volume_name)
+            await docker.volumes.delete(volume_name)
+            return volume
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(
+                status_code=exc.status, detail=exc.message
+            )
 
 
 ### Networks ###
-def get_networks():
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
-    networks = dclient.networks.list()
-    network_list = []
-    for network in networks:
-        attrs = network.attrs
+async def get_networks():
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
+        networks_task = docker.networks.list()
+
+        containers, networks = await asyncio.gather(containers_task, networks_task)
+
+        used_network_ids = set()
         for container in containers:
-            try:
-                if any(
-                    d["NetworkID"] == network.attrs["Id"]
-                    for d in container.attrs["NetworkSettings"]["Networks"].values()
-                ):
-                    attrs.update({"inUse": True})
-                    break
-            except Exception as exc:
-                print(exc)
-                if exc.status_code == 404:
-                    pass
-                else:
-                    raise HTTPException(
-                        status_code=exc.response.status_code, detail=exc.explanation
-                    )
-        if attrs:
-            if attrs.get("inUse") is None:
-                attrs.update({"inUse": False})
-            if attrs.get("Labels", {}):
-                if attrs.get("Labels", {}).get("com.docker.compose.project"):
-                    attrs.update(
-                        {"Project": attrs["Labels"]["com.docker.compose.project"]}
-                    )
+             net_settings = container.get('NetworkSettings', {})
+             for net_name, net_conf in net_settings.get('Networks', {}).items():
+                 if 'NetworkID' in net_conf:
+                     used_network_ids.add(net_conf['NetworkID'])
+
+        network_list = []
+        for network in networks:
+            attrs = network.copy()
+            attrs['inUse'] = attrs.get('Id') in used_network_ids
+
+            labels = attrs.get("Labels", {}) or {}
+            if labels.get("com.docker.compose.project"):
+                attrs["Project"] = labels["com.docker.compose.project"]
+
             network_list.append(attrs)
-    return network_list
+
+        return network_list
 
 
-def write_network(network_form):
-    dclient = docker.from_env()
-
-    ### Check for IP addresses ###
-    if network_form.ipv4subnet:
-        ipv4_pool = docker.types.IPAMPool(
-            subnet=network_form.ipv4subnet,
-            gateway=network_form.ipv4gateway,
-            iprange=network_form.ipv4range,
-        )
-    if network_form.ipv6_enabled and network_form.ipv6subnet:
-        ipv6_pool = docker.types.IPAMPool(
-            subnet=network_form.ipv6subnet,
-            gateway=network_form.ipv6gateway,
-            iprange=network_form.ipv6range,
-        )
-    if "ipv6_pool" in locals() and "ipv4_pool" in locals():
-        ipam_config = docker.types.IPAMConfig(pool_configs=[ipv4_pool, ipv6_pool])
-    elif "ipv4_pool" in locals():
-        ipam_config = docker.types.IPAMConfig(pool_configs=[ipv4_pool])
-    else:
+async def write_network(network_form):
+    async with aiodocker.Docker() as docker:
         ipam_config = None
+        pool_configs = []
 
-    ### Check for parent device (macvlan only) ###
-    if network_form.network_devices:
-        network_options = {"parent": network_form.network_devices}
-    else:
-        network_options = None
-    try:
-        dclient.networks.create(
-            network_form.name,
-            driver=network_form.networkDriver,
-            ipam=ipam_config,
-            options=network_options,
-            internal=network_form.internal,
-            enable_ipv6=network_form.ipv6_enabled,
-            attachable=network_form.attachable,
-        )
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
+        if network_form.ipv4subnet:
+            pool_configs.append({
+                "Subnet": network_form.ipv4subnet,
+                "Gateway": network_form.ipv4gateway,
+                "IPRange": network_form.ipv4range
+            })
 
-    return get_networks()
+        if network_form.ipv6_enabled and network_form.ipv6subnet:
+             pool_configs.append({
+                "Subnet": network_form.ipv6subnet,
+                "Gateway": network_form.ipv6gateway,
+                "IPRange": network_form.ipv6range
+            })
 
+        if pool_configs:
+            ipam_config = {
+                "Config": pool_configs
+            }
 
-def get_network(network_id):
-    dclient = docker.from_env()
-    containers = dclient.containers.list(all=True)
+        options = {}
+        if network_form.network_devices:
+            options["parent"] = network_form.network_devices
 
-    try:
-        network = dclient.networks.get(network_id)
+        config = {
+            "Name": network_form.name,
+            "Driver": network_form.networkDriver,
+            "IPAM": ipam_config,
+            "Options": options,
+            "Internal": network_form.internal,
+            "EnableIPv6": network_form.ipv6_enabled,
+            "Attachable": network_form.attachable
+        }
 
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
-
-    attrs = network.attrs
-    for container in containers:
         try:
-            if any(
-                d["NetworkID"] == network.attrs["Id"]
-                for d in container.attrs["NetworkSettings"]["Networks"].values()
-            ):
-                attrs.update({"inUse": True})
-                break
-        except Exception as exc:
-            if exc.status_code == 404:
-                pass
-            else:
-                raise HTTPException(
-                    status_code=exc.response.status_code, detail=exc.explanation
-                )
-    if attrs.get("inUse") == None:
-        attrs.update({"inUse": False})
-    return attrs
+            await docker.networks.create(config)
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(
+                status_code=exc.status, detail=exc.message
+            )
+
+    return await get_networks()
 
 
-def delete_network(network_id):
-    dclient = docker.from_env()
-    network = dclient.networks.get(network_id)
-    try:
-        network.remove()
+async def get_network(network_id):
+    async with aiodocker.Docker() as docker:
+        containers_task = docker.containers.list(all=True)
+        network_task = docker.networks.inspect(network_id)
 
-    except Exception as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
-        )
-
-    return network.attrs
-
-
-def prune_resources(resource):
-    dclient = docker.from_env()
-    action = getattr(dclient, resource)
-
-    deleted_resource = None
-
-    if resource == "images":
-        # Docker SDK returns {'ImagesDeleted': [...], 'SpaceReclaimed': int}
-        # If ImagesDeleted is None, it means no images were deleted.
         try:
-            deleted_resource = action.prune(filters={"dangling": False})
-        except Exception as e:
-            # Fallback or error handling
-            print(f"Error pruning images: {e}")
-            return {"count": 0, "space_reclaimed": 0}
+            containers, network = await asyncio.gather(containers_task, network_task)
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.message)
 
-    else:
-        # Other resources (containers, networks, volumes)
+        attrs = network.copy()
+        used_network_ids = set()
+        for container in containers:
+             net_settings = container.get('NetworkSettings', {})
+             for net_name, net_conf in net_settings.get('Networks', {}).items():
+                 if 'NetworkID' in net_conf:
+                     used_network_ids.add(net_conf['NetworkID'])
+
+        attrs['inUse'] = attrs.get('Id') in used_network_ids
+        return attrs
+
+
+async def delete_network(network_id):
+    async with aiodocker.Docker() as docker:
         try:
-            deleted_resource = action.prune()
+            network = await docker.networks.inspect(network_id)
+            await docker.networks.delete(network_id)
+            return network
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(
+                status_code=exc.status, detail=exc.message
+            )
+
+async def prune_resources(resource):
+    async with aiodocker.Docker() as docker:
+        try:
+            if resource == "images":
+                return await docker.images.prune(filters={'dangling': ['false']})
+            elif resource == "containers":
+                return await docker.containers.prune()
+            elif resource == "volumes":
+                return await docker.volumes.prune()
+            elif resource == "networks":
+                return await docker.networks.prune()
         except Exception as e:
             print(f"Error pruning {resource}: {e}")
             return {"count": 0, "space_reclaimed": 0}
-
-    # If space is 0 or missing, ensure it is 0.
-    if deleted_resource:
-        if "SpaceReclaimed" not in deleted_resource:
-            deleted_resource["SpaceReclaimed"] = 0
-
-    return deleted_resource
