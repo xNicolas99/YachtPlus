@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import List, Optional, Union
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class TemplateItem(BaseModel):
@@ -29,8 +29,7 @@ class TemplateItem(BaseModel):
     cpus: Optional[int]
     mem_limit: Optional[str]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 ### TEMPLATE ####
@@ -40,8 +39,7 @@ class TemplateBase(BaseModel):
     title: str
     url: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TemplateRead(TemplateBase):
@@ -57,8 +55,7 @@ class TemplateReadAll(TemplateBase):
 class TemplateItems(TemplateRead):
     items: List[TemplateItem] = []
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 ### TEMPLATES END ###
@@ -70,8 +67,7 @@ class TemplateVariables(BaseModel):
     variable: str
     replacement: str
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ReadTemplateVariables(TemplateVariables):
@@ -86,4 +82,4 @@ class Import_Export(BaseModel):
     variables: List[ReadTemplateVariables] = []
 
 
-TemplateItems.update_forward_refs()
+# TemplateItems.update_forward_refs() - Deprecated in Pydantic v2
