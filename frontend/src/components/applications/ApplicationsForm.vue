@@ -1118,8 +1118,7 @@ export default {
         const namePart = image.split('/').pop().split(':')[0];
         this.form.name = namePart;
         this.form.restart_policy = "unless-stopped"; // Default for new deploys
-        this.form.network = "bridge"; // Default network
-        this.form.network_mode = undefined; // Clear mode to allow network selection
+        this.form.network_mode = "bridge"; // Default network
 
         // Attempt to fetch image config (ports/volumes) from backend
         this.isLoading = true;
