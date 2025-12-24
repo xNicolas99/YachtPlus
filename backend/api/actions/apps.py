@@ -36,201 +36,166 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
-"""
-Returns all running apps in a list
-"""
-
-
-def get_running_apps():
+async def get_running_apps():
     apps_list = []
-    dclient = docker.from_env()
-    apps = dclient.containers.list()
-    for app in apps:
-        attrs = app.attrs
-        attrs.update(conv2dict("name", app.name))
-        attrs.update(conv2dict("ports", app.ports))
-        attrs.update(conv2dict("short_id", app.short_id))
-        apps_list.append(attrs)
+    async with aiodocker.Docker() as docker:
+        apps = await docker.containers.list()
+        for app in apps:
+            attrs = app._container
+
+            name = attrs.get("Names", ["/Unknown"])[0][1:]
+            ports = attrs.get("Ports", [])
+            short_id = attrs.get("Id", "")[:12]
+
+            attrs.update({"name": name, "ports": ports, "short_id": short_id})
+            apps_list.append(attrs)
 
     return apps_list
 
+async def check_app_update(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+            attrs = await app.show()
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
 
-"""
-Checks repo digest for app and compares it to image
-digest to see if there's an update available.
+        config = attrs.get("Config")
+        if config and config.get("Image"):
+            loop = asyncio.get_event_loop()
+            try:
+                # _check_updates performs network I/O, run in executor
+                is_updatable = await loop.run_in_executor(None, _check_updates, config["Image"])
+                if is_updatable:
+                    attrs["isUpdatable"] = True
+            except Exception:
+                pass
 
-TODO: This has issues if there's more than one repo digest
-"""
+        attrs["name"] = attrs.get("Name", "")[1:]
+        attrs["short_id"] = attrs.get("Id", "")[:12]
+        attrs["ports"] = attrs.get("NetworkSettings", {}).get("Ports", {})
 
+        return attrs
 
-def check_app_update(app_name):
-    dclient = docker.from_env()
-    try:
-        app = dclient.containers.get(app_name)
-    except docker.errors.APIError as exc:
-        raise HTTPException(
-            status_code=exc.status_code, detail=exc.explanation
-        )
-
-    # Safe access to Config and Image
-    config = app.attrs.get("Config")
-    if config and config.get("Image"):
-        if _check_updates(config["Image"]):
-            app.attrs.update(conv2dict("isUpdatable", True))
-    app.attrs.update(conv2dict("name", app.name))
-    app.attrs.update(conv2dict("ports", app.ports))
-    app.attrs.update(conv2dict("short_id", app.short_id))
-    return app.attrs
-
-
-"""
-Gets all apps in a list and add some easy access to
-properties that aren't in the app attributes
-"""
-
-
-def get_apps():
+async def get_apps():
     apps_list = []
-    dclient = docker.from_env()
-    try:
-        apps = dclient.containers.list(all=True)
-    except docker.errors.APIError as exc:
-        raise HTTPException(
-            status_code=exc.status_code, detail=exc.explanation
-        )
-    for app in apps:
-        attrs = app.attrs
+    async with aiodocker.Docker() as docker:
+        try:
+            apps = await docker.containers.list(all=True)
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
 
-        attrs.update(conv2dict("name", app.name))
-        attrs.update(conv2dict("ports", app.ports))
-        attrs.update(conv2dict("short_id", app.short_id))
-        apps_list.append(attrs)
+        for app in apps:
+            attrs = app._container
+
+            name = attrs.get("Names", ["/Unknown"])[0][1:]
+            short_id = attrs.get("Id", "")[:12]
+            ports = attrs.get("Ports", [])
+
+            attrs.update({"name": name, "ports": ports, "short_id": short_id})
+            apps_list.append(attrs)
 
     return apps_list
 
+async def get_app(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+            attrs = await app.show()
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
 
-"""
-Get a single app by the container name and some easy 
-access to properties that aren't in the app 
-attributes
-"""
+        attrs["name"] = attrs.get("Name", "")[1:]
+        attrs["short_id"] = attrs.get("Id", "")[:12]
+        attrs["ports"] = attrs.get("NetworkSettings", {}).get("Ports", {})
 
+        return attrs
 
-def get_app(app_name):
-    dclient = docker.from_env()
-    try:
-        app = dclient.containers.get(app_name)
-    except docker.errors.APIError as exc:
-        raise HTTPException(
-            status_code=exc.status_code, detail=exc.explanation
-        )
-    attrs = app.attrs
+async def get_app_processes(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+            attrs = await app.show()
+            if attrs["State"]["Status"] == "running":
+                 processes = await app.top()
+                 return Processes(Processes=processes["Processes"], Titles=processes["Titles"])
+            else:
+                return None
+        except Exception:
+            return None
 
-    attrs.update(conv2dict("ports", app.ports))
-    attrs.update(conv2dict("short_id", app.short_id))
-    attrs.update(conv2dict("name", app.name))
+async def get_app_logs(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+            attrs = await app.show()
+            if attrs["State"]["Status"] == "running":
+                logs = await app.log(stdout=True, stderr=True)
+                return AppLogs(logs="".join(logs))
+            else:
+                return None
+        except Exception:
+            return None
 
-    return attrs
-
-
-"""
-Get processes running in an app.
-"""
-
-
-def get_app_processes(app_name):
-    dclient = docker.from_env()
-    app = dclient.containers.get(app_name)
-    if app.status == "running":
-        processes = app.top()
-        return Processes(Processes=processes["Processes"], Titles=processes["Titles"])
-    else:
-        return None
-
-
-"""
-Get app logs (this isn't in use as logs are served
-via a websocket in routers so they're realtime)
-"""
-
-
-def get_app_logs(app_name):
-    dclient = docker.from_env()
-    app = dclient.containers.get(app_name)
-    if app.status == "running":
-        return AppLogs(logs=app.logs())
-    else:
-        return None
-
-
-"""
-Check for container conflicts before deployment
-"""
-def check_container_conflicts(data: DeployForm):
+async def check_container_conflicts(data: DeployForm):
     conflicts = []
-    dclient = docker.from_env()
+    async with aiodocker.Docker() as docker:
+        # Check Name
+        try:
+            c = await docker.containers.get(data.name)
+            c_info = await c.show()
+            if data.edit and data.id == c_info['Id']:
+                pass
+            else:
+                conflicts.append({"type": "name", "message": f"Container name '{data.name}' is already in use."})
+        except aiodocker.exceptions.DockerError as exc:
+            if exc.status == 404:
+                pass
+            else:
+                raise
 
-    # Check Name
-    try:
-        c = dclient.containers.get(data.name)
-        # If found, and we are not editing THIS container, it's a conflict
-        if data.edit and data.id == c.id:
-            pass
-        else:
-            conflicts.append({"type": "name", "message": f"Container name '{data.name}' is already in use."})
-    except docker.errors.NotFound:
-        pass
+        # Check Ports
+        if data.ports:
+            requested_ports = set()
+            for p in data.ports:
+                if p.hport:
+                    requested_ports.add((str(p.hport), p.proto))
 
-    # Check Ports
-    if data.ports:
-        requested_ports = []
-        for p in data.ports:
-            if p.hport:
-                requested_ports.append((str(p.hport), p.proto))
+            if requested_ports:
+                existing_containers = await docker.containers.list()
+                for c in existing_containers:
+                    c_id = c._container.get('Id')
 
-        if requested_ports:
-            existing_containers = dclient.containers.list()
-            for c in existing_containers:
-                # If editing, skip self
-                if data.edit and data.id == c.id:
-                    continue
+                    if data.edit and data.id == c_id:
+                        continue
 
-                ports_map = c.attrs.get('NetworkSettings', {}).get('Ports', {})
-                if not ports_map: continue
+                    c_ports = c._container.get('Ports', [])
+                    if not c_ports: continue
 
-                for c_port_proto, bindings in ports_map.items():
-                    if not bindings: continue
-                    for bind in bindings:
-                        h_port = bind.get('HostPort')
+                    c_name = c._container.get("Names", ["/Unknown"])[0][1:]
+
+                    for port_cfg in c_ports:
+                        h_port = str(port_cfg.get('PublicPort'))
                         if not h_port: continue
-
-                        proto = c_port_proto.split('/')[1]
+                        proto = port_cfg.get('Type')
 
                         if (h_port, proto) in requested_ports:
                              conflicts.append({
                                  "type": "port",
                                  "port": h_port,
-                                 "message": f"Host port {h_port}/{proto} is already used by container {c.name}"
+                                 "message": f"Host port {h_port}/{proto} is already used by container {c_name}"
                              })
 
     return conflicts
 
-"""
-Deploy a new app. Format is available in 
-../db/schemas/apps.py
-"""
-
-
-def deploy_app(template: DeployForm):
-    # Check for conflicts
-    conflicts = check_container_conflicts(template)
+async def deploy_app(template: DeployForm):
+    conflicts = await check_container_conflicts(template)
     if conflicts:
         logger.warning(f"Deployment conflicts for {template.name}: {conflicts}")
         return {"success": False, "conflicts": conflicts}
 
     try:
-        launch = launch_app(
+        launch = await launch_app(
             template.name,
             conv_image2data(template.image),
             conv_restart2data(template.restart_policy),
@@ -251,21 +216,12 @@ def deploy_app(template: DeployForm):
             _id=template.id or None,
         )
     except HTTPException as exc:
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
-    except docker.errors.APIError as exc:
-        raise HTTPException(
-            status_code=exc.status_code, detail=exc.explanation
-        )
-    print("done deploying")
+        raise exc
+    except Exception as exc:
+         raise HTTPException(status_code=500, detail=str(exc))
 
-    return DeployLogs(logs=launch.logs())
-
-
-"""
-Merge utility used for combining portlabels and
-labels into a single variable
-"""
-
+    logs = await launch.log(stdout=True, stderr=True)
+    return DeployLogs(logs="".join(logs))
 
 def Merge(dict1, dict2):
     if dict1 and dict2:
@@ -278,16 +234,7 @@ def Merge(dict1, dict2):
     else:
         return None
 
-
-"""
-This function actually runs the docker run command.
-It also checks if edit is set to true so it can 
-remove the container you're editing before deploying
-a new one.
-"""
-
-
-def launch_app(
+async def launch_app(
     name,
     image,
     restart_policy,
@@ -307,6 +254,18 @@ def launch_app(
     edit,
     _id,
 ):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _launch_app_sync,
+        name, image, restart_policy, command, ports, portlabels,
+        network_mode, network, volumes, env, devices, labels,
+        sysctls, caps, cpus, mem_limit, edit, _id
+    )
+
+def _launch_app_sync(
+    name, image, restart_policy, command, ports, portlabels,
+    network_mode, network, volumes, env, devices, labels,
+    sysctls, caps, cpus, mem_limit, edit, _id
+):
     dclient = docker.from_env()
     if edit == True:
         try:
@@ -314,15 +273,14 @@ def launch_app(
             try:
                 running_app = dclient.containers.get(_id)
                 running_app.remove(force=True)
-            except Exception as e:
-                raise e
-        except Exception as e:
-            # User probably changed the name so it doesn't conflict. If this is the case we'll just spin up a second container.
+            except Exception:
+                pass
+        except Exception:
             pass
 
     combined_labels = Merge(portlabels, labels)
     try:
-        lauch = dclient.containers.run(
+        launch = dclient.containers.run(
             name=name,
             image=image,
             restart_policy=restart_policy,
@@ -340,251 +298,209 @@ def launch_app(
             mem_limit=mem_limit,
             detach=True,
         )
+
+        return AiodockerCompatWrapper(launch)
+
     except docker.errors.APIError as e:
         if e.status_code == 500:
-            failed_app = dclient.containers.get(name)
-            failed_app.remove()
+            try:
+                failed_app = dclient.containers.get(name)
+                failed_app.remove()
+            except: pass
         raise HTTPException(
             status_code=e.status_code, detail=e.explanation
         )
 
-    print(
-        f"""Container started successfully.
-       Name: {name},
-      Image: {image},
-      Ports: {ports},
-    Volumes: {volumes},
-        Env: {env}"""
-    )
-    return lauch
+class AiodockerCompatWrapper:
+    def __init__(self, container):
+        self.container = container
+
+    async def log(self, stdout=True, stderr=True):
+        logs = self.container.logs(stdout=stdout, stderr=stderr)
+        if isinstance(logs, bytes):
+            return [logs.decode('utf-8')]
+        return [logs]
 
 
-"""
-Runs an app action (ie. docker stop, docker start, etc.)
-"""
+async def app_action(app_name, action, background_tasks=None):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
 
+        try:
+            with open("/proc/self/cgroup", "r") as f:
+                content = f.readline()
+                self_id = content.strip().split("/")[-1]
+        except Exception:
+            self_id = None
 
-def app_action(app_name, action, background_tasks=None):
-    err = None
-    dclient = docker.from_env()
-    app = dclient.containers.get(app_name)
+        c_info = await app.show()
+        c_id = c_info['Id']
+        c_short_id = c_id[:12]
 
-    # Check for self-action to prevent crash on restart
+        if self_id and (c_id == self_id or c_short_id in self_id) and action == "restart":
+            if background_tasks:
+                 background_tasks.add_task(app.restart, timeout=10)
+            else:
+                 asyncio.create_task(app.restart(timeout=10))
+
+            return await get_apps()
+
+        try:
+            if action == "start":
+                await app.start()
+            elif action == "stop":
+                await app.stop()
+            elif action == "restart":
+                await app.restart()
+            elif action == "remove":
+                await app.delete(force=True)
+            elif action == "kill":
+                await app.kill()
+            elif action == "pause":
+                await app.pause()
+            elif action == "unpause":
+                await app.unpause()
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(status_code=exc.status, detail=exc.message)
+
+    return await get_apps()
+
+async def app_update(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            old = await docker.containers.get(app_name)
+            old_info = await old.show()
+            old_name = old_info["Name"][1:]
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
+
+        config = {
+            "Image": "containrrr/watchtower:latest",
+            "Cmd": ["--cleanup", "--run-once", old_name],
+            "HostConfig": {
+                "Binds": ["/var/run/docker.sock:/var/run/docker.sock"],
+                "AutoRemove": True
+            }
+        }
+
+        try:
+            updater = await docker.containers.create_or_replace(
+                name=f"watchtower_{old_name}",
+                config=config
+            )
+            await updater.start()
+            await updater.wait(timeout=120)
+
+        except aiodocker.exceptions.DockerError as exc:
+             raise HTTPException(status_code=exc.status, detail=exc.message)
+
+    await asyncio.sleep(1)
+    return await get_apps()
+
+def _get_self_id():
     try:
-        bash_command = "head -1 /proc/self/cgroup|cut -d/ -f3"
-        self_id = subprocess.check_output(["bash", "-c", bash_command]).decode("UTF-8").strip()
+        with open("/proc/self/cgroup", "r") as f:
+            content = f.readline()
+            return content.strip().split("/")[-1]
     except:
-        self_id = None
+        return None
 
-    if self_id and (app.id == self_id or app.short_id in self_id) and action == "restart":
-         # Launch restart in background after a delay to allow response to return
-        if background_tasks:
-            background_tasks.add_task(app.restart, timeout=10)
-        else:
-             # Fallback if no background_tasks provided (should not happen if router is updated)
-            def delayed_restart(container):
-                 time.sleep(2)
-                 container.restart()
+async def _update_self(background_tasks):
+    yacht_id = _get_self_id()
+    if not yacht_id:
+         raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 
-            import threading
-            t = threading.Thread(target=delayed_restart, args=(app,))
-            t.start()
-
-        # Return success immediately
-        return get_apps()
-
-    _action = getattr(app, action)
-    if action == "remove":
+    async with aiodocker.Docker() as docker:
         try:
-            _action(force=True)
-        except docker.errors.APIError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail=exc.explanation
-            )
-    else:
-        try:
-            _action()
-        except docker.errors.APIError as exc:
-            raise HTTPException(
-                status_code=exc.status_code, detail=exc.explanation
-            )
-    apps_list = get_apps()
-    return apps_list
+            yacht = await docker.containers.get(yacht_id)
+            yacht_info = await yacht.show()
+            yacht_name = yacht_info["Name"][1:]
+        except aiodocker.exceptions.DockerError:
+             raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 
-
-"""
-Spins up a watchtower container that uses the --run-once
-and --cleanup flags and targets a container by name
-"""
-
-
-def app_update(app_name):
-    dclient = docker.from_env()
-    try:
-        old = dclient.containers.get(app_name)
-    except docker.errors.APIError as exc:
-        print(exc)
-        if exc.status_code == 404:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail="Unable to get container ID",
-            )
-        else:
-            raise HTTPException(
-                status_code=exc.status_code, detail=exc.explanation
-            )
-
-    volumes = {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}}
-    try:
-        updater = dclient.containers.run(
-            image="containrrr/watchtower:latest",
-            command="--cleanup --run-once " + old.name,
-            remove=True,
-            detach=True,
-            volumes=volumes,
-        )
-    except docker.errors.APIError as exc:
-        print(exc)
-        raise HTTPException(
-            status_code=exc.status_code, detail=exc.explanation
-        )
-
-    print("**** Updating " + old.name + "****")
-    result = updater.wait(timeout=120)
-    print(result)
-    time.sleep(1)
-    return get_apps()
-
-
-"""
-Checks for current docker id (the one yacht is running
-in) and then launches the next function in a 
-background task.
-"""
-
-
-def _update_self(background_tasks):
-    dclient = docker.from_env()
-    bash_command = "head -1 /proc/self/cgroup|cut -d/ -f3"
-    yacht_id = (
-        subprocess.check_output(["bash", "-c", bash_command]).decode("UTF-8").strip()
-    )
-    try:
-        yacht = dclient.containers.get(yacht_id)
-    except docker.errors.APIError as exc:
-        print(exc)
-        if exc.status_code == 404:
-            raise HTTPException(
-                status_code=exc.status_code,
-                detail="Unable to get Yacht container ID",
-            )
-        else:
-            status_code = 500
-            detail = exc.explanation
-            raise HTTPException(status_code=status_code, detail=detail)
-    background_tasks.add_task(update_self_in_background, yacht)
+    background_tasks.add_task(update_self_in_background, yacht_name)
     return {"result": "successful"}
 
+async def update_self_in_background(yacht_name):
+    async with aiodocker.Docker() as docker:
+        print("**** Updating " + yacht_name + "****")
+        config = {
+            "Image": "containrrr/watchtower:latest",
+            "Cmd": ["--cleanup", "--run-once", yacht_name],
+            "HostConfig": {
+                "Binds": ["/var/run/docker.sock:/var/run/docker.sock"],
+                "AutoRemove": True
+            }
+        }
+        try:
+            updater = await docker.containers.create(config=config)
+            await updater.start()
+        except Exception as e:
+            print(f"Error updating self: {e}")
 
-"""
-Spins up a watchtower instance with --cleanup and 
---run-once pointed at the current ID of yacht.
-"""
+async def check_self_update():
+    yacht_id = _get_self_id()
+    if not yacht_id:
+         raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
+
+    async with aiodocker.Docker() as docker:
+        try:
+            yacht = await docker.containers.get(yacht_id)
+            info = await yacht.show()
+            tag = info["Config"]["Image"]
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, _check_updates, tag)
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
 
 
-def update_self_in_background(yacht):
-    dclient = docker.from_env()
-    volumes = {"/var/run/docker.sock": {"bind": "/var/run/docker.sock", "mode": "rw"}}
-    print("**** Updating " + yacht.name + "****")
-    dclient.containers.run(
-        image="containrrr/watchtower:latest",
-        command="--cleanup --run-once " + yacht.name,
-        remove=True,
-        detach=True,
-        volumes=volumes,
+async def generate_support_bundle(app_name):
+    async with aiodocker.Docker() as docker:
+        try:
+            app = await docker.containers.get(app_name)
+            attrs = await app.show()
+            logs = await app.log(stdout=True, stderr=True)
+        except aiodocker.exceptions.DockerError:
+             raise HTTPException(404, f"App {app_name} not found.")
+
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, "w") as zf:
+        zf.writestr(f"{app_name}.log", "".join(logs))
+        zf.writestr(f"{app_name}-config.yml", yaml.dump(attrs))
+
+    stream.seek(0)
+    return StreamingResponse(
+        stream,
+        media_type="application/x-zip-compressed",
+        headers={
+            "Content-Disposition": f"attachment;filename={app_name}_bundle.zip"
+        },
     )
-
-
-"""
-Checks current docker id and compares the repo digest
-to the local digest to see if there's an updata available.
-"""
-
-
-def check_self_update():
-    dclient = docker.from_env()
-    bash_command = "head -1 /proc/self/cgroup|cut -d/ -f3"
-    yacht_id = (
-        subprocess.check_output(["bash", "-c", bash_command]).decode("UTF-8").strip()
-    )
-    try:
-        yacht = dclient.containers.get(yacht_id)
-    except Exception as exc:
-        print(exc)
-        if hasattr(exc, "response") and exc.response.status_code == 404:
-            raise HTTPException(
-                status_code=exc.response.status_code,
-                detail="Unable to get Yacht container ID",
-            )
-        elif hasattr(exc, "response"):
-            raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
-            )
-        else:
-            raise HTTPException(status_code=400, detail=exc.args)
-
-    return _check_updates(yacht.image.tags[0])
-
-
-def generate_support_bundle(app_name):
-    dclient = docker.from_env()
-    if dclient.containers.get(app_name):
-        app = dclient.containers.get(app_name)
-        stream = io.BytesIO()
-        with zipfile.ZipFile(stream, "w") as zf:
-            # print(compose)
-            # print(compose.get("services"))
-            attrs = app.attrs
-            service_log = app.logs()
-            zf.writestr(f"{app_name}.log", service_log)
-            zf.writestr(f"{app_name}-config.yml", yaml.dump(attrs))
-            # It is possible that ".write(...)" has better memory management here.
-        stream.seek(0)
-        return StreamingResponse(
-            stream,
-            media_type="application/x-zip-compressed",
-            headers={
-                "Content-Disposition": f"attachment;filename={app_name}_bundle.zip"
-            },
-        )
-    else:
-        raise HTTPException(404, f"App {app_name} not found.")
-
 
 async def log_generator(request, app_name):
-    while True:
-        async with aiodocker.Docker() as docker:
-            container: DockerContainer = await docker.containers.get(app_name)
-            if container._container["State"]["Status"] == "running":
-                logs_generator = container.log(
-                    stdout=True, stderr=True, follow=True, tail=200
-                )
-                async for line in logs_generator:
+    async with aiodocker.Docker() as docker:
+        try:
+            container = await docker.containers.get(app_name)
+            info = await container.show()
+            if info["State"]["Status"] == "running":
+                async for line in container.log(stdout=True, stderr=True, follow=True, tail=200):
                     yield {"event": "update", "retry": 3000, "data": line}
-
-            if await request.is_disconnected():
-                break
-
+                    if await request.is_disconnected():
+                        break
+        except aiodocker.exceptions.DockerError:
+            pass
 
 async def stat_generator(request, app_name):
     prev_stats = None
-    while True:
-        async with aiodocker.Docker() as adocker:
-            container: DockerContainer = await adocker.containers.get(app_name)
-            if container._container["State"]["Status"] == "running":
-                stats_generator = container.stats(stream=True)
-
-                async for line in stats_generator:
+    async with aiodocker.Docker() as adocker:
+        try:
+            container = await adocker.containers.get(app_name)
+            info = await container.show()
+            if info["State"]["Status"] == "running":
+                async for line in container.stats(stream=True):
                     current_stats = await process_app_stats(line, app_name)
                     if prev_stats != current_stats:
                         yield {
@@ -594,33 +510,37 @@ async def stat_generator(request, app_name):
                         }
                         prev_stats = current_stats
 
-            if await request.is_disconnected():
-                break
-
-            # Stats are generated every second by docker
-            # so there's no point in checking more often than that
-            await asyncio.sleep(1)
+                    if await request.is_disconnected():
+                        break
+        except Exception:
+            pass
 
 async def all_stat_generator(request):
     async with aiodocker.Docker() as docker:
-        containers = []
-        _containers = await docker.containers.list()
-        for _app in _containers:
-            if _app._container["State"] == "running":
-                containers.append(_app)
-        loops = [stat_generator(request, app._container["Names"][0][1:]) for app in containers]
-        async with aiostream.stream.merge(*loops).stream() as merged:
-                    async for event in merged:
-                        yield event
+        containers = await docker.containers.list()
 
+    running_names = []
+    for c in containers:
+         if c._container["State"] == "running":
+             running_names.append(c._container["Names"][0][1:])
+
+    loops = [stat_generator(request, name) for name in running_names]
+
+    if not loops:
+        return
+
+    async with aiostream.stream.merge(*loops).stream() as merged:
+        async for event in merged:
+            yield event
 
 async def process_app_stats(line, app_name):
     cpu_total = 0.0
     cpu_system = 0.0
     cpu_percent = 0.0
-    if line["memory_stats"]:
-        mem_current = line["memory_stats"]["usage"]
-        mem_total = line["memory_stats"]["limit"]
+
+    if "memory_stats" in line:
+        mem_current = line["memory_stats"].get("usage", 0)
+        mem_total = line["memory_stats"].get("limit", 1)
         mem_percent = (mem_current / mem_total) * 100.0
     else:
         mem_current = None
@@ -631,12 +551,11 @@ async def process_app_stats(line, app_name):
         cpu_percent, cpu_system, cpu_total = await calculate_cpu_percent2(
             line, cpu_total, cpu_system
         )
-    except KeyError:
-        print("error while getting new CPU stats: %r, falling back")
+    except Exception:
         cpu_percent = await calculate_cpu_percent(line)
 
     full_stats = {
-        "time": line["read"],
+        "time": line.get("read"),
         "name": app_name,
         "mem_total": mem_total,
         "cpu_percent": round(cpu_percent, 1),

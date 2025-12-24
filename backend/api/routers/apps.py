@@ -29,22 +29,22 @@ def get_db():
 
 
 @router.get("/")
-def index(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def index(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
-    return actions.get_apps()
+    return await actions.get_apps()
 
 
 @router.get("/{app_name}/updates")
-def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
-    return actions.check_app_update(app_name)
+    return await actions.check_app_update(app_name)
 
 
 @router.get("/{app_name}/update")
-def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     check_permission("perm_restart", Authorize, db) # Update is effectively a restart/recreate
-    return actions.app_update(app_name)
+    return await actions.app_update(app_name)
 
 @router.get("/stats")
 async def all_sse_stats(request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
@@ -53,25 +53,25 @@ async def all_sse_stats(request: Request, Authorize: get_auth_wrapper = Depends(
     return EventSourceResponse(stat_generator)
 
 @router.get("/{app_name}")
-def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
-    return actions.get_app(app_name=app_name)
+    return await actions.get_app(app_name=app_name)
 
 
 @router.get("/{app_name}/processes", response_model=schemas.Processes)
-def get_container_processes(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_container_processes(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
-    return actions.get_app_processes(app_name=app_name)
+    return await actions.get_app_processes(app_name=app_name)
 
 
 @router.get("/{app_name}/support")
-def get_support_bundle(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_support_bundle(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
-    return actions.generate_support_bundle(app_name)
+    return await actions.generate_support_bundle(app_name)
 
 
 @router.get("/actions/{app_name}/{action}")
-def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     if action == "start":
         check_permission("perm_start", Authorize, db)
@@ -82,10 +82,10 @@ def container_actions(app_name, action, background_tasks: BackgroundTasks, Autho
     elif action == "kill" or action == "remove":
         check_permission("perm_delete", Authorize, db)
 
-    return actions.app_action(app_name, action, background_tasks)
+    return await actions.app_action(app_name, action, background_tasks)
 
 @router.post("/deploy", response_model=schemas.DeployLogs)
-def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     # Deploying implies starting/creating
     check_permission("perm_start", Authorize, db)
@@ -107,7 +107,7 @@ def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depen
     if not template.name:
          raise HTTPException(status_code=422, detail="Name field is required.")
 
-    result = actions.deploy_app(template=template)
+    result = await actions.deploy_app(template=template)
 
     if isinstance(result, dict) and result.get("success") is False:
         return JSONResponse(status_code=409, content=result)

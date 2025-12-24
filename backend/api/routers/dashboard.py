@@ -6,9 +6,9 @@ import api.actions.dashboard as actions
 router = APIRouter()
 
 @router.get("/stats")
-def get_dashboard_stats(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_dashboard_stats(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     """
     Returns aggregated stats for the dashboard.
     """
     auth_check(Authorize)
-    return actions.get_dashboard_stats()
+    return await actions.get_dashboard_stats()
