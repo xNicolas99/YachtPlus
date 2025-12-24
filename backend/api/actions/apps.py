@@ -20,7 +20,6 @@ from api.utils.apps import (
     calculate_cpu_percent2,
     format_bytes,
 )
-from api.utils.templates import conv2dict
 
 import yaml
 import json
@@ -48,9 +47,10 @@ def get_running_apps():
     apps = dclient.containers.list()
     for app in apps:
         attrs = app.attrs
-        attrs.update(conv2dict("name", app.name))
-        attrs.update(conv2dict("ports", app.ports))
-        attrs.update(conv2dict("short_id", app.short_id))
+        # Direct assignment is faster than conv2dict
+        attrs["name"] = app.name
+        attrs["ports"] = app.ports
+        attrs["short_id"] = app.short_id
         apps_list.append(attrs)
 
     return apps_list
@@ -76,11 +76,16 @@ def check_app_update(app_name):
     # Safe access to Config and Image
     config = app.attrs.get("Config")
     if config and config.get("Image"):
+        # Pass dclient to _check_updates if possible to reuse connection?
+        # For now _check_updates creates its own, but we can optimize utils later.
+        # We optimize here by not re-creating dclient if we could,
+        # but _check_updates is imported.
         if _check_updates(config["Image"]):
-            app.attrs.update(conv2dict("isUpdatable", True))
-    app.attrs.update(conv2dict("name", app.name))
-    app.attrs.update(conv2dict("ports", app.ports))
-    app.attrs.update(conv2dict("short_id", app.short_id))
+            app.attrs["isUpdatable"] = True
+
+    app.attrs["name"] = app.name
+    app.attrs["ports"] = app.ports
+    app.attrs["short_id"] = app.short_id
     return app.attrs
 
 
@@ -101,10 +106,9 @@ def get_apps():
         )
     for app in apps:
         attrs = app.attrs
-
-        attrs.update(conv2dict("name", app.name))
-        attrs.update(conv2dict("ports", app.ports))
-        attrs.update(conv2dict("short_id", app.short_id))
+        attrs["name"] = app.name
+        attrs["ports"] = app.ports
+        attrs["short_id"] = app.short_id
         apps_list.append(attrs)
 
     return apps_list
@@ -127,9 +131,9 @@ def get_app(app_name):
         )
     attrs = app.attrs
 
-    attrs.update(conv2dict("ports", app.ports))
-    attrs.update(conv2dict("short_id", app.short_id))
-    attrs.update(conv2dict("name", app.name))
+    attrs["ports"] = app.ports
+    attrs["short_id"] = app.short_id
+    attrs["name"] = app.name
 
     return attrs
 
