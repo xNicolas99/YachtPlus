@@ -33,6 +33,7 @@ import aiodocker
 import asyncio
 import aiostream
 import logging
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,11 @@ async def get_app_processes(app_name):
                  processes = await app.top()
                  return Processes(Processes=processes["Processes"], Titles=processes["Titles"])
             else:
-                return None
+                return Processes(Processes=[], Titles=[])
         except Exception as e:
             logger.error(f"Error fetching processes for {app_name}: {e}")
-            return None
+            # Return empty process list on error instead of None/crashing
+            return Processes(Processes=[], Titles=[])
 
 async def get_app_logs(app_name):
     async with aiodocker.Docker() as docker:
@@ -340,8 +342,8 @@ async def app_action(app_name, action, background_tasks=None):
              raise HTTPException(status_code=exc.status, detail=exc.message)
 
         try:
-            with open("/proc/self/cgroup", "r") as f:
-                content = f.readline()
+            async with aiofiles.open("/proc/self/cgroup", "r") as f:
+                content = await f.readline()
                 self_id = content.strip().split("/")[-1]
         except Exception as e:
             logger.debug(f"Could not read self cgroup ID: {e}")
@@ -411,17 +413,17 @@ async def app_update(app_name):
     await asyncio.sleep(1)
     return await get_apps()
 
-def _get_self_id():
+async def _get_self_id():
     try:
-        with open("/proc/self/cgroup", "r") as f:
-            content = f.readline()
+        async with aiofiles.open("/proc/self/cgroup", "r") as f:
+            content = await f.readline()
             return content.strip().split("/")[-1]
     except Exception as e:
         logger.warning(f"Failed to determine self container ID: {e}")
         return None
 
 async def _update_self(background_tasks):
-    yacht_id = _get_self_id()
+    yacht_id = await _get_self_id()
     if not yacht_id:
          raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 
@@ -454,7 +456,7 @@ async def update_self_in_background(yacht_name):
             logger.error(f"Error updating self: {e}")
 
 async def check_self_update():
-    yacht_id = _get_self_id()
+    yacht_id = await _get_self_id()
     if not yacht_id:
          raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 

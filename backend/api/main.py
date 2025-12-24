@@ -101,6 +101,16 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # 63072000 seconds = 2 years. Preload enabled.
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    return response
+
 
 @app.exception_handler(docker.errors.DockerException)
 async def docker_exception_handler(request: Request, exc: docker.errors.DockerException):
