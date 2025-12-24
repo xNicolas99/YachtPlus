@@ -109,7 +109,7 @@
         <v-card-text class="pt-2">
           {{ selectedApp.description }}
           <h4 v-if="selectedApp.notes" class="pt-2">Notes:</h4>
-          <p v-if="selectedApp.notes" v-html="selectedApp.notes" />
+          <p v-if="selectedApp.notes" v-html="$sanitize(selectedApp.notes)" />
           <v-card tile>
             <v-card-title class="subheading primary font-weight-bold">
               General

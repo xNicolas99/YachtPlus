@@ -7,6 +7,7 @@ certifi>=2024.2.2
 cffi>=1.16.0
 chardet>=5.2.0
 click>=8.1.7
+cryptography>=41.0.0
 databases<0.9.0
 dnspython>=2.6.1
 docker>=7.1.0
@@ -20,7 +21,8 @@ idna>=3.7
 makefun>=1.15.2
 psycopg2-binary>=2.9.9
 pycparser>=2.22
-pydantic<2
+pydantic>=2.0
+pydantic-settings>=2.0
 PyJWT>=2.8.0
 python-multipart>=0.0.9
 PyYAML>=6.0.1
@@ -43,4 +45,3 @@ qrcode>=7.4.2
 APScheduler>=3.10.4
 Pillow>=10.3.0
 httpx>=0.23.0
-httpx

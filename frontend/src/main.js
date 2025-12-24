@@ -13,6 +13,7 @@ import VueUtils from "./plugins/vueutils";
 import notifications from "./plugins/notifications";
 import "./vee-validate";
 import "./registerServiceWorker";
+import DOMPurify from "dompurify";
 
 // Toast Notifications
 import Toast from "vue-toastification";
@@ -30,6 +31,11 @@ require("animate.css/animate.compat.css");
 Vue.use(VueChatScroll);
 // Restore legacy notification plugin for backward compatibility
 Vue.prototype.$notify = notifications;
+
+// Setup Global Sanitization
+Vue.prototype.$sanitize = function(dirty) {
+  return DOMPurify.sanitize(dirty);
+};
 
 Vue.config.productionTip = false;
 

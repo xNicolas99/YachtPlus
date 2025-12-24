@@ -4,6 +4,7 @@ from api.db.database import SessionLocal
 from api.db.models.users import User
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
+from api.utils.crypto import encrypt, decrypt
 import pyotp
 import qrcode
 import io
@@ -28,7 +29,8 @@ def generate_2fa(db: Session = Depends(get_db), Authorize: get_auth_wrapper = De
 
     # Generate secret
     secret = pyotp.random_base32()
-    user.otp_secret = secret
+    # Encrypt before storing
+    user.otp_secret = encrypt(secret)
     db.commit()
 
     # Generate QR Code
@@ -40,6 +42,7 @@ def generate_2fa(db: Session = Depends(get_db), Authorize: get_auth_wrapper = De
     img.save(buffered, format="PNG")
     img_str = base64.b64encode(buffered.getvalue()).decode()
 
+    # Return the raw secret to the user for manual entry if needed, but it's stored encrypted
     return {"secret": secret, "qr_code": f"data:image/png;base64,{img_str}"}
 
 @router.post("/enable")
@@ -51,13 +54,19 @@ def enable_2fa(token: str = Body(..., embed=True), db: Session = Depends(get_db)
     if not user or not user.otp_secret:
         raise HTTPException(status_code=400, detail="2FA setup not initiated")
 
-    totp = pyotp.TOTP(user.otp_secret)
-    if totp.verify(token):
-        user.is_2fa_enabled = True
-        db.commit()
-        return {"message": "2FA enabled successfully"}
-    else:
-        raise HTTPException(status_code=400, detail="Invalid token")
+    try:
+        # Decrypt secret
+        secret = decrypt(user.otp_secret)
+        totp = pyotp.TOTP(secret)
+        if totp.verify(token):
+            user.is_2fa_enabled = True
+            db.commit()
+            return {"message": "2FA enabled successfully"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid token")
+    except Exception as e:
+        print(f"2FA Enable Error: {e}")
+        raise HTTPException(status_code=400, detail="Invalid token or secret error")
 
 @router.post("/disable")
 def disable_2fa(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):

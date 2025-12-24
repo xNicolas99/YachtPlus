@@ -115,8 +115,8 @@ class AuthWrapper:
             value=token,
             httponly=True,
             max_age=max_age or int(settings.ACCESS_TOKEN_EXPIRES),
-            samesite=settings.SAME_SITE_COOKIES,
-            secure=False # Should be True in prod if https
+            samesite="Strict",
+            secure=True
         )
 
 def get_auth_wrapper(request: Request):

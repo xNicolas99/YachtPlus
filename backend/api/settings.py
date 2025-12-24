@@ -1,6 +1,6 @@
 import os
 import secrets
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
