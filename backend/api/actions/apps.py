@@ -39,17 +39,24 @@ logger = logging.getLogger(__name__)
 
 async def get_running_apps():
     apps_list = []
-    async with aiodocker.Docker() as docker:
-        apps = await docker.containers.list()
-        for app in apps:
-            attrs = app._container
+    try:
+        async with aiodocker.Docker() as docker:
+            apps = await docker.containers.list()
+            for app in apps:
+                attrs = app._container
 
-            name = attrs.get("Names", ["/Unknown"])[0][1:]
-            ports = attrs.get("Ports", [])
-            short_id = attrs.get("Id", "")[:12]
+                name = attrs.get("Names", ["/Unknown"])[0][1:]
+                ports = attrs.get("Ports", [])
+                short_id = attrs.get("Id", "")[:12]
 
-            attrs.update({"name": name, "ports": ports, "short_id": short_id})
-            apps_list.append(attrs)
+                attrs.update({"name": name, "ports": ports, "short_id": short_id})
+                apps_list.append(attrs)
+    except Exception as e:
+        logger.error(f"Error fetching running apps: {e}")
+        # Retain behavior of returning empty list if docker fails,
+        # but now we log the error.
+        # Ideally we should raise HTTP 503 if critical, but for now allow empty list to not break UI completely
+        pass
 
     return apps_list
 
@@ -80,21 +87,31 @@ async def check_app_update(app_name):
 
 async def get_apps():
     apps_list = []
-    async with aiodocker.Docker() as docker:
-        try:
-            apps = await docker.containers.list(all=True)
-        except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+    try:
+        async with aiodocker.Docker() as docker:
+            try:
+                apps = await docker.containers.list(all=True)
+            except aiodocker.exceptions.DockerError as exc:
+                logger.error(f"Docker API Error in get_apps: {exc.message}")
+                raise HTTPException(status_code=exc.status, detail=exc.message)
+            except Exception as exc:
+                logger.error(f"Unexpected error in get_apps (Docker connection?): {exc}")
+                raise HTTPException(status_code=503, detail="Docker unavailable")
 
-        for app in apps:
-            attrs = app._container
+            for app in apps:
+                attrs = app._container
 
-            name = attrs.get("Names", ["/Unknown"])[0][1:]
-            short_id = attrs.get("Id", "")[:12]
-            ports = attrs.get("Ports", [])
+                name = attrs.get("Names", ["/Unknown"])[0][1:]
+                short_id = attrs.get("Id", "")[:12]
+                ports = attrs.get("Ports", [])
 
-            attrs.update({"name": name, "ports": ports, "short_id": short_id})
-            apps_list.append(attrs)
+                attrs.update({"name": name, "ports": ports, "short_id": short_id})
+                apps_list.append(attrs)
+    except HTTPException:
+        raise
+    except Exception as e:
+         logger.error(f"Critical error in get_apps: {e}")
+         raise HTTPException(status_code=500, detail=str(e))
 
     return apps_list
 
