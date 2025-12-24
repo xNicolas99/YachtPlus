@@ -1,8 +1,14 @@
+import logging
 import uvicorn
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+
 from api.db.models.settings import TokenBlacklist
 from api.settings import Settings
 from api.utils.auth import get_db
@@ -20,9 +26,80 @@ from api.services.watchtower import start_scheduler, stop_scheduler
 import docker.errors
 import requests.exceptions
 
-app = FastAPI(root_path="/api")
+# Setup Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 settings = Settings()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    logger.info("Starting up...")
+    Base.metadata.create_all(bind=engine)
+    start_scheduler()
+
+    # Initialize Persistent Secret Key
+    try:
+        db = SessionLocal()
+        key = generate_secret_key(db=db)
+        from api.auth import jwt
+        jwt.set_secret_key(key)
+
+        users_exist = get_users(db=db)
+        logger.info(f"DISABLE_AUTH = {settings.DISABLE_AUTH}")
+
+        if users_exist:
+            logger.info("Users Exist")
+
+        template_variables_exist = read_template_variables(db)
+        if template_variables_exist:
+            logger.info("Template Variables Exist")
+        else:
+            logger.info("No Variables yet! Initializing defaults.")
+            t_vars = settings.BASE_TEMPLATE_VARIABLES
+            t_var_list = []
+            for t in t_vars:
+                template_variables = TemplateVariables(
+                    variable=t.get("variable"), replacement=t.get("replacement")
+                )
+                t_var_list.append(template_variables)
+            set_template_variables(new_variables=t_var_list, db=db)
+
+        # Check for Default Template
+        templates_exist = get_templates(db)
+        if not templates_exist:
+            logger.info("No templates found. Adding default SelfhostedPro template.")
+            default_template = Template(
+                title="SelfhostedPro Templates",
+                url="https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/template.json"
+            )
+            add_template(db, default_template)
+
+        db.close()
+    except Exception as e:
+        logger.error(f"Startup Initialization Error: {e}")
+        # Consider re-raising if critical
+
+    yield
+
+    # Shutdown
+    logger.info("Shutting down...")
+    stop_scheduler()
+
+app = FastAPI(root_path="/api", lifespan=lifespan)
+
+# Middleware
+# Using specific origins instead of wildcard when allow_credentials=True to prevent startup errors
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 
 @app.exception_handler(docker.errors.DockerException)
@@ -32,6 +109,7 @@ async def docker_exception_handler(request: Request, exc: docker.errors.DockerEx
     likely caused by missing socket mounts or permission issues.
     """
     error_str = str(exc)
+    logger.error(f"Docker Exception: {error_str}")
 
     # Permission Denied (e.g. user not in docker group)
     if "Permission denied" in error_str or "PermissionError" in error_str:
@@ -64,6 +142,7 @@ async def requests_connection_error_handler(request: Request, exc: requests.exce
     """
     Handle Requests connection errors that might leak from Docker SDK.
     """
+    logger.error(f"Request Connection Error: {exc}")
     return JSONResponse(
         status_code=503,
         content={
@@ -84,70 +163,12 @@ app.include_router(
     prefix="/resources",
     tags=["resources"],
 )
-app.include_router(
-    templates.router,
-    prefix="/templates",
-    tags=["templates"],
-)
+app.include_router(templates.router, prefix="/templates", tags=["templates"])
 app.include_router(registries.router)
 app.include_router(compose.router, prefix="/compose", tags=["compose"])
 app.include_router(app_settings.router, prefix="/settings", tags=["settings"])
 app.include_router(setup.router, prefix="/setup", tags=["setup"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
-
-
-@app.on_event("startup")
-async def startup(db: Session = Depends(get_db)):
-    Base.metadata.create_all(bind=engine)
-    start_scheduler()
-
-    # Initialize Persistent Secret Key
-    key = generate_secret_key(db=SessionLocal())
-    from api.auth import jwt
-    jwt.set_secret_key(key)
-
-    users_exist = get_users(db=SessionLocal())
-    print(
-        "DISABLE_AUTH = "
-        + str(settings.DISABLE_AUTH)
-        + " ("
-        + str(type(settings.DISABLE_AUTH))
-        + ")"
-    )
-    if users_exist:
-        print("Users Exist")
-    template_variables_exist = read_template_variables(SessionLocal())
-    if template_variables_exist:
-        print("Template Variables Exist")
-    else:
-        print("No Variables yet!")
-        t_vars = settings.BASE_TEMPLATE_VARIABLES
-        t_var_list = []
-        for t in t_vars:
-            template_variables = TemplateVariables(
-                variable=t.get("variable"), replacement=t.get("replacement")
-            )
-            t_var_list.append(template_variables)
-        set_template_variables(new_variables=t_var_list, db=SessionLocal())
-
-    # Check for Default Template
-    try:
-        db_session = SessionLocal()
-        templates_exist = get_templates(db_session)
-        if not templates_exist:
-            print("No templates found. Adding default SelfhostedPro template.")
-            default_template = Template(
-                title="SelfhostedPro Templates",
-                url="https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/template.json"
-            )
-            add_template(db_session, default_template)
-        db_session.close()
-    except Exception as e:
-        print(f"Failed to add default template: {e}")
-
-@app.on_event("shutdown")
-def shutdown_event():
-    stop_scheduler()
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
