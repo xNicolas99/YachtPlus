@@ -68,8 +68,8 @@ async def check_app_update(app_name):
                 is_updatable = await loop.run_in_executor(None, _check_updates, config["Image"])
                 if is_updatable:
                     attrs["isUpdatable"] = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to check for updates for {config.get('Image')}: {e}")
 
         attrs["name"] = attrs.get("Name", "")[1:]
         attrs["short_id"] = attrs.get("Id", "")[:12]
@@ -121,7 +121,8 @@ async def get_app_processes(app_name):
                  return Processes(Processes=processes["Processes"], Titles=processes["Titles"])
             else:
                 return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error fetching processes for {app_name}: {e}")
             return None
 
 async def get_app_logs(app_name):
@@ -134,7 +135,8 @@ async def get_app_logs(app_name):
                 return AppLogs(logs="".join(logs))
             else:
                 return None
-        except Exception:
+        except Exception as e:
+            logger.error(f"Error fetching logs for {app_name}: {e}")
             return None
 
 async def check_container_conflicts(data: DeployForm):
@@ -217,6 +219,8 @@ async def deploy_app(template: DeployForm):
         )
     except HTTPException as exc:
         raise exc
+    except (docker.errors.DockerException, aiodocker.exceptions.DockerError) as exc:
+        raise exc
     except Exception as exc:
          raise HTTPException(status_code=500, detail=str(exc))
 
@@ -254,6 +258,10 @@ async def launch_app(
     edit,
     _id,
 ):
+    """
+    Deprecated: Use launch_app_from_template instead for cleaner signature.
+    Kept for backward compatibility if called from other places, but mapped to new function if possible.
+    """
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, _launch_app_sync,
         name, image, restart_policy, command, ports, portlabels,
@@ -273,9 +281,10 @@ def _launch_app_sync(
             try:
                 running_app = dclient.containers.get(_id)
                 running_app.remove(force=True)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to remove existing container {_id} during edit: {e}")
         except Exception:
+            # Container might not exist, which is fine
             pass
 
     combined_labels = Merge(portlabels, labels)
@@ -306,7 +315,8 @@ def _launch_app_sync(
             try:
                 failed_app = dclient.containers.get(name)
                 failed_app.remove()
-            except: pass
+            except Exception as remove_err:
+                logger.error(f"Failed to cleanup container {name} after API error: {remove_err}")
         raise HTTPException(
             status_code=e.status_code, detail=e.explanation
         )
@@ -333,7 +343,8 @@ async def app_action(app_name, action, background_tasks=None):
             with open("/proc/self/cgroup", "r") as f:
                 content = f.readline()
                 self_id = content.strip().split("/")[-1]
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Could not read self cgroup ID: {e}")
             self_id = None
 
         c_info = await app.show()
@@ -405,7 +416,8 @@ def _get_self_id():
         with open("/proc/self/cgroup", "r") as f:
             content = f.readline()
             return content.strip().split("/")[-1]
-    except:
+    except Exception as e:
+        logger.warning(f"Failed to determine self container ID: {e}")
         return None
 
 async def _update_self(background_tasks):
@@ -439,7 +451,7 @@ async def update_self_in_background(yacht_name):
             updater = await docker.containers.create(config=config)
             await updater.start()
         except Exception as e:
-            print(f"Error updating self: {e}")
+            logger.error(f"Error updating self: {e}")
 
 async def check_self_update():
     yacht_id = _get_self_id()
@@ -512,7 +524,8 @@ async def stat_generator(request, app_name):
 
                     if await request.is_disconnected():
                         break
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Stat generator stopped for {app_name}: {e}")
             pass
 
 async def all_stat_generator(request):
@@ -552,6 +565,7 @@ async def process_app_stats(line, app_name):
             line, cpu_total, cpu_system
         )
     except Exception:
+        # calculate_cpu_percent is a fallback
         cpu_percent = await calculate_cpu_percent(line)
 
     full_stats = {

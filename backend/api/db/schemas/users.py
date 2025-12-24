@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 from typing import Union, Optional
 from datetime import datetime
@@ -39,8 +39,7 @@ class User(UserBase):
     perm_delete: bool
     authDisabled: Optional[bool]
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class APIKEY(BaseModel):
@@ -50,8 +49,7 @@ class APIKEY(BaseModel):
     user: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GenerateAPIKEY(BaseModel):
