@@ -45,3 +45,4 @@ qrcode>=7.4.2
 APScheduler>=3.10.4
 Pillow>=10.3.0
 httpx>=0.23.0
+aiofiles
