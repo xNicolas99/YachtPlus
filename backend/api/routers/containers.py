@@ -13,6 +13,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+@router.get("/")
+async def get_containers(
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    """
+    List all containers
+    """
+    auth_check(Authorize)
+    return await actions.get_containers()
+
 @router.get("/{container_id}/logs")
 async def get_container_logs(
     request: Request,
