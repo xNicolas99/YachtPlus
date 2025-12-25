@@ -102,6 +102,43 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
 
 @app.middleware("http")
+async def check_setup_status(request: Request, call_next):
+    """
+    Middleware to enforce setup flow.
+    If setup is not complete, access is restricted to setup-related endpoints.
+    """
+    if settings.DISABLE_AUTH is True:
+        return await call_next(request)
+
+    # Use a helper or import from setup module. Since circular imports are risky,
+    # we replicate the check or import locally.
+    from api.routers.setup.setup import is_setup_completed
+
+    if not is_setup_completed():
+        path = request.url.path
+        # Allow setup endpoints, static files (if any served by this app, though nginx handles them usually),
+        # and auth endpoints required for setup (like login/token generation).
+        # We also need to allow /api/settings/theme probably if used during setup?
+        allowed_prefixes = [
+            "/api/setup",
+            "/api/auth/login", # Need to login to finalize
+            "/api/auth/jwt/login", # Alternate login
+            "/api/auth/2fa", # 2FA setup
+            "/api/auth/logout",
+            "/docs", "/openapi.json", "/redoc" # Allow docs for debugging? Maybe restrict in strict mode.
+        ]
+
+        # Check if path starts with any allowed prefix
+        if not any(path.startswith(prefix) for prefix in allowed_prefixes):
+            return JSONResponse(
+                status_code=403,
+                content={"detail": "Setup not completed. Access restricted to setup endpoints."}
+            )
+
+    response = await call_next(request)
+    return response
+
+@app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
