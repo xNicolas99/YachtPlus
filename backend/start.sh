@@ -5,12 +5,24 @@ set -e
 # DOCKER_GID can be passed from host (e.g. $(getent group docker | cut -d: -f3))
 if [ -z "${DOCKER_GID}" ]; then
     if [ -S /var/run/docker.sock ]; then
-        DOCKER_GID=$(stat -c '%g' /var/run/docker.sock)
-        echo "DOCKER_GID not set. Auto-detected from /var/run/docker.sock: ${DOCKER_GID}"
+        # Try stat first (GNU stat)
+        if DOCKER_GID=$(stat -c '%g' /var/run/docker.sock 2>/dev/null); then
+            echo "DOCKER_GID not set. Auto-detected from /var/run/docker.sock via stat: ${DOCKER_GID}"
+        # Fallback to ls -n if stat fails (e.g. busybox/alpine differences or missing permissions)
+        else
+            DOCKER_GID=$(ls -n /var/run/docker.sock | awk '{print $4}')
+            echo "DOCKER_GID not set. Auto-detected from /var/run/docker.sock via ls: ${DOCKER_GID}"
+        fi
     else
         echo "DOCKER_GID not set and socket not found. Defaulting to 999 (standard docker group)."
         DOCKER_GID=999
     fi
+fi
+
+# Ensure DOCKER_GID is a number
+if ! echo "$DOCKER_GID" | grep -Eq '^[0-9]+$'; then
+    echo "Error: DOCKER_GID must be a number. Got: $DOCKER_GID"
+    DOCKER_GID=999
 fi
 
 # Create or modify the docker group to match the host's GID
@@ -28,7 +40,7 @@ fi
 # We find the group name associated with the GID
 TARGET_GROUP=$(getent group ${DOCKER_GID} | cut -d: -f1)
 echo "Adding appuser to group ${TARGET_GROUP}"
-usermod -aG ${TARGET_GROUP} appuser
+usermod -aG ${TARGET_GROUP} appuser || echo "Failed to add appuser to group ${TARGET_GROUP}, proceeding anyway..."
 
 # Set permissions for /var/run/docker.sock if it exists
 if [ -S /var/run/docker.sock ]; then
@@ -70,7 +82,8 @@ gosu appuser nginx
 sleep 2
 if ! pgrep nginx > /dev/null; then
     echo "Error: Nginx failed to start!"
-
+    # Display nginx logs for debugging
+    cat /var/log/nginx/error.log
     exit 1
 fi
 

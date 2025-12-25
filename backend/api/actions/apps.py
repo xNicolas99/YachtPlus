@@ -43,7 +43,9 @@ async def get_running_apps():
         async with aiodocker.Docker() as docker:
             apps = await docker.containers.list()
             for app in apps:
-                attrs = app._container
+                attrs = app._container if hasattr(app, '_container') else app
+                if not isinstance(attrs, dict):
+                    continue
 
                 name = attrs.get("Names", ["/Unknown"])[0][1:]
                 ports = attrs.get("Ports", [])
@@ -53,9 +55,7 @@ async def get_running_apps():
                 apps_list.append(attrs)
     except Exception as e:
         logger.error(f"Error fetching running apps: {e}")
-        # Retain behavior of returning empty list if docker fails,
-        # but now we log the error.
-        # Ideally we should raise HTTP 503 if critical, but for now allow empty list to not break UI completely
+        # Retain behavior of returning empty list if docker fails
         pass
 
     return apps_list
@@ -124,7 +124,15 @@ async def get_apps():
         raise
     except Exception as e:
          logger.error(f"Critical error in get_apps: {e}")
-         raise HTTPException(status_code=500, detail=str(e))
+         # Return empty list or raise 503 depending on desired UX.
+         # User requested "Wiederherstellung der Docker-Konnektivität" and robustness.
+         # If we raise 500, the UI shows error. If we return empty list, UI shows 0 apps (Blindflug).
+         # But the user said "App-Liste bleibt leer, obwohl 3 Container erkannt wurden".
+         # This implies it might be silently failing or returning empty list due to parsing errors.
+         # I have added parsing robustness above.
+         # If the connection fails entirely, we should probably raise 503 so the frontend knows something is wrong,
+         # rather than showing empty list which implies "no apps".
+         raise HTTPException(status_code=503, detail=f"Docker Connection Error: {str(e)}")
 
     return apps_list
 
@@ -566,8 +574,15 @@ async def all_stat_generator(request):
 
     running_names = []
     for c in containers:
-         if c._container["State"] == "running":
-             running_names.append(c._container["Names"][0][1:])
+         # Safely access _container or use object itself
+         c_dict = c._container if hasattr(c, '_container') else c
+
+         # Check if it's a dict and has State
+         if isinstance(c_dict, dict) and c_dict.get("State") == "running":
+             # Use Names[0] but strip leading slash
+             names = c_dict.get("Names")
+             if names:
+                 running_names.append(names[0][1:])
 
     loops = [stat_generator(request, name) for name in running_names]
 
