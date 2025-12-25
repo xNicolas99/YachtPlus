@@ -37,7 +37,7 @@ class User(UserBase):
     perm_stop: bool
     perm_restart: bool
     perm_delete: bool
-    authDisabled: Optional[bool]
+    authDisabled: Optional[bool] = False
 
     model_config = ConfigDict(from_attributes=True)
 
