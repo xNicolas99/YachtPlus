@@ -28,6 +28,19 @@ def index(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(g
 
 
 @router.get(
+    "/match",
+    response_model=List[schemas.TemplateItem],
+)
+def match(
+    query: str,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    return crud.match_templates(db=db, query=query)
+
+
+@router.get(
     "/{id}",
     response_model=schemas.TemplateItems,
 )

@@ -7,14 +7,10 @@
           <v-icon>mdi-plus</v-icon>
         </v-btn>
         <v-spacer />
-        <v-text-field
-          v-model="search"
-          append-icon="mdi-magnify"
-          label="Search"
-          hide-details
-          color="secondary"
-          dense
-        ></v-text-field>
+        <!-- Replaced v-text-field with UnifiedSearch -->
+        <div style="width: 400px">
+          <UnifiedSearch @input="val => search = val" />
+        </div>
       </v-card-title>
 
       <v-card-title color="secondary">
@@ -357,11 +353,13 @@
 import { mapActions, mapState } from "vuex";
 import ContainerLogs from "@/components/ContainerLogs.vue";
 import ContainerTerminal from "@/components/ContainerTerminal.vue";
+import UnifiedSearch from "@/components/UnifiedSearch.vue";
 
 export default {
   components: {
     ContainerLogs,
-    ContainerTerminal
+    ContainerTerminal,
+    UnifiedSearch
   },
   data() {
     return {

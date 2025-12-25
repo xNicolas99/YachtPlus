@@ -98,15 +98,28 @@ async def get_apps():
                 logger.error(f"Unexpected error in get_apps (Docker connection?): {exc}")
                 raise HTTPException(status_code=503, detail="Docker unavailable")
 
-            for app in apps:
-                attrs = app._container
+            # Debug log
+            logger.debug(f"get_apps: Found {len(apps)} containers via aiodocker")
 
-                name = attrs.get("Names", ["/Unknown"])[0][1:]
+            for app in apps:
+                # Ensure we handle both dicts and objects if aiodocker version changes or behaves oddly
+                attrs = app._container if hasattr(app, '_container') else app
+                if not isinstance(attrs, dict):
+                    logger.warning(f"Skipping app item of type {type(attrs)}")
+                    continue
+
+                names = attrs.get("Names")
+                if not names:
+                     name = "Unknown"
+                else:
+                     name = names[0][1:] # Strip leading slash
+
                 short_id = attrs.get("Id", "")[:12]
                 ports = attrs.get("Ports", [])
 
                 attrs.update({"name": name, "ports": ports, "short_id": short_id})
                 apps_list.append(attrs)
+
     except HTTPException:
         raise
     except Exception as e:
