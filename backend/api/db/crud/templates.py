@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_
 
 from fastapi import HTTPException
 
@@ -74,6 +75,19 @@ def get_template_items(db: Session, template_id: int):
         .all()
     )
 
+def match_templates(db: Session, query: str):
+    return (
+        db.query(models.TemplateItem)
+        .filter(
+            or_(
+                models.TemplateItem.title.ilike(f"%{query}%"),
+                models.TemplateItem.name.ilike(f"%{query}%"),
+                models.TemplateItem.image.ilike(f"%{query}%")
+            )
+        )
+        .limit(20)
+        .all()
+    )
 
 def delete_template(db: Session, template_id: int):
     _template = (
