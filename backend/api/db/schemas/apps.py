@@ -1,39 +1,45 @@
-from typing import List, Optional, Union
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
 class PortsSchema(BaseModel):
-    cport: str
-    proto: str
+    cport: Optional[str] = None
+    proto: Optional[str] = None
     label: Optional[str] = None
     hport: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VolumesSchema(BaseModel):
-    container: str
-    bind: str
+    container: Optional[str] = None
+    bind: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EnvSchema(BaseModel):
-    label: str
+    label: Optional[str] = None
     default: Optional[str] = None
     name: Optional[str] = None
     description: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SysctlsSchema(BaseModel):
-    name: str
-    value: str
+    name: Optional[str] = None
+    value: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DevicesSchema(BaseModel):
-    container: str
-    host: str
+    container: Optional[str] = None
+    host: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LabelSchema(BaseModel):
-    label: str
-    value: str
+    label: Optional[str] = None
+    value: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DeployForm(BaseModel):
@@ -64,16 +70,19 @@ class DeployForm(BaseModel):
 
 
 class DeployLogs(BaseModel):
-    logs: str
+    logs: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AppLogs(BaseModel):
-    logs: str
+    logs: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Processes #
 
 
 class Processes(BaseModel):
-    Processes: List[List[str]]
-    Titles: List[str]
+    Processes: Optional[List[List[str]]] = None
+    Titles: Optional[List[str]] = None
+    model_config = ConfigDict(from_attributes=True)

@@ -69,4 +69,5 @@ RUN mkdir -p /config /var/www/client_body_temp /var/www/proxy_temp /var/run/ngin
 COPY backend/start.sh /start.sh
 RUN chmod +x /start.sh
 
+USER root
 CMD ["/start.sh"]

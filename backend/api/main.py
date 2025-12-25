@@ -90,10 +90,19 @@ async def lifespan(app: FastAPI):
 app = FastAPI(root_path="/api", lifespan=lifespan)
 
 # Middleware
-# Using specific origins instead of wildcard when allow_credentials=True to prevent startup errors
+# Handle CORS: If "*" is present in allowed origins, we must use allow_origin_regex
+# to avoid the "AssertionError: Allowed origins cannot be set to ['*'] when allow_credentials=True"
+allow_origins = settings.ALLOWED_ORIGINS
+allow_origin_regex = None
+
+if "*" in allow_origins:
+    allow_origins = []
+    allow_origin_regex = ".*"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

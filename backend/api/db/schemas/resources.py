@@ -1,25 +1,28 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 
 class ImageWrite(BaseModel):
-    image: str
+    image: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VolumeWrite(BaseModel):
-    name: str
+    name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NetworkWrite(BaseModel):
-    attachable: bool
-    internal: bool
-    ipv4gateway: str
-    ipv4range: Optional[str]
-    ipv4subnet: str
-    ipv6_enabled: bool
-    ipv6gateway: Optional[str]
-    ipv6range: Optional[str]
-    ipv6subnet: Optional[str]
-    name: str
-    networkDriver: str
-    network_devices: str
+    attachable: Optional[bool] = None
+    internal: Optional[bool] = None
+    ipv4gateway: Optional[str] = None
+    ipv4range: Optional[str] = None
+    ipv4subnet: Optional[str] = None
+    ipv6_enabled: Optional[bool] = None
+    ipv6gateway: Optional[str] = None
+    ipv6range: Optional[str] = None
+    ipv6subnet: Optional[str] = None
+    name: Optional[str] = None
+    networkDriver: Optional[str] = None
+    network_devices: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
