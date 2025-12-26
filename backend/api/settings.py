@@ -31,8 +31,13 @@ class Settings(BaseSettings):
     SECURE_COOKIES: bool = os.environ.get("SECURE_COOKIES", "False").lower() == "true"
     DISABLE_AUTH: bool = os.environ.get("DISABLE_AUTH", "False").lower() == "true"
     ALLOWED_HOSTS: List[str] = os.environ.get("ALLOWED_HOSTS", "*").split(",")
-    # Allowing CORS origins. Default to common local dev ports and production via env.
-    ALLOWED_ORIGINS: List[str] = os.environ.get("ALLOWED_ORIGINS", "http://localhost:8080,http://127.0.0.1:8080").split(",")
+    # Allowing CORS origins.
+    # We remove "*" from defaults to avoid issues with allow_credentials=True in FastAPI.
+    # Instead, we list common local addresses and the requested IP.
+    ALLOWED_ORIGINS: List[str] = os.environ.get(
+        "ALLOWED_ORIGINS",
+        "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000,http://192.168.50.84:8080,http://192.168.50.84:8000"
+    ).split(",")
     BASE_TEMPLATE_VARIABLES: list = load_base_template_variables()
     BASE_TEMPLATE: str = os.environ.get("BASE_TEMPLATE", "")
     SQLALCHEMY_DATABASE_URI: str = os.environ.get(

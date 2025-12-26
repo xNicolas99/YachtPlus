@@ -1,14 +1,17 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Any, Optional
 
 
 class Compose(BaseModel):
-    name: str
+    name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ComposeWrite(Compose):
-    content: Optional[Any]
+    content: Optional[Any] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ComposeRead(ComposeWrite):
-    path: str
+    path: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)

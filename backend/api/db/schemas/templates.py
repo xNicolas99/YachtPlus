@@ -1,33 +1,33 @@
 from __future__ import annotations
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
 class TemplateItem(BaseModel):
-    id: int
-    type: int
-    title: str
-    name: str
-    platform: str
-    description: Optional[str]
-    logo: Optional[str]
-    image: str
-    command: Optional[List[str]]
-    notes: Optional[str]
-    categories: Optional[List]
-    restart_policy: Optional[str]
-    ports: Optional[List] = []
-    volumes: Optional[List] = []
-    env: Optional[List] = []
-    devices: Optional[List] = []
-    labels: Optional[List] = []
-    sysctls: Optional[List] = []
-    cap_add: Optional[List] = []
-    network_mode: Optional[str]
-    network: Optional[str]
-    cpus: Optional[int]
-    mem_limit: Optional[str]
+    id: Optional[int] = None
+    type: Optional[int] = None
+    title: Optional[str] = None
+    name: Optional[str] = None
+    platform: Optional[str] = None
+    description: Optional[str] = None
+    logo: Optional[str] = None
+    image: Optional[str] = None
+    command: Optional[List[str]] = None
+    notes: Optional[str] = None
+    categories: Optional[List[Any]] = None
+    restart_policy: Optional[str] = None
+    ports: Optional[List[Any]] = []
+    volumes: Optional[List[Any]] = []
+    env: Optional[List[Any]] = []
+    devices: Optional[List[Any]] = []
+    labels: Optional[List[Any]] = []
+    sysctls: Optional[List[Any]] = []
+    cap_add: Optional[List[Any]] = []
+    network_mode: Optional[str] = None
+    network: Optional[str] = None
+    cpus: Optional[float] = None # Changed to float for consistency with apps.py
+    mem_limit: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,20 +36,22 @@ class TemplateItem(BaseModel):
 
 
 class TemplateBase(BaseModel):
-    title: str
-    url: str
+    title: Optional[str] = None
+    url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class TemplateRead(TemplateBase):
-    id: int
-    updated_at: datetime
-    created_at: datetime
+    id: Optional[int] = None
+    updated_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TemplateReadAll(TemplateBase):
     items: List[TemplateItem] = []
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TemplateItems(TemplateRead):
@@ -64,14 +66,15 @@ class TemplateItems(TemplateRead):
 
 
 class TemplateVariables(BaseModel):
-    variable: str
-    replacement: str
+    variable: Optional[str] = None
+    replacement: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ReadTemplateVariables(TemplateVariables):
-    id: int
+    id: Optional[int] = None
+    model_config = ConfigDict(from_attributes=True)
 
 
 ### Export/Import ###
@@ -80,6 +83,4 @@ class ReadTemplateVariables(TemplateVariables):
 class Import_Export(BaseModel):
     templates: List[TemplateItems] = []
     variables: List[ReadTemplateVariables] = []
-
-
-# TemplateItems.update_forward_refs() - Deprecated in Pydantic v2
+    model_config = ConfigDict(from_attributes=True)

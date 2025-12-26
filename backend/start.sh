@@ -33,7 +33,6 @@ else
     # If group exists (maybe 'docker' already exists with different GID, or another group uses this GID)
     GROUP_NAME=$(getent group ${DOCKER_GID} | cut -d: -f1)
     echo "Group with GID ${DOCKER_GID} already exists: ${GROUP_NAME}"
-    # If the group name is not 'docker', we might want to use it anyway.
 fi
 
 # Add appuser to the group with DOCKER_GID
@@ -48,7 +47,12 @@ if [ -S /var/run/docker.sock ]; then
     # but inside container it appears as root:root (or root:group).
     # Since we added appuser to the group matching the socket's GID (hopefully),
     # access should work.
+    # However, sometimes we might need to adjust ownership if group logic fails,
+    # but chown might fail on read-only mounts or special filesystems.
     echo "Docker socket found."
+
+    # Optional: Adjust permissions to ensure group rw
+    chmod 660 /var/run/docker.sock 2>/dev/null || true
 else
     echo "Warning: /var/run/docker.sock not found."
 fi
@@ -57,7 +61,6 @@ fi
 # We are currently root, so we should make sure they are owned by appuser
 mkdir -p /config/compose
 chown -R appuser:appuser /config
-
 
 mkdir -p /var/log/nginx
 touch /var/log/nginx/access.log /var/log/nginx/error.log
@@ -68,10 +71,8 @@ echo "Switching to appuser..."
 
 # Start tailing logs in the background to forward them to stdout/stderr
 # We use 'gosu appuser' to ensure the tail process runs as appuser (though reading is fine as root)
-# Actually, tailing as root is fine.
 echo "Starting log forwarder..."
 tail -F /var/log/nginx/access.log /var/log/nginx/error.log &
-TAIL_PID=$!
 
 # Start Nginx (running in background as appuser)
 # Nginx is configured to listen on 8080 and use /var/run/nginx for pid
@@ -89,8 +90,6 @@ fi
 
 echo "Starting Gunicorn..."
 # Exec Gunicorn as appuser
-# Note: This replaces the shell process, so the tail background job becomes an orphan
-# (which is usually fine in Docker as init picks it up, or it dies when container dies).
 exec gosu appuser gunicorn api.main:app \
     --workers 1 \
     --worker-class uvicorn.workers.UvicornWorker \
