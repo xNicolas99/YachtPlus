@@ -39,6 +39,13 @@ Vue.prototype.$sanitize = function(dirty) {
 
 Vue.config.productionTip = false;
 
+// Dynamic Base URL Configuration
+// Uses the browser's hostname to ensure connectivity even if localhost is not used
+const protocol = window.location.protocol;
+const hostname = window.location.hostname;
+const port = window.location.port ? `:${window.location.port}` : "";
+axios.defaults.baseURL = `${protocol}//${hostname}${port}/api`;
+
 // Handle Token Refresh on 401
 function createAxiosResponseInterceptor() {
   const interceptor = axios.interceptors.response.use(

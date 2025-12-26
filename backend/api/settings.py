@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # Instead, we list common local addresses and the requested IP.
     ALLOWED_ORIGINS: List[str] = os.environ.get(
         "ALLOWED_ORIGINS",
-        "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000,http://192.168.50.84:8080,http://192.168.50.84:8000"
+        "http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000,http://192.168.50.84:8080,http://192.168.50.84:8000,https://192.168.50.84:8080,https://192.168.50.84:8000"
     ).split(",")
     BASE_TEMPLATE_VARIABLES: list = load_base_template_variables()
     BASE_TEMPLATE: str = os.environ.get("BASE_TEMPLATE", "")
