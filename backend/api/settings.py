@@ -1,10 +1,12 @@
 import os
 import secrets
 import json
+import logging
 from pydantic_settings import BaseSettings
 from typing import List
 
 basedir = os.path.abspath(os.path.dirname(__file__))
+logger = logging.getLogger(__name__)
 
 def load_base_template_variables():
     try:
@@ -32,11 +34,14 @@ def get_or_create_secret_key():
     try:
         if os.path.exists(secret_file):
             with open(secret_file, "r") as f:
-                return f.read().strip()
-    except Exception:
-        pass
+                key = f.read().strip()
+                if key:
+                    return key
+    except Exception as e:
+        logger.warning(f"Error reading secret key from {secret_file}: {e}")
 
     # Generate and save
+    logger.info("Generating new SECRET_KEY...")
     key = secrets.token_hex(32)
     try:
         # Ensure /config exists (it should in container)
@@ -45,8 +50,10 @@ def get_or_create_secret_key():
 
         with open(secret_file, "w") as f:
             f.write(key)
-    except Exception:
-        # If we can't write, we just return the ephemeral key
+        logger.info(f"SECRET_KEY persisted to {secret_file}")
+    except Exception as e:
+        # If we can't write, we just return the ephemeral key, but log CRITICAL
+        logger.critical(f"Failed to write SECRET_KEY to {secret_file}. Encryption will fail on restart! Error: {e}")
         pass
 
     return key

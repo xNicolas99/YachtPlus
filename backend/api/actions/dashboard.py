@@ -19,15 +19,20 @@ async def get_dashboard_stats():
     """
 
     try:
+        # Increase timeout for Docker stats collection
         async with aiodocker.Docker() as docker:
             containers_task = docker.containers.list(all=True)
             images_task = docker.images.list()
             volumes_task = docker.volumes.list()
             networks_task = docker.networks.list()
 
-            results = await asyncio.gather(
-                containers_task, images_task, volumes_task, networks_task,
-                return_exceptions=True
+            # Wrap tasks in asyncio.wait_for to prevent infinite hanging
+            results = await asyncio.wait_for(
+                asyncio.gather(
+                    containers_task, images_task, volumes_task, networks_task,
+                    return_exceptions=True
+                ),
+                timeout=10.0 # 10 seconds timeout for collecting all stats
             )
 
             # Unpack results, handling exceptions for each task
@@ -56,6 +61,15 @@ async def get_dashboard_stats():
                 networks = results[3]
 
             volumes = volumes_data.get('Volumes', []) or []
+    except asyncio.TimeoutError:
+        logger.error("Timeout fetching dashboard stats from Docker")
+        return {
+            "containers": {"total": 0, "running": 0, "stopped": 0, "unhealthy": 0},
+            "projects": {"total": 0, "active": 0, "inactive": 0},
+            "images": {"total": 0, "used": 0, "dangling": 0, "total_size": 0},
+            "volumes": {"total": 0, "in_use": 0, "unused": 0},
+            "networks": {"total": 0, "custom": 0, "default": 0}
+        }
     except Exception as e:
         logger.error(f"Critical error connecting to Docker in get_dashboard_stats: {e}")
         # Return empty stats structure to prevent frontend crash
