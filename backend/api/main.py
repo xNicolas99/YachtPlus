@@ -165,6 +165,22 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     # 63072000 seconds = 2 years. Preload enabled.
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+
+    # CSP: Mitigate XSS risks (especially important for Vue 2 EOL).
+    # We allow 'unsafe-inline' for styles because Vuetify 2 uses them heavily.
+    # We allow 'unsafe-eval' for Vue 2 runtime compiler if used (often needed).
+    # Ideally, this should be stricter, but 'self' is a good start.
+    csp_policy = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data: https:; "
+        "connect-src 'self' ws: wss: https:; "
+        "frame-src 'none'; "
+        "object-src 'none';"
+    )
+    response.headers["Content-Security-Policy"] = csp_policy
     return response
 
 
