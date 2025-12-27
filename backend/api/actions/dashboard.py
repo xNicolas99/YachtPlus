@@ -18,54 +18,57 @@ async def get_dashboard_stats():
     - Robust error handling for partial failures
     """
 
-    try:
-        async with aiodocker.Docker() as docker:
-            containers_task = docker.containers.list(all=True)
-            images_task = docker.images.list()
-            volumes_task = docker.volumes.list()
-            networks_task = docker.networks.list()
+    # Initialize empty structures
+    containers = []
+    images = []
+    volumes = []
+    networks = []
 
-            results = await asyncio.gather(
-                containers_task, images_task, volumes_task, networks_task,
-                return_exceptions=True
-            )
+    # Increase timeout for Docker stats collection
+    # We split this into two parts: Critical (Containers) and Secondary (Images, Volumes, Networks)
+    # If Secondary fails, we still return Containers.
 
-            # Unpack results, handling exceptions for each task
-            if isinstance(results[0], Exception):
-                logger.error(f"Error fetching containers: {results[0]}")
-                containers = []
-            else:
-                containers = results[0]
+    async with aiodocker.Docker() as docker:
+        # Part 1: Critical - Containers
+        try:
+             # 5s timeout for containers
+             containers = await asyncio.wait_for(
+                 docker.containers.list(all=True),
+                 timeout=5.0
+             )
+        except Exception as e:
+            logger.error(f"Error fetching containers: {e}")
+            # If containers fail, we probably can't do much, but we return empty to avoid 500
+            return {
+                "containers": {"total": 0, "running": 0, "stopped": 0, "unhealthy": 0},
+                "projects": {"total": 0, "active": 0, "inactive": 0},
+                "images": {"total": 0, "used": 0, "dangling": 0, "total_size": 0},
+                "volumes": {"total": 0, "in_use": 0, "unused": 0},
+                "networks": {"total": 0, "custom": 0, "default": 0}
+            }
 
-            if isinstance(results[1], Exception):
-                logger.error(f"Error fetching images: {results[1]}")
-                images = []
-            else:
-                images = results[1]
+        # Part 2: Secondary - Images, Volumes, Networks
+        # We run them in parallel but catch individual errors
+        async def fetch_safe(coro, default):
+            try:
+                return await asyncio.wait_for(coro, timeout=5.0)
+            except Exception as e:
+                logger.warning(f"Stats fetch failed for {default}: {e}")
+                return default
 
-            if isinstance(results[2], Exception):
-                logger.error(f"Error fetching volumes: {results[2]}")
-                volumes_data = {}
-            else:
-                volumes_data = results[2]
+        results = await asyncio.gather(
+            fetch_safe(docker.images.list(), []),
+            fetch_safe(docker.volumes.list(), {}),
+            fetch_safe(docker.networks.list(), []),
+            return_exceptions=True
+        )
 
-            if isinstance(results[3], Exception):
-                logger.error(f"Error fetching networks: {results[3]}")
-                networks = []
-            else:
-                networks = results[3]
+        # Unpack results
+        images = results[0] if isinstance(results[0], list) else []
+        volumes_data = results[1] if isinstance(results[1], dict) else {}
+        networks = results[2] if isinstance(results[2], list) else []
 
-            volumes = volumes_data.get('Volumes', []) or []
-    except Exception as e:
-        logger.error(f"Critical error connecting to Docker in get_dashboard_stats: {e}")
-        # Return empty stats structure to prevent frontend crash
-        return {
-            "containers": {"total": 0, "running": 0, "stopped": 0, "unhealthy": 0},
-            "projects": {"total": 0, "active": 0, "inactive": 0},
-            "images": {"total": 0, "used": 0, "dangling": 0, "total_size": 0},
-            "volumes": {"total": 0, "in_use": 0, "unused": 0},
-            "networks": {"total": 0, "custom": 0, "default": 0}
-        }
+        volumes = volumes_data.get('Volumes', []) or []
 
     try:
         loop = asyncio.get_event_loop()

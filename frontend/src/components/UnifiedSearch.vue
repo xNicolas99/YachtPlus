@@ -98,7 +98,11 @@ export default {
 
         // 3. Search DockerHub (if no local/template matches or always?)
         const regRes = await axios.get(`/api/registries/search?query=${query}&registry=dockerhub`);
-        const regMatches = regRes.data.results.map(r => ({
+
+        // FIX: Backend returns List directly, not { results: List }
+        const results = Array.isArray(regRes.data) ? regRes.data : (regRes.data.results || []);
+
+        const regMatches = results.map(r => ({
            title: r.name,
            description: r.description,
            id: r.name, // Use image name as ID

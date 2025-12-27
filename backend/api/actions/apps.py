@@ -85,6 +85,38 @@ async def check_app_update(app_name):
 
         return attrs
 
+def normalize_ports(summary_ports):
+    """
+    Convert Docker Summary ports list to Inspection ports dict format.
+    Summary: [{'IP': '0.0.0.0', 'PrivatePort': 80, 'PublicPort': 8000, 'Type': 'tcp'}]
+    Inspection: {'80/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '8000'}]}
+    """
+    if not summary_ports:
+        return {}
+
+    # If it's already a dict (Inspection format), return it
+    if isinstance(summary_ports, dict):
+        return summary_ports
+
+    ports_dict = {}
+    for p in summary_ports:
+        if not isinstance(p, dict): continue
+
+        private_port = p.get("PrivatePort")
+        proto = p.get("Type", "tcp")
+        key = f"{private_port}/{proto}"
+
+        host_ip = p.get("IP", "0.0.0.0")
+        host_port = str(p.get("PublicPort", ""))
+
+        if key not in ports_dict:
+            ports_dict[key] = []
+
+        if host_port:
+            ports_dict[key].append({"HostIp": host_ip, "HostPort": host_port})
+
+    return ports_dict
+
 async def get_apps():
     apps_list = []
     try:
@@ -115,23 +147,37 @@ async def get_apps():
                      name = names[0][1:] # Strip leading slash
 
                 short_id = attrs.get("Id", "")[:12]
-                ports = attrs.get("Ports", [])
 
-                attrs.update({"name": name, "ports": ports, "short_id": short_id})
+                # Handling Data Structure Mismatches for Frontend
+
+                # 1. Ensure State is a dict with Status (Frontend expects item.State.Status)
+                state = attrs.get("State")
+                if isinstance(state, str):
+                    attrs["State"] = {"Status": state}
+
+                # 2. Ensure Config exists (Frontend expects item.Config.Image, item.Config.Labels)
+                if "Config" not in attrs:
+                    attrs["Config"] = {
+                        "Image": attrs.get("Image"),
+                        "Labels": attrs.get("Labels") or {}
+                    }
+
+                # 3. Normalize Ports (Frontend expects Dict format)
+                # 'Ports' in summary is List. 'ports' (lowercase) is added below.
+                raw_ports = attrs.get("Ports", [])
+
+                # Update the main dict
+                attrs.update({
+                    "name": name,
+                    "ports": normalize_ports(raw_ports),
+                    "short_id": short_id
+                })
                 apps_list.append(attrs)
 
     except HTTPException:
         raise
     except Exception as e:
          logger.error(f"Critical error in get_apps: {e}")
-         # Return empty list or raise 503 depending on desired UX.
-         # User requested "Wiederherstellung der Docker-Konnektivität" and robustness.
-         # If we raise 500, the UI shows error. If we return empty list, UI shows 0 apps (Blindflug).
-         # But the user said "App-Liste bleibt leer, obwohl 3 Container erkannt wurden".
-         # This implies it might be silently failing or returning empty list due to parsing errors.
-         # I have added parsing robustness above.
-         # If the connection fails entirely, we should probably raise 503 so the frontend knows something is wrong,
-         # rather than showing empty list which implies "no apps".
          raise HTTPException(status_code=503, detail=f"Docker Connection Error: {str(e)}")
 
     return apps_list

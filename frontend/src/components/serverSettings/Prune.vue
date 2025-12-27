@@ -95,7 +95,7 @@ export default {
     prune(resource) {
       this.isLoading = true;
       axios({
-        url: "/api/settings/prune/" + resource,
+        url: "/settings/prune/" + resource,
         method: "GET",
         responseType: "text/json"
       })

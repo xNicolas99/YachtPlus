@@ -60,13 +60,13 @@ export default {
   },
   methods: {
     checkStatus() {
-      axios.get("/api/auth/me").then(response => {
+      axios.get("/auth/me").then(response => {
         this.isEnabled = response.data.is_2fa_enabled;
       });
     },
     setup2FA() {
       axios
-        .post("/api/auth/2fa/generate")
+        .post("/auth/2fa/generate")
         .then(response => {
           this.qrCode = response.data.qr_code;
           this.setupDialog = true;
@@ -80,7 +80,7 @@ export default {
     },
     verifyAndEnable() {
       axios
-        .post("/api/auth/2fa/enable", { token: this.token })
+        .post("/auth/2fa/enable", { token: this.token })
         .then(() => {
           this.isEnabled = true;
           this.setupDialog = false;
@@ -95,7 +95,7 @@ export default {
     },
     disable2FA() {
       if (confirm("Are you sure you want to disable 2FA?")) {
-        axios.post("/api/auth/2fa/disable").then(() => {
+        axios.post("/auth/2fa/disable").then(() => {
           this.isEnabled = false;
           this.$emit("notify", { message: "2FA Disabled", color: "success" });
         });

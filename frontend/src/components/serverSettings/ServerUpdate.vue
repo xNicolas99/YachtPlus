@@ -56,7 +56,7 @@ export default {
     checkUpdate() {
       this.isLoading = true;
       axios({
-        url: "/api/settings/check/update",
+        url: "/settings/check/update",
         method: "GET",
         responseType: "text/json"
       })
@@ -72,7 +72,7 @@ export default {
     update() {
       this.isLoading = true;
       axios({
-        url: "/api/settings/update",
+        url: "/settings/update",
         method: "GET",
         responseType: "text/json"
       })

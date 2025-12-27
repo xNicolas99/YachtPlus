@@ -157,7 +157,14 @@ export default {
             localStorage.setItem("token", response.data.access_token);
           }
           this.$store.commit("auth/AUTH_SUCCESS", response.data);
+
+          // Wait for state to update properly before redirecting
+          await this.$nextTick();
           this.$router.push("/");
+        } else {
+            // Should not happen if successful, but handle it
+            this.errorMessage = "Unknown response";
+            this.errorSnackbar = true;
         }
       } catch (err) {
         this.errorMessage = err.response

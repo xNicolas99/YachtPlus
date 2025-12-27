@@ -36,7 +36,7 @@ const mutations = {
 const actions = {
   readImages({ commit }) {
     commit("setLoading", true);
-    const url = "/api/resources/images/";
+    const url = "/resources/images/";
     axios
       .get(url)
       .then(response => {
@@ -68,7 +68,7 @@ const actions = {
   },
   writeImage({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/resources/images/";
+    const url = "/resources/images/";
     axios
       .post(url, payload)
       .then(response => {

@@ -279,10 +279,10 @@ export default {
     },
     async fetchRegistryImages(registry, query) {
       try {
-        let url = "/api/registries/popular";
+        let url = "/registries/popular";
         let params = { registry: registry };
         if (query) {
-          url = "/api/registries/search";
+          url = "/registries/search";
           params.query = query;
         }
         const response = await axios.get(url, { params });
@@ -346,7 +346,7 @@ export default {
             return;
         }
 
-        const response = await axios.get("/api/registries/tags", {
+        const response = await axios.get("/registries/tags", {
           params: {
             registry: registry,
             image: image.full_name

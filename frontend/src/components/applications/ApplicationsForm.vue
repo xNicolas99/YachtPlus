@@ -828,8 +828,8 @@ export default {
         name: "",
         image: "",
         restart_policy: "",
-        network: undefined,
-        network_mode: undefined,
+        network: "bridge",
+        network_mode: "bridge",
         ports: [],
         volumes: [],
         env: [],
@@ -1072,8 +1072,8 @@ export default {
               image: app.image || "",
               restart_policy: app.restart_policy || "",
               command: app.command || [],
-              network: app.network,
-              network_mode: app.network_mode,
+              network: app.network || "bridge",
+              network_mode: app.network_mode || "bridge",
               ports: app.ports || [],
               volumes: app.volumes || [],
               env: app.env || [],
@@ -1119,11 +1119,12 @@ export default {
         this.form.name = namePart;
         this.form.restart_policy = "unless-stopped"; // Default for new deploys
         this.form.network_mode = "bridge"; // Default network
+        this.form.network = "bridge";
 
         // Attempt to fetch image config (ports/volumes) from backend
         this.isLoading = true;
         try {
-          const { data } = await axios.get('/api/registries/inspect', { params: { image: image } });
+          const { data } = await axios.get('/registries/inspect', { params: { image: image } });
           if (data) {
             // Map Ports
             if (data.ExposedPorts) {
