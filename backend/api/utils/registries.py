@@ -11,9 +11,11 @@ logger = logging.getLogger(__name__)
 #   'dockerhub': { 'data': [...], 'timestamp': ... },
 #   'ghcr': { 'data': [...], 'timestamp': ... },
 #   'linuxserver': { 'data': [...], 'timestamp': ... }
+#   'search_query_registry': { 'data': [...], 'timestamp': ... }
 # }
 REGISTRY_CACHE = {}
-CACHE_DURATION = timedelta(minutes=30)
+CACHE_DURATION_POPULAR = timedelta(minutes=60) # Increased to 1 hour
+CACHE_DURATION_SEARCH = timedelta(minutes=10)
 
 async def get_popular_images(registry: str) -> List[Dict]:
     """
@@ -21,9 +23,10 @@ async def get_popular_images(registry: str) -> List[Dict]:
     Uses caching.
     """
     now = datetime.now()
-    if registry in REGISTRY_CACHE:
-        cache_entry = REGISTRY_CACHE[registry]
-        if now - cache_entry['timestamp'] < CACHE_DURATION:
+    cache_key = f"popular_{registry}"
+    if cache_key in REGISTRY_CACHE:
+        cache_entry = REGISTRY_CACHE[cache_key]
+        if now - cache_entry['timestamp'] < CACHE_DURATION_POPULAR:
             return cache_entry['data']
 
     data = []
@@ -35,10 +38,14 @@ async def get_popular_images(registry: str) -> List[Dict]:
         data = await fetch_linuxserver_popular()
 
     if data:
-        REGISTRY_CACHE[registry] = {
+        REGISTRY_CACHE[cache_key] = {
             'data': data,
             'timestamp': now
         }
+    elif cache_key in REGISTRY_CACHE:
+         # Return stale data if fetch failed
+         logger.warning(f"Returning stale cache for {registry} popular images")
+         return REGISTRY_CACHE[cache_key]['data']
 
     return data
 
@@ -110,6 +117,9 @@ async def fetch_dockerhub_image_info(client: httpx.AsyncClient, image_name: str)
                 "source": "dockerhub",
                 "last_updated": data.get("last_updated")
             }
+        elif response.status_code == 429:
+             logger.warning(f"Rate limited by DockerHub for {image_name}")
+             return None
     except Exception as e:
         logger.error(f"Error fetching {image_name}: {e}")
     return None
@@ -131,14 +141,7 @@ async def fetch_ghcr_popular() -> List[Dict]:
     async with httpx.AsyncClient() as client:
         for image in IMAGES:
             try:
-                # We try to fetch package info from GitHub API
-                # This requires that the package is associated with a repo or is public
-                # If this fails (404/403), we still add the image to the list because we know it exists.
-
                 org, pkg = image.split('/')
-                # Attempt to get metadata if possible, but don't fail hard
-                # https://api.github.com/users/{org}/packages/container/{pkg}
-
                 data = {}
                 url = f"https://api.github.com/users/{org}/packages/container/{pkg}"
                 try:
@@ -168,15 +171,7 @@ async def fetch_ghcr_popular() -> List[Dict]:
 async def fetch_linuxserver_popular() -> List[Dict]:
     """
     Fetch from LinuxServer.io API.
-    https://api.linuxserver.io/api/v1/images
     """
-    url = "https://fleet.linuxserver.io/api/v1/images" # Updated URL just in case, but memory said api.linuxserver.io works. Checking memory again...
-    # Memory said: "The LinuxServer.io integration uses the endpoint https://api.linuxserver.io/api/v1/images"
-    # Wait, actually let's try the one from memory if it failed.
-    # The user said "LinuxServer.io Registry komplett defekt".
-    # I'll stick to what was in the code but add better error handling.
-    # Actually, let's try both common endpoints if one fails.
-
     urls = [
         "https://fleet.linuxserver.io/api/v1/images",
         "https://api.linuxserver.io/api/v1/images"
@@ -184,16 +179,11 @@ async def fetch_linuxserver_popular() -> List[Dict]:
 
     result = []
     async with httpx.AsyncClient() as client:
-        success = False
         for u in urls:
             try:
                 resp = await client.get(u, timeout=10.0)
                 if resp.status_code == 200:
                     data = resp.json()
-                    # Key might be 'data' -> 'repositories' -> 'linuxserver'
-                    # Or just a list depending on endpoint version.
-                    # The code was expecting: data.get('data', {}).get('repositories', {}).get('linuxserver', [])
-
                     images = []
                     if 'data' in data and 'repositories' in data['data']:
                         images = data['data']['repositories'].get('linuxserver', [])
@@ -201,7 +191,7 @@ async def fetch_linuxserver_popular() -> List[Dict]:
                          images = data['repositories'].get('linuxserver', [])
 
                     if not images:
-                        continue # try next url
+                        continue
 
                     images.sort(key=lambda x: x.get('monthly_pulls', 0) or 0, reverse=True)
 
@@ -219,7 +209,6 @@ async def fetch_linuxserver_popular() -> List[Dict]:
                             "last_updated": img.get('version_timestamp'),
                             "github_url": img.get('github_url')
                         })
-                    success = True
                     break
             except Exception as e:
                 logger.error(f"Error fetching LSIO images from {u}: {e}")
@@ -230,17 +219,32 @@ async def search_registry(registry: str, query: str) -> List[Dict]:
     if not query:
         return []
 
+    # Check Cache
+    now = datetime.now()
+    cache_key = f"search_{registry}_{query}"
+    if cache_key in REGISTRY_CACHE:
+        cache_entry = REGISTRY_CACHE[cache_key]
+        if now - cache_entry['timestamp'] < CACHE_DURATION_SEARCH:
+            return cache_entry['data']
+
+    data = []
     if registry == 'dockerhub':
-        return await search_dockerhub(query)
+        data = await search_dockerhub(query)
     elif registry == 'ghcr':
-        return await search_ghcr(query)
+        data = await search_ghcr(query)
     elif registry == 'linuxserver':
         # Search popular list
         popular = await get_popular_images('linuxserver')
         q = query.lower()
-        return [img for img in popular if q in img['name'].lower() or q in img['description'].lower()]
+        data = [img for img in popular if q in img['name'].lower() or q in img['description'].lower()]
 
-    return []
+    if data:
+        REGISTRY_CACHE[cache_key] = {
+            'data': data,
+            'timestamp': now
+        }
+
+    return data
 
 async def search_dockerhub(query: str) -> List[Dict]:
     url = f"https://hub.docker.com/v2/search/repositories?query={query}&page_size=25"
@@ -278,9 +282,6 @@ async def search_dockerhub(query: str) -> List[Dict]:
 
 async def search_ghcr(query: str) -> List[Dict]:
     result = []
-
-    # GHCR search is hard. We'll search GitHub Repositories as a proxy,
-    # assuming they publish packages to GHCR.
     try:
         async with httpx.AsyncClient() as client:
             url = f"https://api.github.com/search/repositories?q={query}&sort=stars&order=desc"
@@ -313,10 +314,8 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
              if '/' not in image:
                  image = f"library/{image}"
 
-             # Handle linuxserver images that might be passed as linuxserver/plex
-             if image.startswith('linuxserver/'):
-                 # It is correct as is
-                 pass
+             # Cache tags? Maybe too much cardinality.
+             # But we can add a simple in-memory LRU later if needed.
 
              url = f"https://hub.docker.com/v2/repositories/{image}/tags?page_size=20"
              async with httpx.AsyncClient() as client:
@@ -329,8 +328,6 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
              if 'ghcr.io/' in image:
                  image = image.replace('ghcr.io/', '')
 
-             # image is owner/repo or owner/package
-             # We try to hit the package versions endpoint
              parts = image.split('/')
              if len(parts) >= 2:
                  org = parts[0]
