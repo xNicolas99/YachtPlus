@@ -47,7 +47,7 @@ const mutations = {
 const actions = {
   readTemplates({ commit }) {
     commit("setLoading", true);
-    const url = "/api/templates/";
+    const url = "/templates/";
     axios
       .get(url)
       .then(response => {
@@ -63,7 +63,7 @@ const actions = {
   },
   readTemplatesAndItems({ commit }) {
     commit("setLoading", true);
-    const url = "/api/templates/";
+    const url = "/templates/";
     axios
       .get(url)
       .then(response => {
@@ -106,7 +106,7 @@ const actions = {
   },
   writeTemplate({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/templates/";
+    const url = "/templates/";
     axios
       .post(url, payload)
       .then(response => {
@@ -175,7 +175,7 @@ const actions = {
   },
   readTemplateVariables({ commit }) {
     commit("setLoading", true);
-    const url = "/api/settings/variables";
+    const url = "/settings/variables";
     return new Promise((resolve, reject) => {
       axios
         .get(url)
@@ -195,7 +195,7 @@ const actions = {
   },
   writeTemplateVariables({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/settings/variables";
+    const url = "/settings/variables";
     axios
       .post(url, payload, {})
       .then(response => {

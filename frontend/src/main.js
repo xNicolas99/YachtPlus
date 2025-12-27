@@ -44,9 +44,9 @@ Vue.config.productionTip = false;
 const protocol = window.location.protocol;
 const hostname = window.location.hostname;
 const port = window.location.port ? `:${window.location.port}` : "";
-// REMOVED /api suffix to prevent double-prefixing (e.g. /api/api/...)
-// as many components use absolute paths like /api/setup/status
-axios.defaults.baseURL = `${protocol}//${hostname}${port}`;
+// RESTORED /api suffix to ensure relative paths like /auth/login work correctly.
+// We will fix double-prefixes in the components instead.
+axios.defaults.baseURL = `${protocol}//${hostname}${port}/api`;
 
 // Handle Token Refresh on 401
 function createAxiosResponseInterceptor() {

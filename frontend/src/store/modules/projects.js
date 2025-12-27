@@ -39,7 +39,7 @@ const mutations = {
 
 const actions = {
   _readProjects({ commit }) {
-    const url = "/api/compose/";
+    const url = "/compose/";
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios
@@ -61,7 +61,7 @@ const actions = {
   },
   readProjects({ commit }) {
     commit("setLoading", true);
-    const url = "/api/compose/";
+    const url = "/compose/";
     axios
       .get(url)
       .then(response => {
@@ -98,7 +98,7 @@ const actions = {
   },
   writeProject({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/compose/";
+    const url = "/compose/";
     axios
       .post(url, payload)
       .then(response => {

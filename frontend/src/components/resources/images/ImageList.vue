@@ -260,7 +260,7 @@ export default {
     pruneImages() {
       this.$store.commit("snackbar/setLoading", true);
       axios({
-        url: "/api/settings/prune/images",
+        url: "/settings/prune/images",
         method: "GET",
         responseType: "text/json"
       })

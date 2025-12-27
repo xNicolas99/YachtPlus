@@ -203,7 +203,7 @@ export default {
       // For now I will mock or fail, but I must add the endpoint in backend.
 
       axios
-        .get("/api/auth/users")
+        .get("/auth/users")
         .then(response => {
           this.users = response.data;
           this.loading = false;
@@ -256,7 +256,7 @@ export default {
       } else {
         // Create
         axios
-          .post("/api/auth/create", this.editedItem)
+          .post("/auth/create", this.editedItem)
           .then(() => {
             this.loadUsers();
             this.notify("User created", "success");

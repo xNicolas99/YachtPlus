@@ -226,7 +226,7 @@ export default {
     pruneNetworks() {
       this.$store.commit("snackbar/setLoading", true);
       axios({
-        url: "/api/settings/prune/networks",
+        url: "/settings/prune/networks",
         method: "GET",
         responseType: "text/json"
       })

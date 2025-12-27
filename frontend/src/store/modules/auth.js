@@ -31,7 +31,7 @@ const actions = {
   [AUTH_REQUEST]: ({ commit }, credentials) => {
     return new Promise((resolve, reject) => {
       commit(AUTH_REQUEST);
-      const url = "/api/auth/login";
+      const url = "/auth/login";
       axios
         .post(url, credentials, { withCredentials: true })
         .then(resp => {
@@ -54,11 +54,11 @@ const actions = {
   [AUTH_LOGOUT]: ({ commit }) => {
     return new Promise(resolve => {
       commit(AUTH_REQUEST);
-      const url = "/api/auth/logout";
+      const url = "/auth/logout";
       axios
         .get(url, {}, { withCredentials: true })
         .then(resp => {
-          let rurl = "/api/auth/logout/refresh";
+          let rurl = "/auth/logout/refresh";
           axios
             .get(
               rurl,
@@ -87,7 +87,7 @@ const actions = {
   [AUTH_REFRESH]: ({ commit }) => {
     return new Promise(resolve => {
       commit(AUTH_REQUEST);
-      const url = "/api/auth/refresh";
+      const url = "/auth/refresh";
       axios
         .post(
           url,
@@ -110,7 +110,7 @@ const actions = {
   [AUTH_CHANGE_PASS]: ({ commit }, credentials) => {
     return new Promise((resolve, reject) => {
       commit(AUTH_REQUEST);
-      const url = "/api/auth/me";
+      const url = "/auth/me";
       axios
         .post(url, credentials)
         .then(resp => {
@@ -130,7 +130,7 @@ const actions = {
     commit(AUTH_REQUEST);
     // Also check setup status
     return dispatch("CHECK_SETUP").then(() => {
-      const url = "/api/auth/me";
+      const url = "/auth/me";
       return axios
         .get(url, { skipAuthRefresh: true, withCredentials: true })
         .then(resp => {
@@ -166,7 +166,7 @@ const actions = {
   },
   CHECK_SETUP: ({ commit }) => {
     return axios
-      .get("/api/setup/status")
+      .get("/setup/status")
       .then(resp => {
         commit("SET_SETUP_STATUS", resp.data.is_setup);
       })

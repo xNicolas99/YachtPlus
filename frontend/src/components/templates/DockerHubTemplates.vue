@@ -161,7 +161,7 @@ export default {
     async fetchPopularImages() {
       this.loading = true;
       try {
-        const response = await axios.get("/api/templates/dockerhub/popular");
+        const response = await axios.get("/templates/dockerhub/popular");
         this.popularImages = response.data;
       } catch (error) {
         console.error("Failed to fetch popular images:", error);

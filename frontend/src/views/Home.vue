@@ -257,7 +257,7 @@ export default {
     }),
     async fetchOverviewStats() {
       try {
-        const response = await axios.get("/api/dashboard/stats");
+        const response = await axios.get("/dashboard/stats");
         this.overview = response.data;
       } catch (e) {
         console.error("Failed to fetch dashboard stats", e);

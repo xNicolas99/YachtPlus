@@ -62,7 +62,7 @@ export default {
     }),
     export_settings() {
       axios({
-        url: "/api/settings/export",
+        url: "/settings/export",
         method: "GET",
         responseType: "blob"
       }).then(response => {
@@ -85,7 +85,7 @@ export default {
         }
       };
       axios
-        .post("/api/settings/export", formData, axiosHeader)
+        .post("/settings/export", formData, axiosHeader)
         .then(response => {
           this.setSuccess(response);
         })

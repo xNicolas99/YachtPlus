@@ -23,7 +23,7 @@ export default new Vuex.Store({
   },
   actions: {
     // readTemplates({ commit }) {
-    //   const url = "/api/templates/";
+    //   const url = "/templates/";
     //   axios
     //     .get(url)
     //     .then(response => {
