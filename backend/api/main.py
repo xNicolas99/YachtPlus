@@ -39,12 +39,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     start_scheduler()
 
-    # Initialize Persistent Secret Key
+    # Initialize App State
     try:
         db = SessionLocal()
-        key = generate_secret_key(db=db)
-        from api.auth import jwt
-        jwt.set_secret_key(key)
+        # Secret Key is now handled in settings.py (immutable env or file)
+        # We no longer read/write it to DB here.
 
         users_exist = get_users(db=db)
         logger.info(f"DISABLE_AUTH = {settings.DISABLE_AUTH}")
