@@ -489,7 +489,14 @@ export default {
   },
   created() {
     this.headers = Object.values(this.headersMap);
-    this.selectedHeaders = this.headers;
+    // Explicitly set default selected columns to include Name
+    this.selectedHeaders = [
+        this.headersMap.name,
+        this.headersMap.status,
+        this.headersMap.image,
+        this.headersMap.ports,
+        this.headersMap.created
+    ];
   },
   async mounted() {
     await this.loadAppsWithTimeout();
