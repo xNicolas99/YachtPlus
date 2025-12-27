@@ -1123,7 +1123,7 @@ export default {
         // Attempt to fetch image config (ports/volumes) from backend
         this.isLoading = true;
         try {
-          const { data } = await axios.get('/api/registries/inspect', { params: { image: image } });
+          const { data } = await axios.get('/registries/inspect', { params: { image: image } });
           if (data) {
             // Map Ports
             if (data.ExposedPorts) {

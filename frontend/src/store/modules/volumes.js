@@ -35,7 +35,7 @@ const mutations = {
 
 const actions = {
   _readVolumes({ commit }) {
-    const url = "/api/resources/volumes/";
+    const url = "/resources/volumes/";
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios
@@ -57,7 +57,7 @@ const actions = {
   },
   readVolumes({ commit }) {
     commit("setLoading", true);
-    const url = "/api/resources/volumes/";
+    const url = "/resources/volumes/";
     axios
       .get(url)
       .then(response => {
@@ -89,7 +89,7 @@ const actions = {
   },
   writeVolume({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/resources/volumes/";
+    const url = "/resources/volumes/";
     axios
       .post(url, payload)
       .then(response => {

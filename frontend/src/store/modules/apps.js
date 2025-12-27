@@ -59,7 +59,7 @@ const actions = {
   async readApps({ commit }) {
     await commit("setLoading", true);
     await commit("setAction", "Getting Apps ...");
-    const url = "/api/apps/";
+    const url = "/apps/";
     await axios
       .get(url)
       .then(response => {

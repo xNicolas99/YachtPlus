@@ -169,7 +169,7 @@ export default {
 
     async createAdmin() {
       try {
-        const response = await axios.post("/api/setup/register", {
+        const response = await axios.post("/setup/register", {
           username: this.email,
           password: this.password
         });
@@ -189,7 +189,7 @@ export default {
 
     async generate2FA() {
       try {
-        const response = await axios.post("/api/auth/2fa/generate");
+        const response = await axios.post("/auth/2fa/generate");
         this.qrCodeUrl = response.data.qr_code;
       } catch (err) {
         this.showError("Failed to generate 2FA");
@@ -198,12 +198,12 @@ export default {
 
     async verify2FA() {
       try {
-        await axios.post("/api/auth/2fa/enable", {
+        await axios.post("/auth/2fa/enable", {
           token: this.otpToken
         });
 
         // Finalize setup
-        await axios.post("/api/setup/finalize");
+        await axios.post("/setup/finalize");
 
         this.finishSetup();
       } catch (err) {

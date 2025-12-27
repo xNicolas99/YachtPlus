@@ -35,7 +35,7 @@ const mutations = {
 
 const actions = {
   _readNetworks({ commit }) {
-    const url = "/api/resources/networks/";
+    const url = "/resources/networks/";
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios
@@ -57,7 +57,7 @@ const actions = {
   },
   readNetworks({ commit }) {
     commit("setLoading", true);
-    const url = "/api/resources/networks/";
+    const url = "/resources/networks/";
     axios
       .get(url)
       .then(response => {
@@ -89,7 +89,7 @@ const actions = {
   },
   writeNetwork({ commit }, payload) {
     commit("setLoading", true);
-    const url = "/api/resources/networks/";
+    const url = "/resources/networks/";
     axios
       .post(url, payload)
       .then(response => {
