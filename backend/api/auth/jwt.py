@@ -18,18 +18,16 @@ class TokenData(BaseModel):
     # Add other claims if needed
 
 # JWT Configuration
-_SECRET_KEY = settings.SECRET_KEY
+# _SECRET_KEY is now strictly from settings
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(settings.ACCESS_TOKEN_EXPIRES) / 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_secret_key():
-    return _SECRET_KEY
+    return settings.SECRET_KEY
 
-def set_secret_key(key: str):
-    global _SECRET_KEY
-    _SECRET_KEY = key
+# Deprecated/Removed: set_secret_key (secrets are immutable after startup now)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()

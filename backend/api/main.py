@@ -39,12 +39,11 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     start_scheduler()
 
-    # Initialize Persistent Secret Key
+    # Initialize App State
     try:
         db = SessionLocal()
-        key = generate_secret_key(db=db)
-        from api.auth import jwt
-        jwt.set_secret_key(key)
+        # Secret Key is now handled in settings.py (immutable env or file)
+        # We no longer read/write it to DB here.
 
         users_exist = get_users(db=db)
         logger.info(f"DISABLE_AUTH = {settings.DISABLE_AUTH}")
@@ -128,12 +127,15 @@ async def check_setup_status(request: Request, call_next):
         # Allow setup endpoints, static files (if any served by this app, though nginx handles them usually),
         # and auth endpoints required for setup (like login/token generation).
         # We also need to allow /api/settings/theme probably if used during setup?
+
+        # FIX: The Nginx proxy strips '/api' from the path, so FastAPI sees '/setup/status' instead of '/api/setup/status'.
+        # We must allow paths relative to the FastAPI root.
         allowed_prefixes = [
-            "/api/setup",
-            "/api/auth/login", # Need to login to finalize
-            "/api/auth/jwt/login", # Alternate login
-            "/api/auth/2fa", # 2FA setup
-            "/api/auth/logout",
+            "/setup",
+            "/auth/login", # Need to login to finalize
+            "/auth/jwt/login", # Alternate login
+            "/auth/2fa", # 2FA setup
+            "/auth/logout",
             "/docs", "/openapi.json", "/redoc" # Allow docs for debugging? Maybe restrict in strict mode.
         ]
 
@@ -227,4 +229,6 @@ app.include_router(setup.router, prefix="/setup", tags=["setup"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    # FIX: Use 'api.main:app' to ensure correct module resolution when running via python -m
+    # Or better, pass the app object directly if possible, but Uvicorn reloader needs import string.
+    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
