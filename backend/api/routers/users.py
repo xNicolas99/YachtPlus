@@ -13,10 +13,15 @@ from api.db.schemas import users as schemas
 from api.utils.security import check_ip_restriction, record_login_attempt
 from api.utils.crypto import decrypt
 import pyotp
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
 settings = Settings()
 logger = logging.getLogger(__name__)
+
+# Initialize limiter (ensure it matches the one in main.py)
+limiter = Limiter(key_func=get_remote_address)
 
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
@@ -93,6 +98,7 @@ def create_user(
     return crud.create_user(db=db, user=user)
 
 @router.post("/login")
+@limiter.limit("5/minute")
 def login(
     request: Request,
     user: schemas.UserCreate,
@@ -123,10 +129,12 @@ def login(
                     totp = pyotp.TOTP(secret)
                     if not totp.verify(otp_token):
                         record_login_attempt(db, client_ip, user.username, False)
+                        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                         raise HTTPException(status_code=400, detail="Invalid 2FA code")
                 except Exception as e:
                     logger.error(f"2FA Verify Error: {e}")
                     record_login_attempt(db, client_ip, user.username, False)
+                    logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                     raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
         # Success
@@ -140,9 +148,11 @@ def login(
         }
     else:
         record_login_attempt(db, client_ip, user.username, False)
+        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Invalid Username or Password.")
 
 @router.post("/login_cookie")
+@limiter.limit("5/minute")
 def login_cookie(
     request: Request,
     response: Response,
@@ -169,10 +179,12 @@ def login_cookie(
                  totp = pyotp.TOTP(secret)
                  if not totp.verify(otp_token):
                      record_login_attempt(db, client_ip, user.username, False)
+                     logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                      raise HTTPException(status_code=400, detail="Invalid 2FA code")
              except Exception as e:
                  logger.error(f"2FA Verify Error: {e}")
                  record_login_attempt(db, client_ip, user.username, False)
+                 logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                  raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
         record_login_attempt(db, client_ip, user.username, True)
@@ -185,11 +197,14 @@ def login_cookie(
         }
     else:
         record_login_attempt(db, client_ip, user.username, False)
+        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Invalid Username or Password.")
 
 
 @router.post("/refresh")
+@limiter.limit("20/minute")
 def refresh(
+    request: Request,
     response: Response,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
