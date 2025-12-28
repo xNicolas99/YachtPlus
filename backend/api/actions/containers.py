@@ -58,16 +58,49 @@ async def get_stats(container_id: str):
 
         c_inspect = await container.show()
         if c_inspect["State"]["Status"] != "running":
-             # Return 0 stats for stopped containers instead of 409, or let frontend handle it.
-             # Frontend expects 409 for stopped.
             raise HTTPException(status_code=409, detail="Container is not running")
 
+        stats = None
+
         try:
-            # Use stream=False to fetch a single snapshot.
-            # Docker API calculates cpu_stats and precpu_stats internally for this call.
+            # Try single snapshot first
             stats = await container.stats(stream=False)
+
+            # Check if we have valid precpu_stats
+            has_precpu = False
+            if 'precpu_stats' in stats:
+                pre_total_usage = stats['precpu_stats'].get('cpu_usage', {}).get('total_usage', 0)
+                if pre_total_usage > 0:
+                     has_precpu = True
+
+            if not has_precpu:
+                 logger.debug(f"Stats: Falling back to stream for {container_id}")
+
+                 # Reset stats to ensure we don't use the stateless snapshot if it's invalid
+                 stats = None
+
+                 # Using a managed context for stream to ensure it closes
+                 async for chunk in container.stats(stream=True):
+                      if not stats:
+                           stats = chunk
+                           # If the first chunk happens to have valid precpu, we can stop.
+                           if 'precpu_stats' in chunk and chunk['precpu_stats']['cpu_usage']['total_usage'] > 0:
+                                break
+                      else:
+                           # This is the second chunk. It should have precpu_stats populated relative to the first.
+                           stats = chunk
+                           break
+
         except aiodocker.exceptions.DockerError as e:
              raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+             logger.error(f"Error fetching stats stream: {e}")
+             if not stats:
+                 raise HTTPException(status_code=500, detail="Failed to fetch stats")
+
+        # Fallback check if stats is still None (e.g. stream returned empty)
+        if not stats:
+             raise HTTPException(status_code=500, detail="Failed to fetch stats (empty)")
 
         # Calculate Memory
         mem_current = 0
@@ -116,9 +149,6 @@ async def get_stats(container_id: str):
 
             if system_delta > 0.0 and cpu_delta > 0.0:
                  cpu_percent = (cpu_delta / system_delta) * float(online_cpus) * 100.0
-
-            # Sanity cap (should not happen if math is right, but safe for UI)
-            # cpu_percent = min(cpu_percent, online_cpus * 100.0)
 
         except Exception as e:
             logger.error(f"Error calculating CPU stats for {container_id}: {e}")
