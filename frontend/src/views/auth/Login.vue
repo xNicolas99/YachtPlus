@@ -115,7 +115,6 @@ export default {
     async onSubmit() {
       // We will handle the login request manually here to intercept 2FA requirement
       try {
-        // FIX: Removed /api prefix as baseURL already includes it
         const response = await axios.post("/auth/login_cookie", {
           user: {
             username: this.username,
@@ -130,7 +129,7 @@ export default {
             localStorage.setItem("token", response.data.access_token);
           }
           this.$store.commit("auth/AUTH_SUCCESS", response.data);
-          this.$router.push("/");
+          this.$router.push("/").catch(() => {});
         }
       } catch (err) {
         this.errorMessage = err.response
@@ -143,7 +142,6 @@ export default {
 
     async onSubmit2FA() {
       try {
-        // FIX: Removed /api prefix
         const response = await axios.post("/auth/login_cookie", {
           user: {
             username: this.username,
@@ -160,17 +158,34 @@ export default {
 
           // Wait for state to update properly before redirecting
           await this.$nextTick();
-          this.$router.push("/");
+          // Catch navigation errors (e.g. redundant navigation) to prevent "Failed to verify"
+          this.$router.push("/").catch(err => {
+             // Ignore NavigationDuplicated or Redirected errors
+             if (err.name !== 'NavigationDuplicated' && !err.message.includes('Redirected')) {
+                 console.error(err);
+             }
+          });
         } else {
             // Should not happen if successful, but handle it
-            this.errorMessage = "Unknown response";
+            this.errorMessage = "Verification returned unexpected status";
             this.errorSnackbar = true;
         }
       } catch (err) {
-        this.errorMessage = err.response
-          ? err.response.data.detail
-          : "Verification failed";
-        this.errorSnackbar = true;
+        // Only show error if it's an actual error response
+        if (err.response) {
+            this.errorMessage = err.response.data.detail || "Verification failed";
+            this.errorSnackbar = true;
+        } else {
+            console.error("Login Error:", err);
+            // Don't show generic error if it's likely a redirect/router issue
+            // But if it is a network error, show it.
+            if (err.message !== "Network Error") {
+                 // Squelch
+            } else {
+                 this.errorMessage = "Network Error";
+                 this.errorSnackbar = true;
+            }
+        }
       }
     },
 
@@ -186,8 +201,6 @@ export default {
   },
   mounted() {
     // this.authCheck();
-    // Commented out authCheck here because it might be redundant with route guards/App.vue
-    // but good to keep if direct navigation
   }
 };
 </script>

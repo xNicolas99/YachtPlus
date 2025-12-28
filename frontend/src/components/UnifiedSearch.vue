@@ -82,9 +82,13 @@ export default {
       this.items = [...localMatches];
 
       try {
-        // 2. Search Templates
-        const tmplRes = await axios.get(`/api/templates/match?query=${query}`);
-        const tmplMatches = tmplRes.data.map(t => ({
+        // Use Unified Search Endpoint
+        // Returns { dockerhub: [...], templates: [...] }
+        const response = await axios.get(`/search/?q=${query}`);
+        const data = response.data;
+
+        // Templates
+        const tmplMatches = (data.templates || []).map(t => ({
           title: t.title || t.name,
           description: t.description,
           id: t.id,
@@ -96,16 +100,11 @@ export default {
         }));
         this.items = [...this.items, ...tmplMatches];
 
-        // 3. Search DockerHub (if no local/template matches or always?)
-        const regRes = await axios.get(`/api/registries/search?query=${query}&registry=dockerhub`);
-
-        // FIX: Backend returns List directly, not { results: List }
-        const results = Array.isArray(regRes.data) ? regRes.data : (regRes.data.results || []);
-
-        const regMatches = results.map(r => ({
+        // DockerHub
+        const regMatches = (data.dockerhub || []).map(r => ({
            title: r.name,
            description: r.description,
-           id: r.name, // Use image name as ID
+           id: r.name,
            source: "DockerHub",
            type: "image",
            icon: "mdi-docker",
