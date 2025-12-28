@@ -1,9 +1,6 @@
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-try:
-    from sh import docker_compose
-except ImportError:
-    docker_compose = None
+import subprocess
 
 import os
 import yaml
@@ -14,10 +11,12 @@ import io
 import zipfile
 import asyncio
 import functools
+import logging
 
 from api.settings import Settings
 from api.utils.compose import find_yml_files, validate_compose_project_name
 
+logger = logging.getLogger(__name__)
 settings = Settings()
 
 """
@@ -31,6 +30,31 @@ async def run_in_thread(func, *args, **kwargs):
 Runs an action on the specified compose project.
 """
 
+def _run_compose_command(command_args, cwd, env_vars):
+    """
+    Executes a docker-compose command using subprocess.
+    """
+    cmd = ["docker-compose"] + command_args
+    logger.info(f"Executing: {' '.join(cmd)} in {cwd}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            env=env_vars,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        return result.stdout.strip() if result.stdout else (result.stderr.strip() if result.stderr else "No Output")
+    except subprocess.CalledProcessError as e:
+        logger.error(f"Command failed: {e.stderr}")
+        raise HTTPException(400, e.stderr.strip() if e.stderr else str(e))
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(500, str(e))
+
 def _compose_action_sync(name, action):
     validate_compose_project_name(name)
     files = find_yml_files(settings.COMPOSE_DIR)
@@ -40,57 +64,24 @@ def _compose_action_sync(name, action):
 
     # Check docker host
     _env_vars = check_dockerhost(env)
+    # Merge env vars
+    full_env = env.copy()
+    full_env.update(_env_vars)
+    if full_env.get("clear_env") == "true":
+         del full_env["clear_env"]
 
     _cwd = os.path.dirname(compose["path"])
 
     if action == "up":
-        try:
-            _action = docker_compose(
-                action,
-                "-d",
-                _cwd=_cwd,
-                _env=_env_vars,
-            )
-        except Exception as exc:
-            if hasattr(exc, "stderr"):
-                raise HTTPException(400, exc.stderr.decode("UTF-8").rstrip())
-            else:
-                raise HTTPException(400, str(exc))
+        output = _run_compose_command([action, "-d"], _cwd, full_env)
     elif action == "create":
-        try:
-            _action = docker_compose(
-                "up",
-                "--no-start",
-                _cwd=_cwd,
-                _env=_env_vars,
-            )
-        except Exception as exc:
-            if hasattr(exc, "stderr"):
-                raise HTTPException(400, exc.stderr.decode("UTF-8").rstrip())
-            else:
-                raise HTTPException(400, str(exc))
+        output = _run_compose_command(["up", "--no-start"], _cwd, full_env)
     else:
-        try:
-            _action = docker_compose(
-                action,
-                _cwd=_cwd,
-                _env=_env_vars,
-            )
-        except Exception as exc:
-            if hasattr(exc, "stderr"):
-                raise HTTPException(400, exc.stderr.decode("UTF-8").rstrip())
-            else:
-                raise HTTPException(400, str(exc))
+        output = _run_compose_command([action], _cwd, full_env)
 
-    if _action.stdout.decode("UTF-8").rstrip():
-        _output = _action.stdout.decode("UTF-8").rstrip()
-    elif _action.stderr.decode("UTF-8").rstrip():
-        _output = _action.stderr.decode("UTF-8").rstrip()
-    else:
-        _output = "No Output"
     print(f"""Project {compose['name']} {action} successful.""")
     print(f"""Output: """)
-    print(_output)
+    print(output)
     return _get_compose_projects_sync()
 
 async def compose_action(name, action):
@@ -118,30 +109,23 @@ def _compose_app_action_sync(name, action, app):
 
     _cwd = os.path.dirname(compose["path"])
     _env_vars = check_dockerhost(env)
+    full_env = env.copy()
+    full_env.update(_env_vars)
+    if full_env.get("clear_env") == "true":
+         del full_env["clear_env"]
+
 
     print("RUNNING: " + compose["path"] + " docker-compose " + " " + action + " " + app)
 
-    try:
-        if action == "up":
-            _action = docker_compose("up", "-d", app, _cwd=_cwd, _env=_env_vars)
-        elif action == "create":
-            _action = docker_compose("up", "--no-start", app, _cwd=_cwd, _env=_env_vars)
-        elif action == "rm":
-            _action = docker_compose("rm", "--force", "--stop", app, _cwd=_cwd, _env=_env_vars)
-        else:
-            _action = docker_compose(action, app, _cwd=_cwd, _env=_env_vars)
-    except Exception as exc:
-        if hasattr(exc, "stderr"):
-            raise HTTPException(400, exc.stderr.decode("UTF-8").rstrip())
-        else:
-            raise HTTPException(400, str(exc))
-
-    if _action.stdout.decode("UTF-8").rstrip():
-        output = _action.stdout.decode("UTF-8").rstrip()
-    elif _action.stderr.decode("UTF-8").rstrip():
-        output = _action.stderr.decode("UTF-8").rstrip()
+    if action == "up":
+        output = _run_compose_command(["up", "-d", app], _cwd, full_env)
+    elif action == "create":
+        output = _run_compose_command(["up", "--no-start", app], _cwd, full_env)
+    elif action == "rm":
+        output = _run_compose_command(["rm", "--force", "--stop", app], _cwd, full_env)
     else:
-        output = "No Output"
+        output = _run_compose_command([action, app], _cwd, full_env)
+
     print(f"""Project {compose['name']} App {name} {action} successful.""")
     print(f"""Output: """)
     print(output)
