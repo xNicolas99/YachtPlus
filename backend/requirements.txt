@@ -27,7 +27,6 @@ python-multipart>=0.0.9
 PyYAML>=6.0.1
 requests>=2.32.4
 six>=1.16.0
-sh>=2.0.6
 SQLAlchemy>=2.0
 starlette>=0.37.2
 sse-starlette>=2.1.0
