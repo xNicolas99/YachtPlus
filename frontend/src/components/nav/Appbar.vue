@@ -2,9 +2,12 @@
   <v-app-bar app clipped-left color="secondary">
     <img :src="themeLogo()" class="main-logo" />
     <v-toolbar-title class="ml-2">YachtPlus</v-toolbar-title>
-    <v-toolbar-title class="mx-auto font-weight-bold hidden-sm-and-down">
-      {{ $route.name }}
-    </v-toolbar-title>
+
+    <!-- Global Search (Hidden on small screens) -->
+    <div class="mx-auto hidden-sm-and-down">
+      <GlobalSearch />
+    </div>
+
     <v-spacer class="hidden-md-and-up" />
     <v-menu bottom offset-y v-if="!authDisabled">
       <template v-slot:activator="{ on, attrs }">
@@ -40,7 +43,12 @@ import { mapActions, mapState } from "vuex";
 import lightLogo from "@/assets/logo-light.svg";
 import darkLogo from "@/assets/logo.svg";
 import { themeLogo } from "../../config.js";
+import GlobalSearch from "@/components/GlobalSearch.vue";
+
 export default {
+  components: {
+    GlobalSearch
+  },
   methods: {
     ...mapActions({
       logout: "auth/AUTH_LOGOUT"

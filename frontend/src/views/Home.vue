@@ -234,8 +234,9 @@ export default {
       stats: {},
       statsInterval: null,
       polling: true,
-      pollingInterval: 5000,
+      pollingInterval: 2000,
       pollingOptions: [
+        { text: "2s", value: 2000 },
         { text: "5s", value: 5000 },
         { text: "10s", value: 10000 },
         { text: "30s", value: 30000 },
@@ -263,37 +264,6 @@ export default {
         console.error("Failed to fetch dashboard stats", e);
       }
     },
-    async fetchContainerStats(containerId) {
-      try {
-        const response = await axios.get(
-          `/api/containers/${containerId}/stats`,
-          {
-            skipAuthRefresh: true // Avoid loop if auth fails during heavy polling
-          }
-        );
-        const data = response.data;
-
-        this.$set(this.stats, containerId, {
-          cpu_percent: data.cpu_percent,
-          mem_percent: data.memory_percent,
-          mem_current: data.memory_usage_mb + " MB",
-          mem_total: data.memory_limit_mb + " MB",
-          name: containerId
-        });
-      } catch (error) {
-        // Ignore 409 (conflict/stopped) or 401 (handled by interceptor usually, but here skipped)
-        if (error.response && error.response.status === 409) {
-          this.$set(this.stats, containerId, {
-            cpu_percent: 0,
-            mem_percent: 0,
-            mem_current: "0 MB",
-            mem_total: "0 MB",
-            name: containerId,
-            status: "stopped"
-          });
-        }
-      }
-    },
     startStatsPolling() {
       if (this.statsInterval) clearInterval(this.statsInterval);
       if (this.pollingInterval === 0) return; // Off
@@ -312,20 +282,40 @@ export default {
       await this.fetchOverviewStats();
 
       // Fetch container stats
-      if (this.apps) {
-        this.apps.forEach(app => {
-          if (app.State.Status === "running") {
-            this.fetchContainerStats(app.name);
-          } else {
-            this.$set(this.stats, app.name, {
-              cpu_percent: 0,
-              mem_percent: 0,
-              mem_current: "0 MB",
-              mem_total: "0 MB",
-              name: app.name
-            });
-          }
+      try {
+        const response = await axios.get("/api/containers/stats", {
+          skipAuthRefresh: true
         });
+        const statsData = response.data;
+
+        // Update stats
+        // We might need to handle stopped containers manually if not returned by API
+        if (this.apps) {
+          this.apps.forEach(app => {
+            const stat = statsData[app.name];
+            if (stat) {
+               this.$set(this.stats, app.name, {
+                 cpu_percent: stat.cpu_percent,
+                 mem_percent: stat.memory_percent,
+                 mem_current: stat.memory_usage_mb + " MB",
+                 mem_total: stat.memory_limit_mb + " MB",
+                 name: app.name
+               });
+            } else {
+               // Stopped or missing
+               this.$set(this.stats, app.name, {
+                 cpu_percent: 0,
+                 mem_percent: 0,
+                 mem_current: "0 MB",
+                 mem_total: "0 MB",
+                 name: app.name,
+                 status: "stopped"
+               });
+            }
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch global stats", error);
       }
     },
     togglePolling() {
