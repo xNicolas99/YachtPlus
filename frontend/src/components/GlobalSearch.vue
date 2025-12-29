@@ -160,7 +160,7 @@ export default {
     }
 
     const navigateTo = (path) => {
-      router.push({ path }).catch(err => {})
+      router.push({ path }).catch(() => {})
       showDropdown.value = false
       searchQuery.value = ''
     }
@@ -168,7 +168,7 @@ export default {
     const deployTemplate = (templateId) => {
         // Route name 'Deploy' exists in router/index.js:
         // path: "deploy/:appId", name: "Deploy"
-        router.push({ name: 'Deploy', params: { appId: templateId } }).catch(err => {})
+        router.push({ name: 'Deploy', params: { appId: templateId } }).catch(() => {})
         showDropdown.value = false
         searchQuery.value = ''
     }
@@ -179,7 +179,7 @@ export default {
       // or path: "deploy/:appId", name: "Deploy"
       // The prompt code used: router.push(`/apps/deploy?image=${encodeURIComponent(imageName)}`)
       // This matches path "/apps/deploy".
-      router.push({ path: '/apps/deploy', query: { image: imageName } }).catch(err => {})
+      router.push({ path: '/apps/deploy', query: { image: imageName } }).catch(() => {})
       showDropdown.value = false
       searchQuery.value = ''
     }

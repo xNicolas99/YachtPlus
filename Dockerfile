@@ -1,5 +1,5 @@
 # Build Vue.js frontend
-FROM node:20-alpine as build-stage
+FROM node:16-alpine as build-stage
 
 ARG VUE_APP_VERSION
 ENV VUE_APP_VERSION=${VUE_APP_VERSION}
