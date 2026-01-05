@@ -41,74 +41,13 @@ async def get_all_container_stats(
 
         async def fetch_single_stats(container):
             try:
-                # Reuse the logic from actions.get_stats but optimized for bulk
-                # We need to manually calculate or use the library helper if robust enough.
-                # However, actions.get_stats does a lot of heavy lifting for CPU calc.
-                # Calling actions.get_stats sequentially is slow.
-                # Calling it in parallel is better.
-                # But actions.get_stats creates a new Docker client instance every time!
-                # We should refactor actions.get_stats or implement the logic here reusing the docker client?
-                # For now, let's call actions.get_stats but we need to pass the docker client or fix it.
-                # actions.get_stats instantiates aiodocker.Docker() inside.
-                # That's 20+ connections for 20 containers. Bad.
-
-                # Let's implement lightweight stats here using the shared client.
-
                 stats = await container.stats(stream=False)
-
-                # Calculate CPU
-                cpu_percent = 0.0
-                mem_percent = 0.0
-                mem_current = 0
-                mem_limit = 0
-
-                try:
-                    cpu_stats = stats.get("cpu_stats", {})
-                    precpu_stats = stats.get("precpu_stats", {})
-
-                    cpu_usage = cpu_stats.get("cpu_usage", {})
-                    pre_cpu_usage = precpu_stats.get("cpu_usage", {})
-
-                    total_usage = cpu_usage.get("total_usage", 0)
-                    pre_total_usage = pre_cpu_usage.get("total_usage", 0)
-
-                    system_cpu_usage = cpu_stats.get("system_cpu_usage", 0)
-                    pre_system_cpu_usage = precpu_stats.get("system_cpu_usage", 0)
-
-                    if total_usage > 0 and pre_total_usage > 0:
-                        cpu_delta = float(total_usage) - float(pre_total_usage)
-                        system_delta = float(system_cpu_usage) - float(pre_system_cpu_usage)
-
-                        online_cpus = cpu_stats.get("online_cpus")
-                        if not online_cpus:
-                            online_cpus = len(cpu_usage.get("percpu_usage", [])) or 1
-
-                        if system_delta > 0.0 and cpu_delta > 0.0:
-                            cpu_percent = (cpu_delta / system_delta) * float(online_cpus) * 100.0
-                except:
-                    pass
-
-                try:
-                    mem_stats = stats.get("memory_stats", {})
-                    mem_current = mem_stats.get("usage", 0)
-                    mem_limit = mem_stats.get("limit", 0)
-                    if mem_limit > 0:
-                        mem_percent = (mem_current / mem_limit) * 100.0
-                except:
-                    pass
-
-                # Get name (strip /)
+                # Use shared logic
                 name = container._container.get("Names", ["/Unknown"])[0][1:]
-
-                return {
-                    "name": name,
-                    "id": container.id,
-                    "cpu_percent": round(cpu_percent, 2),
-                    "memory_percent": round(mem_percent, 2),
-                    "memory_usage_mb": round(mem_current / 1024 / 1024, 2),
-                    "memory_limit_mb": round(mem_limit / 1024 / 1024, 2),
-                    "status": "running"
-                }
+                res = actions.calculate_container_stats(stats, name)
+                if res:
+                    res['id'] = container.id
+                return res
             except Exception as e:
                 # logger.error(f"Error fetching stats for container: {e}")
                 return None

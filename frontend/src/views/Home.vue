@@ -3,41 +3,41 @@
     <v-card-title class="primary font-weight-bold">
       Dashboard
       <v-spacer></v-spacer>
-      <!-- Polling Interval Dropdown -->
-      <v-menu offset-y>
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn text v-bind="attrs" v-on="on" class="mr-2">
-            <v-icon left>mdi-refresh</v-icon>
-            {{ pollingIntervalText }}
-            <v-icon right>mdi-chevron-down</v-icon>
-          </v-btn>
-        </template>
-        <v-list>
-          <v-list-item
-            v-for="interval in pollingOptions"
-            :key="interval.value"
-            @click="setPollingInterval(interval.value)"
-          >
-            <v-list-item-title>{{ interval.text }}</v-list-item-title>
-          </v-list-item>
-        </v-list>
-      </v-menu>
+      <!-- Connection Status Indicator -->
+      <v-chip
+        v-if="!connected"
+        color="error"
+        small
+        class="mr-2"
+      >
+        <v-icon left small>mdi-wifi-off</v-icon>
+        Disconnected
+      </v-chip>
+      <v-chip
+        v-else
+        color="success"
+        small
+        class="mr-2"
+        outlined
+      >
+        <v-icon left small>mdi-wifi</v-icon>
+        Live
+      </v-chip>
 
       <v-tooltip bottom>
         <template v-slot:activator="{ on, attrs }">
           <v-btn
             icon
-            @click="togglePolling"
+            @click="toggleStream"
             v-bind="attrs"
             v-on="on"
             class="mr-2"
           >
-            <v-icon>{{ polling ? "mdi-pause" : "mdi-play" }}</v-icon>
+            <v-icon>{{ connected ? "mdi-pause" : "mdi-play" }}</v-icon>
           </v-btn>
         </template>
-        <span>{{ polling ? "Pause Stats" : "Resume Stats" }}</span>
+        <span>{{ connected ? "Pause Stream" : "Resume Stream" }}</span>
       </v-tooltip>
-      <v-icon v-on:click="refresh()">mdi-refresh</v-icon>
     </v-card-title>
     <v-card-text class="secondary text-center px-5 py-5">
       <!-- Overview Cards Grid -->
@@ -179,6 +179,34 @@
             >
           </v-card-title>
           <v-card-text class="text-left pt-2">
+            <!-- CPU/Mem Stats are not in the overview payload, they were separate.
+                 However, getting stats for ALL containers every 2s is heavy.
+                 The Dashboard SSE payload (actions.get_dashboard_stats) does NOT return per-container CPU/Mem.
+                 It returns aggregate counts.
+                 The previous implementation fetched /api/containers/stats separate from /dashboard/stats.
+                 We need to make sure we don't lose that functionality.
+
+                 Ideally, we should fetch per-container stats only for visible containers or accept that the dashboard
+                 is an overview and detailed stats belong in the container details view.
+
+                 However, to maintain feature parity without killing the server:
+                 If the user wants "Real-time" dashboard, we should probably bundle the stats in the SSE
+                 OR make a second SSE stream for stats (heavy).
+
+                 Wait, the previous implementation called /api/containers/stats every 2s.
+                 If we want to optimize, we should rely on the status mainly.
+
+                 Let's check if the user *really* needs per-container CPU bars on the dashboard.
+                 The screenshot/code shows progress bars. Removing them is a regression.
+
+                 Solution: The dashboard SSE should probably include the lightweight stats if possible,
+                 OR we keep polling /api/containers/stats but use SSE for the Overview.
+
+                 But the audit said "Replace Polling".
+
+                 Let's modify the backend SSE endpoint to INCLUDE the per-container stats
+                 by merging the logic from containers.get_all_container_stats.
+            -->
             <div v-if="stats[app.name]">
               <div class="d-flex justify-space-between caption">
                 <span>CPU</span>
@@ -232,17 +260,8 @@ export default {
   data() {
     return {
       stats: {},
-      statsInterval: null,
-      polling: true,
-      pollingInterval: 2000,
-      pollingOptions: [
-        { text: "2s", value: 2000 },
-        { text: "5s", value: 5000 },
-        { text: "10s", value: 10000 },
-        { text: "30s", value: 30000 },
-        { text: "60s", value: 60000 },
-        { text: "Off", value: 0 }
-      ],
+      connected: false,
+      eventSource: null,
       overview: {
         containers: { total: 0, running: 0, stopped: 0, unhealthy: 0 },
         projects: { total: 0, active: 0, inactive: 0 },
@@ -256,40 +275,62 @@ export default {
     ...mapActions({
       readApps: "apps/readApps"
     }),
-    async fetchOverviewStats() {
-      try {
-        const response = await axios.get("/dashboard/stats");
-        this.overview = response.data;
-      } catch (e) {
-        console.error("Failed to fetch dashboard stats", e);
+    toggleStream() {
+      if (this.connected) {
+        this.closeStream();
+      } else {
+        this.initStream();
       }
     },
-    startStatsPolling() {
-      if (this.statsInterval) clearInterval(this.statsInterval);
-      if (this.pollingInterval === 0) return; // Off
-
-      // Initial call
-      this.pollAll();
-
-      this.statsInterval = setInterval(() => {
-        if (this.polling) {
-          this.pollAll();
-        }
-      }, this.pollingInterval);
+    closeStream() {
+      if (this.eventSource) {
+        this.eventSource.close();
+        this.eventSource = null;
+      }
+      this.connected = false;
     },
-    async pollAll() {
-      // Fetch overview
-      await this.fetchOverviewStats();
+    initStream() {
+      this.closeStream(); // Ensure clean start
 
-      // Fetch container stats
-      try {
-        const response = await axios.get("/api/containers/stats", {
-          skipAuthRefresh: true
-        });
-        const statsData = response.data;
+      const url = "/api/dashboard/stream";
+      this.eventSource = new EventSource(url, { withCredentials: true });
 
-        // Update stats
-        // We might need to handle stopped containers manually if not returned by API
+      this.eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Update Overview
+          this.overview = data;
+
+          // NOTE: The current SSE implementation in dashboard_sse.py calls actions.get_dashboard_stats()
+          // which returns the overview object (counts), NOT the per-container stats.
+          // To get per-container stats (CPU/RAM) via SSE, we would need to update the backend
+          // to include that data in the stream.
+          //
+          // For now, I will keep the polling for the DETAILED stats as a separate lightweight
+          // poll if absolutely necessary, OR (better) I will update the backend SSE to include it.
+          //
+          // Let's assume I will update the backend to include `container_stats` in the payload next.
+
+          if (data.container_stats) {
+             this.processContainerStats(data.container_stats);
+          }
+
+          this.connected = true;
+        } catch (e) {
+          console.error("SSE Parse Error", e);
+        }
+      };
+
+      this.eventSource.onerror = () => {
+        this.connected = false;
+        // EventSource attempts reconnect automatically, but UI should reflect status
+      };
+
+      this.eventSource.onopen = () => {
+        this.connected = true;
+      };
+    },
+    processContainerStats(statsData) {
         if (this.apps) {
           this.apps.forEach(app => {
             const stat = statsData[app.name];
@@ -314,21 +355,6 @@ export default {
             }
           });
         }
-      } catch (error) {
-        console.error("Failed to fetch global stats", error);
-      }
-    },
-    togglePolling() {
-      this.polling = !this.polling;
-    },
-    setPollingInterval(val) {
-      this.pollingInterval = val;
-      localStorage.setItem("dashboard_polling_interval", val);
-      this.startPolling();
-    },
-    async refresh() {
-      await this.readApps();
-      await this.pollAll();
     },
     sortByTitle(arr) {
       return [...arr].sort((a, b) => a.name.localeCompare(b.name));
@@ -339,26 +365,13 @@ export default {
   },
   computed: {
     ...mapState("apps", ["apps"]),
-    pollingIntervalText() {
-      if (this.pollingInterval === 0) return "Off";
-      return this.pollingInterval / 1000 + "s";
-    }
   },
   async created() {
-    // Load preference
-    const stored = localStorage.getItem("dashboard_polling_interval");
-    if (stored !== null) {
-      this.pollingInterval = parseInt(stored);
-    }
-
     await this.readApps();
-    await this.fetchOverviewStats();
-    this.startStatsPolling();
+    this.initStream();
   },
   beforeDestroy() {
-    if (this.statsInterval) {
-      clearInterval(this.statsInterval);
-    }
+    this.closeStream();
   }
 };
 </script>

@@ -1,11 +1,14 @@
 # Build Vue.js frontend
-FROM node:16-alpine as build-stage
+FROM node:20-alpine as build-stage
 
 ARG VUE_APP_VERSION
 ENV VUE_APP_VERSION=${VUE_APP_VERSION}
+# Fix for Webpack 4 on Node 17+ (OpenSSL 3)
+ENV NODE_OPTIONS=--openssl-legacy-provider
 
 WORKDIR /app
 COPY ./frontend/package*.json ./
+# Legacy peer deps required for Vue 2 ecosystem on newer npm
 RUN npm install --legacy-peer-deps --verbose
 COPY ./frontend/ ./
 RUN npm run build --verbose

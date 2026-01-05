@@ -21,7 +21,7 @@ from api.db.database import SessionLocal, engine
 from api.db.schemas.users import UserCreate
 from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
-from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search
+from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search, dashboard_sse
 from api.routers.setup import setup
 from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
 from api.db.models.containers import Template
@@ -253,6 +253,7 @@ app.include_router(compose.router, prefix="/compose", tags=["compose"])
 app.include_router(app_settings.router, prefix="/settings", tags=["settings"])
 app.include_router(setup.router, prefix="/setup", tags=["setup"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
+app.include_router(dashboard_sse.router, prefix="/dashboard", tags=["dashboard-sse"])
 app.include_router(search.router, prefix="/search", tags=["search"])
 
 if __name__ == "__main__":
