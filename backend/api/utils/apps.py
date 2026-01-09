@@ -170,40 +170,6 @@ def conv_devices2data(data):
         return devices
 
 
-# def conv_labels2data(data):
-#     # Set is depracated. Name is the actual value. Label is the name of the field.
-#     # Label is the label of the label field.
-#     if not data:
-#         labels = {}
-#         return labels
-#     db = SessionLocal()
-#     t_variables = db.query(models.TemplateVariables).all()
-
-#     for i, variable in enumerate(data):
-#         for t_var in t_variables:
-#             if variable.label:
-#                 if t_var.variable in variable.label:
-#                     new_var = data[i].label.replace(t_var.variable, t_var.replacement)
-#                     variable.label = new_var
-#                     continue
-#             if variable.value:
-#                 if t_var.variable in variable.value:
-#                     new_var = data[i].value.replace(t_var.variable, t_var.replacement)
-#                     variable.value = new_var
-#                     continue
-#         else:
-#             if variable.value.startswith("!"):
-#                 raise HTTPException(
-#                     400, "Unset template variable used: " + variable.value
-#                 )
-#             if variable.label.startswith("!"):
-#                 raise HTTPException(
-#                     400, "Unset template variable used: " + variable.label
-#                 )
-#     delim = "="
-#     return {delim.join((d.label, d.value)) for d in data if d.value}
-
-
 def conv_labels2data(data):
     # grab template variables
     db = SessionLocal()
