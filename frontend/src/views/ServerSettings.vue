@@ -110,7 +110,7 @@ export default {
   data() {
     return {
       SettingsTab: 1,
-      version: process.env.VUE_APP_VERSION || "unreleased",
+      version: import.meta.env.VITE_VERSION || "unreleased",
       snackbar: {
         show: false,
         message: "",

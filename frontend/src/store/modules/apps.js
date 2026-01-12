@@ -1,5 +1,4 @@
 import axios from "axios";
-import Vue from "vue";
 
 const state = {
   apps: [],
@@ -67,12 +66,10 @@ const actions = {
         commit("setApps", apps);
       })
       .catch(err => {
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.error(
-            "Failed to load apps: " +
-              (err.response?.data?.detail || err.message)
-          );
-        }
+        console.error(
+          "Failed to load apps: " +
+            (err.response?.data?.detail || err.message)
+        );
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
@@ -96,18 +93,12 @@ const actions = {
             commit("setLoading", true);
           })
           .catch(err => {
-            if (Vue.prototype.$toast) {
-              Vue.prototype.$toast.error(
-                "Failed to check updates for " + _app.name
-              );
-            }
+            console.error("Failed to check updates for " + _app.name);
             commit("snackbar/setErr", err, { root: true });
           });
       })
     ).then(() => {
-      if (Vue.prototype.$toast) {
-        Vue.prototype.$toast.success("Update check completed");
-      }
+      console.log("Update check completed");
       commit("setLoading", false);
       commit("setAction", "");
     });
@@ -125,9 +116,7 @@ const actions = {
           resolve(app);
         })
         .catch(err => {
-          if (Vue.prototype.$toast) {
-            Vue.prototype.$toast.error("Failed to read app " + Name);
-          }
+          console.error("Failed to read app " + Name);
           commit("snackbar/setErr", err, { root: true });
           reject(err);
         });
@@ -142,9 +131,7 @@ const actions = {
         commit("setAppProcesses", processes);
       }
     } catch (err) {
-      if (Vue.prototype.$toast) {
-        Vue.prototype.$toast.error("Failed to read processes for " + Name);
-      }
+      console.error("Failed to read processes for " + Name);
     }
   },
   async readAppLogs({ commit }, Name) {
@@ -159,39 +146,27 @@ const actions = {
           logs.push(element);
         });
         commit("setAppLogs", logs);
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.success("Logs downloaded for " + Name);
-        }
+        console.log("Logs downloaded for " + Name);
       })
       .catch(err => {
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.error("Failed to download logs for " + Name);
-        }
+        console.error("Failed to download logs for " + Name);
         commit("snackbar/setErr", err, { root: true });
       });
   },
   AppUpdate({ commit }, Name) {
     commit("setLoading", true);
     commit("setAction", "Updating " + Name + " ...");
-    if (Vue.prototype.$toast) {
-      Vue.prototype.$toast.info(
-        "Update started for " + Name + ", please wait..."
-      );
-    }
+    console.log("Update started for " + Name + ", please wait...");
     const url = `/api/apps/${Name}/update`;
     axios
       .get(url)
       .then(response => {
         const app = response.data;
         commit("setApps", app);
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.success(Name + " updated successfully");
-        }
+        console.log(Name + " updated successfully");
       })
       .catch(err => {
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.error("Failed to update " + Name);
-        }
+        console.error("Failed to update " + Name);
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
@@ -204,11 +179,9 @@ const actions = {
     commit("setLoading", true);
     commit("setAction", Action + " " + Name + " ...");
 
-    if (Vue.prototype.$toast) {
-      Vue.prototype.$toast.info(
-        Action.charAt(0).toUpperCase() + Action.slice(1) + "ing " + Name + "..."
-      );
-    }
+    console.log(
+      Action.charAt(0).toUpperCase() + Action.slice(1) + "ing " + Name + "..."
+    );
 
     const url = `/api/apps/actions/${Name}/${Action}`;
     axios
@@ -216,21 +189,17 @@ const actions = {
       .then(response => {
         const app = response.data;
         commit("setApps", app);
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.success(Name + " " + Action + "ed successfully");
-        }
+        console.log(Name + " " + Action + "ed successfully");
       })
       .catch(err => {
-        if (Vue.prototype.$toast) {
-          Vue.prototype.$toast.error(
-            "Failed to " +
-              Action +
-              " " +
-              Name +
-              ": " +
-              (err.response?.data?.detail || err.message)
-          );
-        }
+        console.error(
+          "Failed to " +
+            Action +
+            " " +
+            Name +
+            ": " +
+            (err.response?.data?.detail || err.message)
+        );
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {

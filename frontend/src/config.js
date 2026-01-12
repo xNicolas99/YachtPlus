@@ -1,5 +1,5 @@
-export const themeTheme = process.env.VUE_APP_THEME;
-export const themeLogo = process.env.VUE_APP_LOGO;
+export const themeTheme = import.meta.env.VITE_THEME;
+export const themeLogo = import.meta.env.VITE_LOGO;
 
 export default {
   themeTheme,

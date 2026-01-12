@@ -1,14 +1,21 @@
 # Build Vue.js frontend
 FROM node:20-alpine as build-stage
 
-ARG VUE_APP_VERSION
-ENV VUE_APP_VERSION=${VUE_APP_VERSION}
-ENV NODE_OPTIONS=--openssl-legacy-provider
+ARG VITE_VERSION
+ENV VITE_VERSION=${VITE_VERSION}
 
 WORKDIR /app
 COPY ./frontend/package*.json ./
-RUN npm install --legacy-peer-deps --verbose
+
+# DEBUG STEPS
+RUN node -v && npm -v
+RUN npm ci --include=dev || npm install --include=dev
+
 COPY ./frontend/ ./
+
+# Verify structure before build
+RUN ls -la
+
 RUN npm run build --verbose
 
 # Setup Container and install Flask backend
