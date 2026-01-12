@@ -1,69 +1,45 @@
-// Setup Vue
-import Vue from "vue";
-import App from "./App.vue";
-import router from "./router";
-import store from "./store";
-import VueChatScroll from "vue-chat-scroll";
-// API Calls
-import axios from "axios";
-// UI Framework
-import vuetify from "./plugins/vuetify";
-// Form Validation
-import VueUtils from "./plugins/vueutils";
-import notifications from "./plugins/notifications";
-import "./vee-validate";
-import "./registerServiceWorker";
-import DOMPurify from "dompurify";
+import { createApp } from 'vue'
+import App from './App.vue'
+import router from './router'
+import store from './store'
+import vuetify from './plugins/vuetify'
+import { loadFonts } from './plugins/webfontloader'
+import axios from 'axios'
+import DOMPurify from 'dompurify'
 
-// Toast Notifications
-import Toast from "vue-toastification";
-import "vue-toastification/dist/index.css";
+// Load fonts
+loadFonts()
 
-Vue.use(Toast, {
-  position: "top-right",
-  timeout: 5000,
-  maxToasts: 3
-});
+const app = createApp(App)
 
-// Animations
-require("animate.css/animate.compat.css");
-
-Vue.use(VueChatScroll);
-// Restore legacy notification plugin for backward compatibility
-Vue.prototype.$notify = notifications;
-
-// Setup Global Sanitization
-Vue.prototype.$sanitize = function(dirty) {
+// Global Properties (replacing Vue.prototype)
+app.config.globalProperties.$sanitize = function(dirty) {
   return DOMPurify.sanitize(dirty);
-};
+}
 
-Vue.config.productionTip = false;
+// Stub legacy notifications for now
+app.config.globalProperties.$notify = function(args) {
+  console.log('Notification:', args)
+}
 
-// Dynamic Base URL Configuration
-// Uses the browser's hostname to ensure connectivity even if localhost is not used
+// Axios Configuration
 const protocol = window.location.protocol;
 const hostname = window.location.hostname;
 const port = window.location.port ? `:${window.location.port}` : "";
-// RESTORED /api suffix to ensure relative paths like /auth/login work correctly.
-// We will fix double-prefixes in the components instead.
 axios.defaults.baseURL = `${protocol}//${hostname}${port}/api`;
 
-// Handle Token Refresh on 401
+// Auth Interceptor
 function createAxiosResponseInterceptor() {
   const interceptor = axios.interceptors.response.use(
     response => response,
     error => {
-      // Check if the request explicitly asks to skip the refresh logic
       if (error.config && error.config.skipAuthRefresh) {
         return Promise.reject(error);
       }
-
       if (error.response && error.response.status !== 401) {
         return Promise.reject(error);
       }
-
       axios.interceptors.response.eject(interceptor);
-
       return store
         .dispatch("auth/AUTH_REFRESH")
         .then(() => {
@@ -86,13 +62,10 @@ function createAxiosResponseInterceptor() {
     }
   );
 }
-
-// Call interceptor
 createAxiosResponseInterceptor();
-Vue.use(VueUtils);
-new Vue({
-  router,
-  store,
-  vuetify,
-  render: h => h(App)
-}).$mount("#app");
+
+app.use(router)
+app.use(store)
+app.use(vuetify)
+
+app.mount('#app')
