@@ -1,7 +1,7 @@
-// Base
-import Vue from "vue";
-import VueRouter from "vue-router";
+import { createRouter, createWebHashHistory } from 'vue-router'
 import store from "../store";
+
+// Templates
 import Home from "../views/Home.vue";
 import Login from "../views/auth/Login.vue";
 import Setup from "../views/auth/Setup.vue";
@@ -56,10 +56,6 @@ import Prune from "../components/serverSettings/Prune.vue";
 import ServerUpdate from "../components/serverSettings/ServerUpdate.vue";
 import Theme from "../components/serverSettings/Theme.vue";
 import UserManagement from "../views/UserManagement.vue";
-// import { component } from "vue/types/umd";
-// import { component } from "vue/types/umd";
-
-Vue.use(VueRouter);
 
 const routes = [
   {
@@ -272,28 +268,13 @@ const routes = [
   }
 ];
 
-const router = new VueRouter({
-  mode: "hash",
-  base: "",
+const router = createRouter({
+  history: createWebHashHistory(),
   routes
 });
 
 router.beforeEach(async (to, from, next) => {
-  // Check auth and setup status if not already known
-  // Note: authCheck action updates both isAuthenticated and isSetup
-
-  // Ensure we have the latest status
-  // Skip check if we are already going to login and we haven't checked yet
-  // However, we need to know if it is Setup.
-  // Ideally, AUTH_CHECK handles 401 gracefully now, so it shouldn't loop.
-  // But to be safe and efficient:
   if (!store.state.auth.status) {
-    if (to.path === "/login") {
-      // If we are going to login, we might still want to check setup status?
-      // But AUTH_CHECK does that.
-      // Let's call it, but since we fixed AUTH_CHECK to not redirect on 401, it is safe.
-      // However, if we want to optimize:
-    }
     await store.dispatch("auth/AUTH_CHECK");
   }
 

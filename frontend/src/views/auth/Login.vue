@@ -1,213 +1,76 @@
 <template>
-  <ValidationObserver ref="obs1" v-slot="{ invalid, validated }">
-    <v-container class="fill-height" fluid>
-      <img class="mx-auto mt-12 main-logo" alt="Vue logo" :src="themeLogo()" />
-      <v-row align="center" justify="center" class="mt-12">
-        <v-col cols="12" sm="8" md="4">
-          <v-card color="foreground" class="elevation-12 pb-8">
-            <v-toolbar color="primary" dark flat>
-              <v-toolbar-title>Login</v-toolbar-title>
-              <v-spacer></v-spacer>
-            </v-toolbar>
-            <v-card-text>
-              <div v-if="!requires2FA">
-                <v-form @keyup.native.enter="onSubmit()">
-                  <ValidationProvider
-                    name="username"
-                    rules="required"
-                    v-slot="{ errors, valid }"
-                  >
-                    <v-text-field
-                      label="Email"
-                      v-model="username"
-                      :error-messages="errors"
-                      :success="valid"
-                      required
-                    />
-                  </ValidationProvider>
+  <v-container fluid class="fill-height">
+    <v-row align="center" justify="center">
+      <v-col cols="12" sm="8" md="4">
+        <v-card class="elevation-12">
+          <v-toolbar color="primary" dark flat>
+            <v-toolbar-title>Login</v-toolbar-title>
+          </v-toolbar>
+          <v-card-text>
+            <v-form @submit.prevent="login">
+              <v-text-field
+                label="Login"
+                name="login"
+                prepend-icon="mdi-account"
+                type="text"
+                v-model="email"
+                required
+              ></v-text-field>
 
-                  <ValidationProvider
-                    name="password"
-                    rules="required"
-                    v-slot="{ errors, valid }"
-                  >
-                    <v-text-field
-                      label="Password"
-                      v-model="password"
-                      :error-messages="errors"
-                      :success="valid"
-                      :type="show ? 'text' : 'password'"
-                      :append-icon="show ? 'mdi-eye' : 'mdi-eye-off'"
-                      clearable
-                      required
-                      @click:append="show = !show"
-                    />
-                  </ValidationProvider>
-                  <v-btn
-                    class="float-right"
-                    @click="onSubmit()"
-                    color="primary"
-                    :disabled="invalid || !validated"
-                    >Login</v-btn
-                  >
-                </v-form>
-              </div>
-              <div v-else>
-                <p>Please enter your 2FA code.</p>
-                <v-form @keyup.native.enter="onSubmit2FA()">
-                  <v-text-field
-                    label="2FA Code"
-                    v-model="otpToken"
-                    required
-                    outlined
-                    autofocus
-                  />
-                  <v-btn
-                    class="float-right"
-                    @click="onSubmit2FA()"
-                    color="primary"
-                    >Verify</v-btn
-                  >
-                </v-form>
-              </div>
-            </v-card-text>
-          </v-card>
-        </v-col>
-      </v-row>
+              <v-text-field
+                id="password"
+                label="Password"
+                name="password"
+                prepend-icon="mdi-lock"
+                type="password"
+                v-model="password"
+                required
+              ></v-text-field>
 
-      <v-snackbar v-model="errorSnackbar" color="error">
-        {{ errorMessage }}
-      </v-snackbar>
-    </v-container>
-  </ValidationObserver>
+              <v-alert v-if="error" type="error" dense class="mt-2">
+                {{ error }}
+              </v-alert>
+            </v-form>
+          </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn color="primary" @click="login" :loading="loading">Login</v-btn>
+          </v-card-actions>
+        </v-card>
+      </v-col>
+    </v-row>
+  </v-container>
 </template>
 
 <script>
-import lightLogo from "@/assets/logo-light.svg";
-import darkLogo from "@/assets/logo.svg";
-import { ValidationObserver, ValidationProvider } from "vee-validate";
-import { mapActions } from "vuex";
-import { themeLogo } from "../../config.js";
-import axios from "axios";
-
 export default {
-  components: {
-    ValidationProvider,
-    ValidationObserver
-  },
   data() {
     return {
-      username: "",
+      email: "",
       password: "",
-      show: false,
-      requires2FA: false,
-      otpToken: "",
-      errorSnackbar: false,
-      errorMessage: ""
+      error: null,
+      loading: false
     };
   },
   methods: {
-    ...mapActions({
-      loginAction: "auth/AUTH_REQUEST",
-      authCheck: "auth/AUTH_CHECK"
-    }),
-
-    async onSubmit() {
-      // We will handle the login request manually here to intercept 2FA requirement
-      try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
-            username: this.username,
-            password: this.password
+    login() {
+      this.error = null;
+      this.loading = true;
+      const { email, password } = this;
+      this.$store
+        .dispatch("auth/AUTH_REQUEST", { email, password })
+        .then(() => {
+          this.$router.push("/");
+        })
+        .catch(err => {
+          this.loading = false;
+          if (err.response && err.response.data && err.response.data.detail) {
+            this.error = err.response.data.detail;
+          } else {
+             this.error = "Login failed. Please check your credentials.";
           }
         });
-
-        if (response.data.login === "2fa_required") {
-          this.requires2FA = true;
-        } else if (response.data.login === "successful") {
-          if (response.data.access_token) {
-            localStorage.setItem("token", response.data.access_token);
-          }
-          this.$store.commit("auth/AUTH_SUCCESS", response.data);
-          this.$router.push("/").catch(() => {});
-        }
-      } catch (err) {
-        this.errorMessage = err.response
-          ? err.response.data.detail
-          : "Login failed";
-        this.errorSnackbar = true;
-        this.$store.commit("auth/AUTH_ERROR");
-      }
-    },
-
-    async onSubmit2FA() {
-      try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
-            username: this.username,
-            password: this.password
-          },
-          otp_token: this.otpToken
-        });
-
-        if (response.data.login === "successful") {
-          if (response.data.access_token) {
-            localStorage.setItem("token", response.data.access_token);
-          }
-          this.$store.commit("auth/AUTH_SUCCESS", response.data);
-
-          // Wait for state to update properly before redirecting
-          await this.$nextTick();
-          // Catch navigation errors (e.g. redundant navigation) to prevent "Failed to verify"
-          this.$router.push("/").catch(err => {
-             // Ignore NavigationDuplicated or Redirected errors
-             if (err.name !== 'NavigationDuplicated' && !err.message.includes('Redirected')) {
-                 console.error(err);
-             }
-          });
-        } else {
-            // Should not happen if successful, but handle it
-            this.errorMessage = "Verification returned unexpected status";
-            this.errorSnackbar = true;
-        }
-      } catch (err) {
-        // Only show error if it's an actual error response
-        if (err.response) {
-            this.errorMessage = err.response.data.detail || "Verification failed";
-            this.errorSnackbar = true;
-        } else {
-            console.error("Login Error:", err);
-            // Don't show generic error if it's likely a redirect/router issue
-            // But if it is a network error, show it.
-            if (err.message !== "Network Error") {
-                 // Squelch
-            } else {
-                 this.errorMessage = "Network Error";
-                 this.errorSnackbar = true;
-            }
-        }
-      }
-    },
-
-    themeLogo() {
-      if (themeLogo) {
-        return themeLogo;
-      } else if (this.$vuetify.theme.dark == true) {
-        return darkLogo;
-      } else if (this.$vuetify.theme.dark == false) {
-        return lightLogo;
-      }
     }
-  },
-  mounted() {
-    // this.authCheck();
   }
 };
 </script>
-
-<style lang="css" scope>
-.main-logo {
-  max-width: 107px;
-  max-height: 72px;
-}
-</style>

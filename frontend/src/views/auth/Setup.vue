@@ -1,227 +1,97 @@
 <template>
-  <v-container class="fill-height" fluid>
+  <v-container fluid class="fill-height">
     <v-row align="center" justify="center">
-      <v-col cols="12" sm="8" md="6" lg="4">
-        <v-card color="foreground" class="elevation-12">
+      <v-col cols="12" sm="8" md="4">
+        <v-card class="elevation-12">
           <v-toolbar color="primary" dark flat>
             <v-toolbar-title>Setup Yacht</v-toolbar-title>
           </v-toolbar>
           <v-card-text>
-            <v-stepper v-model="step">
-              <v-stepper-header>
-                <v-stepper-step :complete="step > 1" step="1"
-                  >Create Admin</v-stepper-step
-                >
-                <v-divider></v-divider>
-                <v-stepper-step :complete="step > 2" step="2"
-                  >2FA Setup</v-stepper-step
-                >
-              </v-stepper-header>
+            <p>Please create an administrator account.</p>
+            <v-form @submit.prevent="register">
+              <v-text-field
+                label="Email"
+                name="email"
+                prepend-icon="mdi-email"
+                type="email"
+                v-model="email"
+                required
+              ></v-text-field>
 
-              <v-stepper-items>
-                <!-- Step 1: Create Admin -->
-                <v-stepper-content step="1">
-                  <ValidationObserver
-                    ref="obs1"
-                    v-slot="{ invalid, validated }"
-                  >
-                    <v-form @submit.prevent="createAdmin">
-                      <ValidationProvider
-                        name="Email"
-                        rules="required|email"
-                        v-slot="{ errors, valid }"
-                      >
-                        <v-text-field
-                          label="Email"
-                          v-model="email"
-                          :error-messages="errors"
-                          :success="valid"
-                          required
-                          outlined
-                        />
-                      </ValidationProvider>
+              <v-text-field
+                label="Password"
+                name="password"
+                prepend-icon="mdi-lock"
+                type="password"
+                v-model="password"
+                required
+              ></v-text-field>
 
-                      <ValidationProvider
-                        name="Password"
-                        rules="required|min:8"
-                        v-slot="{ errors, valid }"
-                      >
-                        <v-text-field
-                          label="Password"
-                          v-model="password"
-                          :error-messages="errors"
-                          :success="valid"
-                          :type="showPass ? 'text' : 'password'"
-                          :append-icon="showPass ? 'mdi-eye' : 'mdi-eye-off'"
-                          @click:append="showPass = !showPass"
-                          required
-                          outlined
-                        />
-                      </ValidationProvider>
+               <v-text-field
+                label="Confirm Password"
+                name="confirm_password"
+                prepend-icon="mdi-lock-check"
+                type="password"
+                v-model="confirm_password"
+                required
+              ></v-text-field>
 
-                      <ValidationProvider
-                        name="Confirm Password"
-                        rules="required|confirmed:Password"
-                        v-slot="{ errors, valid }"
-                      >
-                        <v-text-field
-                          label="Confirm Password"
-                          v-model="confirmPassword"
-                          :error-messages="errors"
-                          :success="valid"
-                          type="password"
-                          required
-                          outlined
-                        />
-                      </ValidationProvider>
-
-                      <v-btn
-                        color="primary"
-                        @click="createAdmin"
-                        :disabled="invalid || !validated"
-                      >
-                        Create Account
-                      </v-btn>
-                    </v-form>
-                  </ValidationObserver>
-                </v-stepper-content>
-
-                <!-- Step 2: 2FA Setup -->
-                <v-stepper-content step="2">
-                  <div class="text-center mb-4">
-                    <p>Scan the QR code below with your authenticator app.</p>
-                    <img
-                      v-if="qrCodeUrl"
-                      :src="qrCodeUrl"
-                      alt="2FA QR Code"
-                      style="max-width: 200px;"
-                    />
-                  </div>
-
-                  <ValidationObserver
-                    ref="obs2"
-                    v-slot="{ invalid, validated }"
-                  >
-                    <v-form @submit.prevent="verify2FA">
-                      <ValidationProvider
-                        name="2FA Code"
-                        rules="required|digits:6"
-                        v-slot="{ errors, valid }"
-                      >
-                        <v-text-field
-                          label="Verification Code"
-                          v-model="otpToken"
-                          :error-messages="errors"
-                          :success="valid"
-                          required
-                          outlined
-                          autofocus
-                        />
-                      </ValidationProvider>
-                      <v-btn
-                        color="primary"
-                        @click="verify2FA"
-                        :disabled="invalid || !validated"
-                      >
-                        Verify & Enable
-                      </v-btn>
-                    </v-form>
-                  </ValidationObserver>
-                </v-stepper-content>
-              </v-stepper-items>
-            </v-stepper>
+              <v-alert v-if="error" type="error" dense class="mt-2">
+                {{ error }}
+              </v-alert>
+            </v-form>
           </v-card-text>
+          <v-card-actions>
+            <v-spacer></v-spacer>
+            <v-btn color="primary" @click="register" :loading="loading">Create Admin</v-btn>
+          </v-card-actions>
         </v-card>
       </v-col>
     </v-row>
-    <v-snackbar v-model="snackbar" :color="snackbarColor">
-      {{ snackbarMessage }}
-    </v-snackbar>
   </v-container>
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
-import axios from "axios";
-import { mapActions } from "vuex";
+import axios from 'axios';
 
 export default {
-  components: {
-    ValidationProvider,
-    ValidationObserver
-  },
   data() {
     return {
-      step: 1,
       email: "",
       password: "",
-      confirmPassword: "",
-      showPass: false,
-      qrCodeUrl: "",
-      otpToken: "",
-      snackbar: false,
-      snackbarColor: "",
-      snackbarMessage: ""
+      confirm_password: "",
+      error: null,
+      loading: false
     };
   },
   methods: {
-    ...mapActions("auth", ["CHECK_SETUP"]),
+    async register() {
+      if (this.password !== this.confirm_password) {
+        this.error = "Passwords do not match";
+        return;
+      }
+      this.error = null;
+      this.loading = true;
 
-    async createAdmin() {
       try {
-        const response = await axios.post("/setup/register", {
-          username: this.email,
+        await axios.post('/auth/register', {
+          email: this.email,
           password: this.password
         });
-
-        // Assuming success means we are logged in
-        this.$store.commit("auth/AUTH_SUCCESS", response);
-
-        // Trigger 2FA Generation
-        await this.generate2FA();
-        this.step = 2;
-      } catch (err) {
-        this.showError(
-          err.response ? err.response.data.detail : "Setup failed"
-        );
-      }
-    },
-
-    async generate2FA() {
-      try {
-        const response = await axios.post("/auth/2fa/generate");
-        this.qrCodeUrl = response.data.qr_code;
-      } catch (err) {
-        this.showError("Failed to generate 2FA");
-      }
-    },
-
-    async verify2FA() {
-      try {
-        await axios.post("/auth/2fa/enable", {
-          token: this.otpToken
+        // After registration, login
+        await this.$store.dispatch("auth/AUTH_REQUEST", {
+           email: this.email,
+           password: this.password
         });
-
-        // Finalize setup
-        await axios.post("/setup/finalize");
-
-        this.finishSetup();
+        this.$router.push("/");
       } catch (err) {
-        this.showError(
-          err.response ? err.response.data.detail : "Verification failed"
-        );
+        this.loading = false;
+        if (err.response && err.response.data && err.response.data.detail) {
+            this.error = err.response.data.detail;
+        } else {
+            this.error = "Setup failed.";
+        }
       }
-    },
-
-    async finishSetup() {
-      await this.CHECK_SETUP(); // Update store state
-      this.$router.push("/");
-    },
-
-    showError(msg) {
-      this.snackbarMessage = msg;
-      this.snackbarColor = "error";
-      this.snackbar = true;
     }
   }
 };

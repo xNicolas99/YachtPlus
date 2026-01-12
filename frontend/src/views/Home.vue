@@ -5,11 +5,11 @@
       <v-spacer></v-spacer>
       <!-- Polling Interval Dropdown -->
       <v-menu offset-y>
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn text v-bind="attrs" v-on="on" class="mr-2">
-            <v-icon left>mdi-refresh</v-icon>
+        <template v-slot:activator="{ props }">
+          <v-btn text v-bind="props" class="mr-2">
+            <v-icon start>mdi-refresh</v-icon>
             {{ pollingIntervalText }}
-            <v-icon right>mdi-chevron-down</v-icon>
+            <v-icon end>mdi-chevron-down</v-icon>
           </v-btn>
         </template>
         <v-list>
@@ -24,12 +24,11 @@
       </v-menu>
 
       <v-tooltip bottom>
-        <template v-slot:activator="{ on, attrs }">
+        <template v-slot:activator="{ props }">
           <v-btn
             icon
             @click="togglePolling"
-            v-bind="attrs"
-            v-on="on"
+            v-bind="props"
             class="mr-2"
           >
             <v-icon>{{ polling ? "mdi-pause" : "mdi-play" }}</v-icon>
@@ -37,122 +36,20 @@
         </template>
         <span>{{ polling ? "Pause Stats" : "Resume Stats" }}</span>
       </v-tooltip>
-      <v-icon v-on:click="refresh()">mdi-refresh</v-icon>
+      <v-icon @click="refresh()">mdi-refresh</v-icon>
     </v-card-title>
     <v-card-text class="secondary text-center px-5 py-5">
       <!-- Overview Cards Grid -->
+       <v-alert type="info" variant="outlined" class="mb-4">
+        Visualization widgets temporarily disabled for migration.
+      </v-alert>
+
       <div class="dashboard-grid">
-        <stats-card
-          title="Containers"
-          :count="overview.containers.total"
-          icon="mdi-cube-outline"
-          color="primary"
-          to="/apps"
-          :items="[
-            {
-              label: 'Running',
-              count: overview.containers.running,
-              color: 'success',
-              icon: 'mdi-circle'
-            },
-            {
-              label: 'Stopped',
-              count: overview.containers.stopped,
-              color: 'error',
-              icon: 'mdi-pause'
-            },
-            {
-              label: 'Unhealthy',
-              count: overview.containers.unhealthy,
-              color: 'warning',
-              icon: 'mdi-alert'
-            }
-          ]"
-        />
-        <stats-card
-          title="Projects"
-          :count="overview.projects.total"
-          icon="mdi-folder-multiple-outline"
-          color="info"
-          to="/projects"
-          :items="[
-            {
-              label: 'Active',
-              count: overview.projects.active,
-              color: 'success',
-              icon: 'mdi-circle'
-            },
-            {
-              label: 'Inactive',
-              count: overview.projects.inactive,
-              color: 'grey',
-              icon: 'mdi-circle-outline'
-            }
-          ]"
-        />
-        <stats-card
-          title="Images"
-          :count="overview.images.total"
-          icon="mdi-disc"
-          color="success"
-          to="/resources/images"
-          :items="[
-            {
-              label: 'Used',
-              count: overview.images.used,
-              color: 'info',
-              icon: 'mdi-check'
-            },
-            {
-              label: 'Dangling',
-              count: overview.images.dangling,
-              color: 'warning',
-              icon: 'mdi-delete'
-            }
-          ]"
-        />
-        <stats-card
-          title="Volumes"
-          :count="overview.volumes.total"
-          icon="mdi-database"
-          color="warning"
-          to="/resources/volumes"
-          :items="[
-            {
-              label: 'In Use',
-              count: overview.volumes.in_use,
-              color: 'success',
-              icon: 'mdi-check'
-            },
-            {
-              label: 'Unused',
-              count: overview.volumes.unused,
-              color: 'grey',
-              icon: 'mdi-delete-outline'
-            }
-          ]"
-        />
-        <stats-card
-          title="Networks"
-          :count="overview.networks.total"
-          icon="mdi-network"
-          color="error"
-          to="/resources/networks"
-          :items="[
-            {
-              label: 'Custom',
-              count: overview.networks.custom,
-              color: 'info',
-              icon: 'mdi-creation'
-            },
-            {
-              label: 'Default',
-              count: overview.networks.default,
-              color: 'grey',
-              icon: 'mdi-lock'
-            }
-          ]"
-        />
+         <!-- STUBBED STATS CARDS -->
+         <v-card v-for="(val, key) in overview" :key="key">
+            <v-card-title>{{ key }}</v-card-title>
+            <v-card-text>{{ val.total }}</v-card-text>
+         </v-card>
       </div>
 
       <!-- Container Cards Grid -->
@@ -173,7 +70,7 @@
               >{{ app.name }}</span
             >
             <v-chip
-              x-small
+              size="x-small"
               :color="app.State.Status === 'running' ? 'success' : 'error'"
               >{{ app.State.Status }}</v-chip
             >
@@ -185,7 +82,7 @@
                 <span>{{ stats[app.name].cpu_percent }}%</span>
               </div>
               <v-progress-linear
-                :value="stats[app.name].cpu_percent"
+                :model-value="stats[app.name].cpu_percent"
                 color="primary"
                 height="4"
                 rounded
@@ -197,7 +94,7 @@
                 <span>{{ stats[app.name].mem_percent }}%</span>
               </div>
               <v-progress-linear
-                :value="stats[app.name].mem_percent"
+                :model-value="stats[app.name].mem_percent"
                 color="blue"
                 height="4"
                 rounded
@@ -208,7 +105,7 @@
               </div>
             </div>
             <div v-else-if="app.State.Status === 'running'">
-              <v-skeleton-loader type="list-item-two-line"></v-skeleton-loader>
+              <div>Loading...</div>
             </div>
             <div v-else class="text-center caption grey--text py-4">
               Container Stopped
@@ -223,12 +120,11 @@
 <script>
 import { mapActions, mapState } from "vuex";
 import axios from "axios";
-import StatsCard from "@/components/dashboard/StatsCard";
 
 export default {
-  components: {
-    StatsCard
-  },
+  // components: {
+  //   StatsCard
+  // },
   data() {
     return {
       stats: {},
@@ -278,39 +174,33 @@ export default {
       }, this.pollingInterval);
     },
     async pollAll() {
-      // Fetch overview
       await this.fetchOverviewStats();
-
-      // Fetch container stats
       try {
-        const response = await axios.get("/api/containers/stats", {
+        const response = await axios.get("/containers/stats", {
           skipAuthRefresh: true
         });
         const statsData = response.data;
 
-        // Update stats
-        // We might need to handle stopped containers manually if not returned by API
         if (this.apps) {
           this.apps.forEach(app => {
             const stat = statsData[app.name];
             if (stat) {
-               this.$set(this.stats, app.name, {
+               this.stats[app.name] = {
                  cpu_percent: stat.cpu_percent,
                  mem_percent: stat.memory_percent,
                  mem_current: stat.memory_usage_mb + " MB",
                  mem_total: stat.memory_limit_mb + " MB",
                  name: app.name
-               });
+               };
             } else {
-               // Stopped or missing
-               this.$set(this.stats, app.name, {
+               this.stats[app.name] = {
                  cpu_percent: 0,
                  mem_percent: 0,
                  mem_current: "0 MB",
                  mem_total: "0 MB",
                  name: app.name,
                  status: "stopped"
-               });
+               };
             }
           });
         }
@@ -324,13 +214,14 @@ export default {
     setPollingInterval(val) {
       this.pollingInterval = val;
       localStorage.setItem("dashboard_polling_interval", val);
-      this.startPolling();
+      this.startStatsPolling();
     },
     async refresh() {
       await this.readApps();
       await this.pollAll();
     },
     sortByTitle(arr) {
+       if(!arr) return [];
       return [...arr].sort((a, b) => a.name.localeCompare(b.name));
     },
     handleAppClick(appName) {
@@ -345,7 +236,6 @@ export default {
     }
   },
   async created() {
-    // Load preference
     const stored = localStorage.getItem("dashboard_polling_interval");
     if (stored !== null) {
       this.pollingInterval = parseInt(stored);
@@ -355,7 +245,7 @@ export default {
     await this.fetchOverviewStats();
     this.startStatsPolling();
   },
-  beforeDestroy() {
+  beforeUnmount() {
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
     }

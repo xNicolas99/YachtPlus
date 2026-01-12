@@ -1,5 +1,4 @@
-import Vue from "vue";
-import Vuex from "vuex";
+import { createStore } from "vuex";
 import auth from "./modules/auth";
 import templates from "./modules/templates.js";
 import apps from "./modules/apps.js";
@@ -9,9 +8,7 @@ import volumes from "./modules/volumes.js";
 import networks from "./modules/networks.js";
 import projects from "./modules/projects.js";
 
-Vue.use(Vuex);
-
-export default new Vuex.Store({
+export default createStore({
   state: {
     // templates: [],
     // itemCount: 10

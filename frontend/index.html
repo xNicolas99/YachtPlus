@@ -11,7 +11,6 @@
     </style>
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>Yacht</title>
-    <link rel="manifest" crossorigin="use-credentials" href="<%= BASE_URL %>manifest.json" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:100,300,400,500,700,900">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@latest/css/materialdesignicons.min.css">
     <link rel="apple-touch-icon" sizes="57x57" href="/img/icons/apple-touch-icon-57x57.png">
@@ -57,23 +56,12 @@
     <link rel="apple-touch-startup-image" href="/img/icons/apple-splash-1334-750.jpg" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
     <link rel="apple-touch-startup-image" href="/img/icons/apple-splash-640-1136.jpg" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)">
     <link rel="apple-touch-startup-image" href="/img/icons/apple-splash-1136-640.jpg" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2) and (orientation: landscape)">
-    <script type=text/javascript>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/service-worker.js')
-        .then(function(registration) {
-          console.log('Registration successful, scope is:', registration.scope);
-        })
-        .catch(function(error) {
-          console.log('Service worker registration failed, error:', error);
-        });
-      }
-    </script>
   </head>
   <body>
     <noscript>
       <strong>We're sorry but Yacht doesn't work properly without JavaScript enabled. Please enable it to continue.</strong>
     </noscript>
     <div id="app"></div>
-    <!-- built files will be auto injected -->
+    <script type="module" src="/src/main.js"></script>
   </body>
 </html>
