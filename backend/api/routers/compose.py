@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from api.auth.jwt import get_auth_wrapper
 
 from api.actions.compose import (
@@ -31,6 +31,8 @@ async def get_project(project_name, Authorize: get_auth_wrapper = Depends(get_au
 @router.get("/{project_name}/actions/{action}")
 async def get_compose_action(project_name, action, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
+    if action not in ["up", "down", "start", "stop", "restart", "create", "delete", "pull"]:
+        raise HTTPException(status_code=400, detail="Invalid action")
     if action == "delete":
         return await delete_compose(project_name)
     else:
@@ -48,6 +50,8 @@ async def write_compose_project(
 @router.get("/{project_name}/actions/{action}/{app}")
 async def get_compose_app_action(project_name, action, app, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
+    if action not in ["up", "down", "start", "stop", "restart", "create", "rm", "pull"]:
+        raise HTTPException(status_code=400, detail="Invalid action")
     return await compose_app_action(project_name, action, app)
 
 
