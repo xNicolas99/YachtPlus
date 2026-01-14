@@ -197,6 +197,9 @@ async def check_setup_status(request: Request, call_next):
             "/auth/jwt/login", # Alternate login
             "/auth/2fa", # 2FA setup
             "/auth/logout",
+            "/auth/users", # Check if users exist (trigger setup wizard)
+            "/settings", # Theme, version, and other non-sensitive settings needed for UI init
+            "/manifest.json", # PWA manifest
             "/docs", "/openapi.json", "/redoc" # Allow docs for debugging? Maybe restrict in strict mode.
         ]
 
