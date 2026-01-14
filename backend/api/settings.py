@@ -3,7 +3,7 @@ import secrets
 import json
 import logging
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 logger = logging.getLogger(__name__)
@@ -95,3 +95,6 @@ class Settings(BaseSettings):
         "DATABASE_URL", "sqlite:////config/data.sqlite"
     )
     COMPOSE_DIR: str = os.environ.get("COMPOSE_DIR", "/config/compose/")
+
+    # Docker Host configuration
+    DOCKER_HOST: Optional[str] = os.environ.get("DOCKER_HOST")
