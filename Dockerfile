@@ -18,7 +18,7 @@ RUN ls -la
 
 RUN npm run build --verbose
 
-# Setup Container and install Flask backend
+# Setup Container and install FastAPI backend
 FROM python:3.11-slim as deploy-stage
 
 # Set environment variables
@@ -30,6 +30,7 @@ COPY ./backend/requirements.txt ./
 
 # Install build dependencies and system libraries
 # Switching to apt-get for Debian Slim
+# Removed duplicate 'procps' and 'gosu' (not needed for non-root execution now)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
@@ -37,8 +38,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     nginx \
     curl \
-    procps \
-    gosu \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
@@ -77,5 +76,6 @@ RUN mkdir -p /config /var/www/client_body_temp /var/www/proxy_temp /var/run/ngin
 COPY backend/start.sh /start.sh
 RUN chmod +x /start.sh
 
-USER root
+# Run as appuser
+USER appuser
 CMD ["/start.sh"]

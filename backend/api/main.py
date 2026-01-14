@@ -35,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 settings = Settings()
 
+if settings.DOCKER_HOST:
+    logger.info(f"Using DOCKER_HOST: {settings.DOCKER_HOST}")
+else:
+    logger.info("Using default Docker socket (local).")
+
 if settings.ALLOWED_HOSTS == ["*"]:
     logger.warning("CRITICAL SECURITY WARNING: ALLOWED_HOSTS is set to ['*']. This is insecure for production.")
     logger.warning("Please set ALLOWED_HOSTS to your specific domain or IP address in environment variables to prevent Host Header attacks.")
