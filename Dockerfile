@@ -25,12 +25,14 @@ FROM python:3.11-slim as deploy-stage
 ENV PYTHONIOENCODING=UTF-8
 ENV THEME=Default
 
+# Create user 'appuser' (UID 1000) early to use for COPY permissions
+RUN groupadd -r appuser -g 1000 && \
+    useradd -u 1000 -r -g appuser -s /bin/bash -c "App User" appuser
+
 WORKDIR /api
-COPY ./backend/requirements.txt ./
 
 # Install build dependencies and system libraries
 # Switching to apt-get for Debian Slim
-# Removed duplicate 'procps' and 'gosu' (not needed for non-root execution now)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3-dev \
@@ -49,31 +51,33 @@ RUN curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/doc
 # Upgrade pip, setuptools, and wheel
 RUN pip3 install --upgrade pip setuptools wheel
 
+# Copy requirements.txt first
+COPY ./backend/requirements.txt ./
+
 # Install Python packages from requirements.txt
 RUN pip3 install -r requirements.txt --no-cache-dir --verbose
 
-# Copy the backend code
-COPY ./backend/ ./
+# Create directories and set permissions for appuser
+# Nginx directories: /var/cache/nginx, /var/log/nginx, /var/lib/nginx, /etc/nginx, /var/run/nginx
+# App directories: /config, /var/www/client_body_temp, /var/www/proxy_temp
+RUN mkdir -p /config /var/www/client_body_temp /var/www/proxy_temp /var/run/nginx /var/cache/nginx /var/log/nginx /var/lib/nginx /etc/nginx/conf.d && \
+    chown -R appuser:appuser /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx /var/cache/nginx /api
 
-# Copy frontend build artifacts
-COPY --from=build-stage /app/dist /app
+# Copy the backend code with correct ownership
+COPY --chown=appuser:appuser ./backend/ ./
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/nginx.conf
+# Copy frontend build artifacts with correct ownership
+COPY --from=build-stage --chown=appuser:appuser /app/dist /app
+
+# Copy nginx config (global config needs to be readable by nginx master process, usually root starts it but we run as appuser? No, we run as appuser.)
+# If we run nginx as appuser, the config file must be readable.
+COPY --chown=appuser:appuser nginx.conf /etc/nginx/nginx.conf
 
 # Expose ports
 EXPOSE 8080
 
-# Create user 'appuser' (UID 1000)
-RUN groupadd -r appuser -g 1000 && \
-    useradd -u 1000 -r -g appuser -s /bin/bash -c "App User" appuser
-
-# Create directories and set permissions for appuser
-RUN mkdir -p /config /var/www/client_body_temp /var/www/proxy_temp /var/run/nginx && \
-    chown -R appuser:appuser /api /app /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx
-
 # Start script
-COPY backend/start.sh /start.sh
+COPY --chown=appuser:appuser backend/start.sh /start.sh
 RUN chmod +x /start.sh
 
 # Run as appuser
