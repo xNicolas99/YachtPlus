@@ -1,5 +1,8 @@
 import logging
 import uvicorn
+import fcntl
+import asyncio
+import aiodocker
 from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,8 +54,39 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up...")
+
+    # 1. Proxy Availability Check (Retry Logic)
+    logger.info("Checking Docker Socket/Proxy availability...")
+    docker_connected = False
+    for i in range(5):
+        try:
+            docker_client = aiodocker.Docker(url=settings.DOCKER_HOST)
+            await docker_client.version()
+            await docker_client.close()
+            docker_connected = True
+            logger.info("Docker Socket/Proxy is available.")
+            break
+        except Exception as e:
+            logger.warning(f"Docker connection attempt {i+1}/5 failed: {e}. Retrying in 2s...")
+            await asyncio.sleep(2)
+
+    if not docker_connected:
+        logger.error("CRITICAL: Failed to connect to Docker after 5 attempts. Application may not function correctly.")
+
     Base.metadata.create_all(bind=engine)
-    start_scheduler()
+
+    # 2. Scheduler Locking (Concurrency Control)
+    scheduler_lock_file = "/tmp/yacht_scheduler.lock"
+    scheduler_lock_fp = open(scheduler_lock_file, "w")
+    try:
+        # Try to acquire an exclusive non-blocking lock
+        fcntl.lockf(scheduler_lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logger.info("Scheduler Lock acquired. Starting Scheduler...")
+        start_scheduler()
+        app.state.scheduler_started_by_me = True
+    except IOError:
+        logger.info("Scheduler Lock already held by another worker. Skipping Scheduler start.")
+        app.state.scheduler_started_by_me = False
 
     # Initialize App State
     try:
@@ -99,7 +133,17 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down...")
-    stop_scheduler()
+
+    # Only stop scheduler if we started it
+    if getattr(app.state, "scheduler_started_by_me", False):
+        logger.info("Stopping Scheduler (I hold the lock)...")
+        stop_scheduler()
+        # Lock is released when file descriptor is closed or process exits
+        # Explicitly closing file is good practice, though OS cleans up locks on process exit
+        try:
+            scheduler_lock_fp.close()
+        except Exception:
+            pass
 
 app = FastAPI(root_path="/api", lifespan=lifespan)
 app.state.limiter = limiter
