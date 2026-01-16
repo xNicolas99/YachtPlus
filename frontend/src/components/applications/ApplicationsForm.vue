@@ -809,7 +809,7 @@
 <script>
 import axios from "axios";
 import { mapActions, mapMutations, mapState } from "vuex";
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { ValidationObserver, ValidationProvider } from "@/compat/vee-validate";
 
 export default {
   components: {

@@ -86,7 +86,7 @@
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { ValidationObserver, ValidationProvider } from "@/compat/vee-validate";
 import { mapActions } from "vuex";
 export default {
   components: {

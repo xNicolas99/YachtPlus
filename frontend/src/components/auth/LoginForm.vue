@@ -85,7 +85,7 @@
 <script>
 import lightLogo from "@/assets/logo-light.svg";
 import darkLogo from "@/assets/logo.svg";
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { ValidationObserver, ValidationProvider } from "@/compat/vee-validate";
 import { mapActions } from "vuex";
 import { themeLogo } from "../../config.js";
 import axios from "axios";

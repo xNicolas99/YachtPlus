@@ -65,7 +65,7 @@
 
                     <v-card-text style="overflow-y: auto; height:168px">
                       {{
-                        item.description ? item.description : "" | truncate(120)
+                        $truncate(item.description ? item.description : "", 120)
                       }}
                     </v-card-text>
                     <v-card-actions>

@@ -323,7 +323,7 @@
           <span class="ImageName">{{ item.Config.Image }}</span>
         </template>
         <template v-slot:item.created="{ item }">
-          <span class="CreatedAt"> {{ item.Created | formatDate }} </span>
+          <span class="CreatedAt"> {{ $formatDate(item.Created) }} </span>
         </template>
 
         <!-- No Data slot -->

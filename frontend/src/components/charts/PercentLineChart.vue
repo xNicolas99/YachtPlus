@@ -1,88 +1,63 @@
+<template>
+  <div class="chart-container">
+    <Line :data="chartData" :options="mergedOptions" />
+  </div>
+</template>
+
 <script>
-import { Line, mixins } from "vue-chartjs"; // We specify what type of chart we want from vue-chartjs and the mixins module
-const { reactiveProp } = mixins;
+import { Line } from 'vue-chartjs'
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend } from 'chart.js'
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend)
+
 export default {
-  extends: Line, //We are extending the base chart class as mentioned above
-  mixins: [reactiveProp],
+  name: 'PercentLineChart',
+  components: { Line },
   props: {
-    chartdata: {
+    chartData: {
       type: Object,
-      default: null
+      required: true
+    },
+    chartOptions: {
+      type: Object,
+      default: () => ({})
     }
   },
-  data() {
-    return {
-      options: {
-        //Chart.js options
-        animation: {
-          duration: 0
-        },
-        responsiveAnimationDuration: 0,
-        tooltips: {
-          mode: "index",
-          intersect: false,
-          callbacks: {
-            label: function(tooltipItems) {
-              return tooltipItems.yLabel + "%";
+  computed: {
+    mergedOptions() {
+      // Default options for 0-100% scaling
+      const defaultOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0,
+            max: 100,
+            ticks: {
+              stepSize: 10
             }
+          },
+          x: {
+            type: 'category', // Ensure x-axis is treated as category (or time if configured)
+            display: false // Often hidden in these mini-charts
           }
         },
-        hover: {
-          mode: "index",
-          intersect: true,
-          animationDuration: 0
-        },
-        scales: {
-          yAxes: [
-            {
-              ticks: {
-                beginAtZero: true,
-                stepSize: 1,
-                min: 0,
-                max: 100,
-                maxTicksLimit: 10
-              },
-              gridLines: {
-                display: true
-              }
-            }
-          ],
-          xAxes: [
-            {
-              ticks: {
-                min: 1,
-                sampleSize: 5,
-                autoSkip: true,
-                autoSkipPadding: 15,
-                maxRotation: 0,
-                maxTicksLimit: 2,
-                padding: 10
-              },
-              type: "time",
-              time: {
-                unit: "second"
-              },
-              displayFormats: {
-                second: "h:mm:ss a"
-              },
-              gridLines: {
-                display: false
-              },
-              distribution: "series"
-            }
-          ]
-        },
-        legend: {
-          display: true
-        },
-        responsive: true,
-        maintainAspectRatio: false
-      }
-    };
-  },
-  mounted() {
-    // this.chartData is created in the mixin
-    this.renderChart(this.chartData, this.options);
+        plugins: {
+          legend: {
+            display: false
+          }
+        }
+      };
+
+      return { ...defaultOptions, ...this.chartOptions };
+    }
   }
-};
+}
 </script>
+
+<style scoped>
+.chart-container {
+  position: relative;
+  height: 200px;
+}
+</style>

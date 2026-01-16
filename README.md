@@ -4,7 +4,7 @@ YachtPlus is a container management UI with a focus on templates and 1-click dep
 
 ## Features
 
-- **Vue 2 + FastAPI**: Built with a robust modern stack.
+- **Vue 3 + FastAPI**: Built with a robust modern stack.
 - **Docker Management**: Manage containers, images, volumes, and networks properly.
 - **Docker-Compose Support**: Create and manage Docker Compose projects directly from the UI.
 - **Templates**: One-click deployment of popular applications using templates (Docker Hub integration).

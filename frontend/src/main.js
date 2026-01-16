@@ -6,11 +6,13 @@ import vuetify from './plugins/vuetify'
 import { loadFonts } from './plugins/webfontloader'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
+import ChatScroll from './directives/v-chat-scroll'
 
 // Load fonts
 loadFonts()
 
 const app = createApp(App)
+app.directive('chat-scroll', ChatScroll)
 
 // Global Properties (replacing Vue.prototype)
 app.config.globalProperties.$sanitize = function(dirty) {

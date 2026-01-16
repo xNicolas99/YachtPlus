@@ -1,14 +1,6 @@
 <template lang="html">
   <div class="template-form component">
     <v-card>
-      <!-- <v-fade-transition>
-        <v-progress-linear
-          indeterminate
-          v-if="isLoading"
-          color="primary"
-          bottom
-        />
-      </v-fade-transition> -->
       <v-form>
         <div class="d-flex">
           <v-row>
@@ -24,7 +16,7 @@
               <v-text-field
                 v-if="!this.existing"
                 class="mr-3"
-                v-model="form.name"
+                v-model:model-value="form.name"
                 label="Template Name"
                 required
               >
@@ -37,15 +29,14 @@
             </v-col>
           </v-row>
         </div>
-        <editor
-          v-model="form.content"
+        <VAceEditor
+          v-model:value="form.content"
           @init="editorInit"
           lang="yaml"
           :theme="editorTheming()"
-          :height="windowHeight"
-          :width="windowWidth"
+          :style="{ height: windowHeight + 'px', width: windowWidth + 'px' }"
           class="editor"
-        ></editor>
+        />
       </v-form>
     </v-card>
   </div>
@@ -54,20 +45,25 @@
 <script>
 import { mapActions, mapMutations } from "vuex";
 import axios from "axios";
+import { VAceEditor } from 'vue3-ace-editor';
+import "ace-builds/src-noconflict/mode-yaml";
+import "ace-builds/src-noconflict/theme-twilight";
+import "ace-builds/src-noconflict/theme-textmate";
+
 export default {
   data() {
     return {
       existing: false,
       form: {
         name: "",
-        content: null
+        content: "" // Initialize as string
       },
       windowHeight: window.innerHeight - 205,
       windowWidth: window.innerWidth - 80
     };
   },
   components: {
-    editor: require("vue2-ace-editor")
+    VAceEditor
   },
   methods: {
     ...mapMutations({
@@ -76,13 +72,11 @@ export default {
     ...mapActions({
       readProject: "projects/readProject"
     }),
-    editorInit() {
-      require("brace/mode/yaml");
-      require("brace/theme/twilight");
-      require("brace/theme/textmate");
+    editorInit(editor) {
+      // Init logic if needed
     },
     editorTheming() {
-      if (this.$vuetify.theme.dark == false) {
+      if (this.$vuetify.theme.global.current.dark == false) { // Vuetify 3 theme access
         return "textmate";
       } else {
         return "twilight";

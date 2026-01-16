@@ -81,7 +81,7 @@
             Created
           </v-list-item-content>
           <v-list-item-content>
-            {{ volume.CreatedAt | formatDate }}
+            {{ $formatDate(volume.CreatedAt) }}
           </v-list-item-content>
         </v-list-item>
         <v-list-item v-if="volume.Labels">

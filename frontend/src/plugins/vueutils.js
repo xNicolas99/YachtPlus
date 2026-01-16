@@ -1,22 +1,33 @@
-import moment from "moment";
+import dayjs from "dayjs";
+import utc from "dayjs/plugin/utc";
+import localizedFormat from "dayjs/plugin/localizedFormat";
+
+dayjs.extend(utc);
+dayjs.extend(localizedFormat);
 
 const VueUtils = {
-  install(Vue) {
-    Vue.filter("formatDate", (value, format) => {
+  install(app) {
+    // Vue 3 Global Properties
+    app.config.globalProperties.$formatDate = (value, format) => {
       if (value) {
-        return moment(moment.utc(value).toDate())
+        return dayjs(dayjs.utc(value).toDate())
           .local()
           .format(format || "LLL");
       }
-    });
+      return '';
+    };
 
-    Vue.filter("truncate", function(value, limit, suffix) {
+    app.config.globalProperties.$truncate = (value, limit, suffix) => {
+      if (!value) return '';
       if (value.length > limit) {
         let idx = value.lastIndexOf(" ", limit - 1);
         value = value.substring(0, idx ? idx : limit - 1) + (suffix || "…");
       }
       return value;
-    });
+    };
+
+    // Compat for Vue 2 filters (if still used in templates, will fail in Vue 3 compiler unless migraton build)
+    // Vue 3 does not support filters. We must rely on method calls in templates: $formatDate(val)
   }
 };
 

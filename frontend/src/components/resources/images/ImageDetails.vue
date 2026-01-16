@@ -89,7 +89,7 @@
             Created
           </v-list-item-content>
           <v-list-item-content>
-            {{ image.Created | formatDate }}
+            {{ $formatDate(image.Created) }}
           </v-list-item-content>
         </v-list-item>
         <v-list-item>

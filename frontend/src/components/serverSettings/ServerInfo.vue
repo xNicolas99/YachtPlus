@@ -42,7 +42,7 @@
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { ValidationObserver, ValidationProvider } from "@/compat/vee-validate";
 import axios from "axios";
 import { mapMutations } from "vuex";
 export default {

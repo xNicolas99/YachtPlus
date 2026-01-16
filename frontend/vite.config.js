@@ -15,10 +15,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      'vee-validate': path.resolve(__dirname, './src/stubs/vee-validate.js'),
-      'vue-chartjs': path.resolve(__dirname, './src/stubs/vue-chartjs.js'),
-      'vue-chat-scroll': path.resolve(__dirname, './src/stubs/vue-chat-scroll.js'),
-      'vue2-ace-editor': path.resolve(__dirname, './src/stubs/vue2-ace-editor.js'),
     },
     extensions: ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.json', '.vue']
   },
@@ -27,11 +23,6 @@ export default defineConfig({
       define: {
         global: 'globalThis'
       }
-    }
-  },
-  build: {
-    commonjsOptions: {
-      transformMixedEsModules: true,
     }
   },
   define: {

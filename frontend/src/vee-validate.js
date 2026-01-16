@@ -1,21 +1,25 @@
-import { extend } from "vee-validate";
-import * as rules from "vee-validate/dist/rules";
-import { messages } from "vee-validate/dist/locale/en.json";
-Object.keys(rules).forEach(rule => {
-  extend(rule, {
-    ...rules[rule], // copies rule configuration
-    message: messages[rule] // assign message
-  });
+import { defineRule, configure } from "vee-validate";
+import { all } from "@vee-validate/rules";
+import { localize } from '@vee-validate/i18n';
+import en from '@vee-validate/i18n/dist/locale/en.json';
+
+// Install all rules
+Object.entries(all).forEach(([name, rule]) => {
+  defineRule(name, rule);
 });
 
-extend("url", {
-  validate: str => {
-    try {
-      const url = new URL(str);
-      return url.protocol === "http:" || url.protocol === "https:";
-    } catch (_) {
-      return false;
-    }
-  },
-  message: "This is not a valid URL"
+// Configure messages
+configure({
+  generateMessage: localize({
+    en,
+  }),
+});
+
+defineRule("url", (value) => {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "http:" || url.protocol === "https:") || "This is not a valid URL";
+  } catch (_) {
+    return "This is not a valid URL";
+  }
 });
