@@ -28,7 +28,7 @@ async def get_dashboard_stats():
     # We split this into two parts: Critical (Containers) and Secondary (Images, Volumes, Networks)
     # If Secondary fails, we still return Containers.
 
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         # Part 1: Critical - Containers
         try:
              # 5s timeout for containers
