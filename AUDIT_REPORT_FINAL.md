@@ -1,68 +1,93 @@
-# Deep-Dive Audit Report: YachtPlus Secure-by-Design
+# ELITE SYSTEM AUDIT REPORT: YACHT-PLUS
 
-**Datum:** 17.12.2025
-**Auditor:** Jules (AI Agent)
-**Status:** Abgeschlossen
+**DATUM:** 28.12.2025
+**AUDITOR:** JULES (Elite System Auditor)
+**STATUS:** KRITISCH
+**STACK:** Python 3.11 (FastAPI), Vue 3 (Vite), Docker
 
-Dieser Bericht fasst die Ergebnisse des Deep-Dive Audits zusammen, der nach dem Refactoring auf die "Secure-by-Design"-Architektur (Non-Root, Socket-Proxy, Gunicorn) durchgeführt wurde.
+---
 
-## 1. Identifizierte Risiken
+## 1. TECH-STACK & ANALYSE
+Das System ist ein Docker-Container-Management-Dashboard.
+*   **Backend:** FastAPI (Async), Uvicorn, Gunicorn. Nutzt `aiodocker` für Async-Ops und `docker` (Python SDK) via `subprocess`/`run_in_thread` für Legacy-Ops.
+*   **Frontend:** Vue 3 Migration (Vite), Vuetify 3. Node 20.
+*   **Infrastruktur:** Läuft als Non-Root (`appuser`, UID 1000). Nginx Reverse Proxy.
 
-### 1.1 Concurrency & Scheduler (Kritisch)
-*   **Problem:** Durch den Wechsel von Uvicorn (Single-Process) zu Gunicorn mit 4 Workern wird der `lifespan`-Eventhandler von FastAPI viermal parallel ausgeführt.
-*   **Auswirkung:** Der `APScheduler` (`start_scheduler()`), der Hintergrundaufgaben wie "Check for Updates" ausführt, würde 4x gestartet werden. Dies führt zu Race Conditions, Datenbank-Locks und vierfachen Benachrichtigungen/Logs.
-*   **Status:** **GELÖST** durch Implementierung eines File-Locking-Mechanismus (`fcntl`). Nur der erste Worker, der den Lock auf `/tmp/scheduler.lock` erhält, startet den Scheduler.
+---
 
-### 1.2 Permission Management & Migration (Medium)
-*   **Problem:** Der Container läuft jetzt strikt als `appuser` (UID 1000). Wenn ein Benutzer von einer älteren Version migriert, gehören die Dateien im gemounteten Host-Volume `./config` oft `root`.
-*   **Auswirkung:** Der Container würde beim Versuch, in die Datenbank zu schreiben oder Configs zu speichern, mit `PermissionDenied` abstürzen. Ein automatischer Fix (`chown`) ist nicht möglich, da dem Container Root-Rechte fehlen.
-*   **Status:** **MITIGATED** durch "Fail Fast"-Strategie. Das Start-Skript prüft beim Start die Schreibrechte. Wenn diese fehlen, wird eine klare Fehlermeldung ausgegeben, die den Nutzer auffordert, `chown -R 1000:1000 ./config` auf dem Host auszuführen.
+## 2. KRITISCHE ALARME (Sofortiges Handeln erforderlich)
 
-### 1.3 Networking & Proxy Availability (Medium)
-*   **Problem:** `yachtplus` und `socket-proxy` starten parallel via Docker Compose. Es besteht eine Race Condition, bei der das Backend versucht, den Docker-Socket zu erreichen, bevor der Proxy bereit ist.
-*   **Auswirkung:** `aiodocker` würde Verbindungsfehler werfen, und die App könnte crashen oder ohne Docker-Verbindung starten.
-*   **Status:** **GELÖST** durch Implementierung einer Retry-Logik (5 Versuche à 2 Sekunden) im Backend-Startup.
+### 🚨 DIE "STUB"-LÜGE (Betrug am Compiler)
+Der Audit hat ergeben, dass die Migration auf Vue 3 eine Fassade ist. In `frontend/vite.config.js` werden kritische Bibliotheken auf leere "Stubs" umgeleitet:
+*   `vee-validate` -> `src/stubs/vee-validate.js`
+*   `vue-chartjs` -> `src/stubs/vue-chartjs.js`
+*   `vue-chat-scroll` -> `src/stubs/vue-chat-scroll.js`
+*   `vue2-ace-editor` -> `src/stubs/vue2-ace-editor.js`
 
-### 1.4 Host-Header & Security (Low)
-*   **Problem:** `ALLOWED_HOSTS` war standardmäßig auf `["*"]` gesetzt.
-*   **Auswirkung:** Theoretisches Risiko von Host-Header-Injection-Attacken, obwohl Nginx dies teilweise mitigiert (`proxy_set_header Host $host`).
-*   **Status:** **GELÖST**. Warnung im Log bleibt bestehen, aber die Architektur ist sicher, solange Nginx korrekt konfiguriert ist.
+**Konsequenz:** Validierungen, Charts und Editoren existieren im Build, sind aber funktional tot. Das System täuscht Funktionalität vor. Das widerspricht direkt den angeblichen Fixes aus dem Dezember-Audit.
 
-## 2. Technische Umsetzung
+### 🚨 CSP-HINTERTÜR: `unsafe-eval`
+In `backend/api/main.py` wird `script-src 'unsafe-eval'` explizit erlaubt.
+*   **Code:** `script-src 'self' 'unsafe-eval' 'unsafe-inline'`
+*   **Risiko:** Dies öffnet Tür und Tor für XSS-Angriffe. In einer modernen Vue 3 (Vite) Applikation ist `unsafe-eval` NICHT notwendig. Das ist ein gefährliches Überbleibsel der Vue 2 Webpack-Ära.
 
-### 2.1 Scheduler Locking (Code-Snippet)
-Wir verwenden `fcntl` für einen exklusiven, nicht-blockierenden Lock.
+### 🚨 ALLOWED_HOSTS WILDCARD
+`backend/api/settings.py` erlaubt standardmäßig `ALLOWED_HOSTS=["*"]`.
+*   **Risiko:** Host-Header-Injection-Angriffe sind möglich. In Production darf dies niemals der Default sein.
 
-```python
-f = open("/tmp/scheduler.lock", "w")
-try:
-    fcntl.lockf(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    start_scheduler()
-    logger.info("Scheduler started (Lock acquired).")
-except IOError:
-    logger.info("Scheduler skipped (Lock already held by another worker).")
-```
+---
 
-### 2.2 Permissions Check (`start.sh`)
-```bash
-if ! touch "/config/.perm_check" 2>/dev/null; then
-    echo "ERROR: MIGRATION REQUIRED..."
-    exit 1
-fi
-rm "/config/.perm_check"
-```
+## 3. SYSTEM-BREMSEN (Performance-Killer)
 
-### 2.3 Proxy Retry Logic
-Im `lifespan` Startup:
-```python
-for i in range(5):
-    try:
-        docker = aiodocker.Docker(url=settings.DOCKER_HOST)
-        await docker.version()
-        break
-    except Exception:
-        await asyncio.sleep(2)
-```
+### 🐌 DOPPELTE DOCKER-LAST
+Das Backend lädt ZWEI Docker-Clients:
+1.  `aiodocker` (Async, genutzt in `main.py`)
+2.  `docker` (Sync Python SDK, genutzt in `actions/compose.py`)
+**Urteil:** Verschwendung von RAM und CPU-Zyklen. Die `docker`-Bibliothek ist synchron und blockiert. Sie wird zwar in Threads ausgelagert, aber das erhöht den Context-Switching-Overhead unnötig.
 
-## 3. Fazit
-Die identifizierten Risiken wurden durch die implementierten Maßnahmen effektiv mitigiert. Die Architektur behält ihren gehärteten Status (Non-Root) bei, während die Stabilität (Retry, Locking) deutlich verbessert wurde.
+### 🐌 ZOMBIE-DEPENDENCY: MOMENT.JS
+In `frontend/package.json` ist `moment` gelistet, obwohl das Projekt angeblich auf `dayjs` (via Memory/Plugins) umgestiegen ist.
+**Urteil:** Moment.js ist deprecated und bläht das Bundle unnötig auf (kein Tree-Shaking).
+
+### 🐌 SYNCHRONE REQUESTS
+`backend/requirements.txt` listet `requests`. In einem Async-Framework wie FastAPI sollte ausschließlich `httpx` oder `aiohttp` genutzt werden. Synchrone Aufrufe in einer Async-Loop (selbst wenn theoretisch isoliert) sind eine tickende Zeitbombe für die Performance unter Last.
+
+---
+
+## 4. ARCHITEKTUR-SÜNDEN (Code-Qualität)
+
+### 💀 SPAGHETTI-IMPORTS IN MIDDLEWARE
+In `backend/api/main.py` wird innerhalb der Middleware-Funktion `check_setup_status` importiert:
+`from api.routers.setup.setup import is_setup_completed`
+**Urteil:** Das umgeht Circular Dependency Fehler durch schlechtes Design. Die Setup-Logik sollte entkoppelt sein (z.B. in einen Service oder State-Manager), um saubere Top-Level-Imports zu ermöglichen.
+
+### 💀 INKONSISTENTE API-STRUKTUR (Dashboard)
+Der Router `backend/api/routers/dashboard.py` liefert nur `/stats`. Die modernen "Live-Updates" via SSE (Server-Sent Events), die in `Home.vue` erwartet werden, fehlen im Router-File oder sind schlecht abstrahiert.
+
+---
+
+## AUTONOME ROADMAP (Für den Fixer-Agent)
+
+Du wirst die folgenden Schritte exakt in dieser Reihenfolge ausführen. Melde keinen Erfolg, bis die Stubs eliminiert sind.
+
+1.  **STUB-ELIMINIERUNG (Frontend):**
+    *   Lösche die Alias-Einträge in `frontend/vite.config.js`.
+    *   Installiere echte Vue 3 kompatible Versionen: `vee-validate@4`, `vue-chartjs@5`, `chart.js`.
+    *   Passe den Import-Code in den Komponenten an, falls nötig.
+
+2.  **SECURITY-HARDENING (Backend):**
+    *   Entferne `'unsafe-eval'` aus der CSP in `backend/api/main.py`.
+    *   Setze `ALLOWED_HOSTS` defaultmäßig auf `localhost` oder die Docker-IP, nicht `*`.
+
+3.  **CLEANUP (Dependencies):**
+    *   Entferne `moment` aus `frontend/package.json`.
+    *   Entferne `requests` aus `backend/requirements.txt` (ersetze durch `httpx` wo nötig).
+
+4.  **REFACTORING (Architektur):**
+    *   Verschiebe `is_setup_completed` in `backend/api/utils/setup_status.py` (neue Datei), um den Circular Import in `main.py` zu lösen.
+
+5.  **VERIFICATION:**
+    *   Führe `npm build` aus. Es darf keine Fehler geben.
+    *   Starte das Backend. Es darf keine Import-Fehler geben.
+
+**AUSFÜHREN.**
