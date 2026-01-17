@@ -2,13 +2,15 @@ import aiodocker
 from fastapi import HTTPException
 import asyncio
 import logging
+from api.settings import Settings
 
 logger = logging.getLogger(__name__)
+settings = Settings()
 
 ### IMAGES ###
 
 async def get_images():
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         images_task = docker.images.list()
 
@@ -60,7 +62,7 @@ async def write_image(image_tag):
         repo = image_tag
         tag = "latest"
 
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             await docker.images.pull(f"{repo}:{tag}")
         except Exception as exc:
@@ -70,7 +72,7 @@ async def write_image(image_tag):
 
 
 async def get_image(image_id):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         image_task = docker.images.inspect(image_id)
 
@@ -107,7 +109,7 @@ async def get_image(image_id):
 
 
 async def update_image(image_id):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             image = await docker.images.inspect(image_id)
             if image.get('RepoTags'):
@@ -121,7 +123,7 @@ async def update_image(image_id):
 
 
 async def delete_image(image_id):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
              image = await docker.images.inspect(image_id)
              await docker.images.delete(image_id, force=True)
@@ -134,7 +136,7 @@ async def delete_image(image_id):
 
 ### Volumes ###
 async def get_volumes():
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         volumes_task = docker.volumes.list()
 
@@ -172,7 +174,7 @@ async def get_volumes():
 
 
 async def write_volume(volume_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             await docker.volumes.create({"Name": volume_name})
         except aiodocker.exceptions.DockerError as exc:
@@ -183,7 +185,7 @@ async def write_volume(volume_name):
 
 
 async def get_volume(volume_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         volume_task = docker.volumes.inspect(volume_name)
 
@@ -233,7 +235,7 @@ async def get_volume(volume_name):
 
 
 async def delete_volume(volume_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             volume = await docker.volumes.inspect(volume_name)
             await docker.volumes.delete(volume_name)
@@ -246,7 +248,7 @@ async def delete_volume(volume_name):
 
 ### Networks ###
 async def get_networks():
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         networks_task = docker.networks.list()
 
@@ -290,7 +292,7 @@ async def get_networks():
 
 
 async def write_network(network_form):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         ipam_config = None
         pool_configs = []
 
@@ -338,7 +340,7 @@ async def write_network(network_form):
 
 
 async def get_network(network_id):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         network_task = docker.networks.inspect(network_id)
 
@@ -376,7 +378,7 @@ async def get_network(network_id):
 
 
 async def delete_network(network_id):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             network = await docker.networks.inspect(network_id)
             await docker.networks.delete(network_id)
@@ -387,7 +389,7 @@ async def delete_network(network_id):
             )
 
 async def prune_resources(resource):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             if resource == "images":
                 return await docker.images.prune(filters={'dangling': ['false']})
