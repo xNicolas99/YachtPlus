@@ -67,7 +67,7 @@ export default {
     };
   },
   components: {
-    editor: require("vue2-ace-editor")
+    editor: () => import("vue2-ace-editor")
   },
   methods: {
     ...mapMutations({
@@ -77,9 +77,9 @@ export default {
       readProject: "projects/readProject"
     }),
     editorInit() {
-      require("brace/mode/yaml");
-      require("brace/theme/twilight");
-      require("brace/theme/textmate");
+      import("brace/mode/yaml");
+      import("brace/theme/twilight");
+      import("brace/theme/textmate");
     },
     editorTheming() {
       if (this.$vuetify.theme.dark == false) {
