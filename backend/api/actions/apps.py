@@ -34,13 +34,15 @@ import asyncio
 import aiostream
 import logging
 import aiofiles
+from api.settings import Settings
 
 logger = logging.getLogger(__name__)
+settings = Settings()
 
 async def get_running_apps():
     apps_list = []
     try:
-        async with aiodocker.Docker() as docker:
+        async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
             apps = await docker.containers.list()
             for app in apps:
                 attrs = app._container if hasattr(app, '_container') else app
@@ -61,7 +63,7 @@ async def get_running_apps():
     return apps_list
 
 async def check_app_update(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -120,7 +122,7 @@ def normalize_ports(summary_ports):
 async def get_apps():
     apps_list = []
     try:
-        async with aiodocker.Docker() as docker:
+        async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
             try:
                 apps = await docker.containers.list(all=True)
             except aiodocker.exceptions.DockerError as exc:
@@ -183,7 +185,7 @@ async def get_apps():
     return apps_list
 
 async def get_app(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -197,7 +199,7 @@ async def get_app(app_name):
         return attrs
 
 async def get_app_processes(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -212,7 +214,7 @@ async def get_app_processes(app_name):
             return Processes(Processes=[], Titles=[])
 
 async def get_app_logs(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -227,7 +229,7 @@ async def get_app_logs(app_name):
 
 async def check_container_conflicts(data: DeployForm):
     conflicts = []
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         # Check Name
         try:
             c = await docker.containers.get(data.name)
@@ -419,7 +421,7 @@ class AiodockerCompatWrapper:
 
 
 async def app_action(app_name, action, background_tasks=None):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
         except aiodocker.exceptions.DockerError as exc:
@@ -466,7 +468,7 @@ async def app_action(app_name, action, background_tasks=None):
     return await get_apps()
 
 async def app_update(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             old = await docker.containers.get(app_name)
             old_info = await old.show()
@@ -511,7 +513,7 @@ async def _update_self(background_tasks):
     if not yacht_id:
          raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             yacht = await docker.containers.get(yacht_id)
             yacht_info = await yacht.show()
@@ -523,7 +525,7 @@ async def _update_self(background_tasks):
     return {"result": "successful"}
 
 async def update_self_in_background(yacht_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         print("**** Updating " + yacht_name + "****")
         config = {
             "Image": "containrrr/watchtower:latest",
@@ -544,7 +546,7 @@ async def check_self_update():
     if not yacht_id:
          raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
 
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             yacht = await docker.containers.get(yacht_id)
             info = await yacht.show()
@@ -556,7 +558,7 @@ async def check_self_update():
 
 
 async def generate_support_bundle(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -579,7 +581,7 @@ async def generate_support_bundle(app_name):
     )
 
 async def log_generator(request, app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
             container = await docker.containers.get(app_name)
             info = await container.show()
@@ -593,7 +595,7 @@ async def log_generator(request, app_name):
 
 async def stat_generator(request, app_name):
     prev_stats = None
-    async with aiodocker.Docker() as adocker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as adocker:
         try:
             container = await adocker.containers.get(app_name)
             info = await container.show()
@@ -615,7 +617,7 @@ async def stat_generator(request, app_name):
             pass
 
 async def all_stat_generator(request):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers = await docker.containers.list()
 
     running_names = []

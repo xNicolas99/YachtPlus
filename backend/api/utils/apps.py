@@ -321,7 +321,7 @@ def graceful_chain_get(d, *args, default=None):
 
 
 async def get_app_stats(app_name):
-    async with aiodocker.Docker() as docker:
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         cpu_total = 0.0
         cpu_system = 0.0
         cpu_percent = 0.0

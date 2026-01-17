@@ -9,8 +9,10 @@ import logging
 import jwt
 import json
 from datetime import datetime, timedelta
+from api.settings import Settings
 
 logger = logging.getLogger(__name__)
+settings = Settings()
 
 router = APIRouter()
 
@@ -88,7 +90,7 @@ async def container_exec(
         await websocket.close(code=1008)
         return
 
-    docker = aiodocker.Docker()
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     exec_id = None
     stream = None
 
