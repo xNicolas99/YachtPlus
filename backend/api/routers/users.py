@@ -107,16 +107,18 @@ def login(
 ):
     # Security Check
     if not user_data.username:
-        raise HTTPException(status_code=400, detail="Username is required")
-
-    if not user_data.username:
-        raise HTTPException(status_code=400, detail="Username is required")
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
     client_ip = check_ip_restriction(request, db, user_data.username)
 
+    # Defensive check for casefold
+    username_query = user_data.username
+    if hasattr(username_query, 'casefold'):
+        username_query = username_query.casefold()
+
     _user = (
         db.query(models.User)
-        .filter(models.User.username == user_data.username.casefold())
+        .filter(models.User.username == username_query)
         .first()
     )
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
@@ -135,12 +137,12 @@ def login(
                     if not totp.verify(user_data.otp_token):
                         record_login_attempt(db, client_ip, user_data.username, False)
                         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+                        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
                 except Exception as e:
                     logger.error(f"2FA Verify Error: {e}")
                     record_login_attempt(db, client_ip, user_data.username, False)
                     logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
-                    raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
+                    raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
         # Success
         record_login_attempt(db, client_ip, user_data.username, True)
@@ -154,7 +156,7 @@ def login(
     else:
         record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
-        raise HTTPException(status_code=400, detail="Invalid Username or Password.")
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
 @router.post("/login_cookie")
 @limiter.limit("5/minute")
@@ -166,11 +168,19 @@ def login_cookie(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
+    if not user_data.username:
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
     client_ip = check_ip_restriction(request, db, user_data.username)
+
+    # Defensive check for casefold
+    username_query = user_data.username
+    if hasattr(username_query, 'casefold'):
+        username_query = username_query.casefold()
 
     _user = (
         db.query(models.User)
-        .filter(models.User.username == user_data.username.casefold())
+        .filter(models.User.username == username_query)
         .first()
     )
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
@@ -184,12 +194,12 @@ def login_cookie(
                  if not totp.verify(user_data.otp_token):
                      record_login_attempt(db, client_ip, user_data.username, False)
                      logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                     raise HTTPException(status_code=400, detail="Invalid 2FA code")
+                     raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
              except Exception as e:
                  logger.error(f"2FA Verify Error: {e}")
                  record_login_attempt(db, client_ip, user_data.username, False)
                  logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
-                 raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
+                 raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
         record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
@@ -202,7 +212,7 @@ def login_cookie(
     else:
         record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
-        raise HTTPException(status_code=400, detail="Invalid Username or Password.")
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
 
 @router.post("/refresh")
