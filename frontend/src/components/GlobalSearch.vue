@@ -95,7 +95,7 @@ export default {
         try {
           // 1. Search running containers (client-side filter as per prompt instructions)
           try {
-            const containersRes = await axios.get('/api/containers')
+            const containersRes = await axios.get('/containers')
             const containers = containersRes.data
             runningContainers.value = containers.filter(c =>
               (c.Names && c.Names[0].toLowerCase().includes(searchQuery.value.toLowerCase())) ||
@@ -111,7 +111,7 @@ export default {
           // 2. Search Templates (via backend match endpoint or fetching all)
           // The prompt used '/api/templates' and filtered client side.
           try {
-             const templatesRes = await axios.get('/api/templates')
+             const templatesRes = await axios.get('/templates')
              const templatesData = templatesRes.data
              templates.value = templatesData.filter(t =>
                t.title.toLowerCase().includes(searchQuery.value.toLowerCase())
@@ -134,11 +134,11 @@ export default {
           // BUT, I'll use the backend proxy `/api/registries/dockerhub/search` if available OR the unified search.
           // Given the prompt also said "Unified Search - Complete Implementation Needed", and "Search API-Integration (DockerHub + lokale Container/Templates)",
           // and "Erwartet: Dropdown mit DockerHub/Template/Running Container Ergebnissen",
-          // I will use the `/api/search` endpoint for Templates and DockerHub because it is designed for this and avoids CORS/Performance issues.
-          // I will keep the containers logic separate as implemented above since `/api/search` might not include running containers.
+          // I will use the `/search` endpoint for Templates and DockerHub because it is designed for this and avoids CORS/Performance issues.
+          // I will keep the containers logic separate as implemented above since `/search` might not include running containers.
 
           try {
-             const searchRes = await axios.get(`/api/search?q=${encodeURIComponent(searchQuery.value)}`)
+             const searchRes = await axios.get(`/search?q=${encodeURIComponent(searchQuery.value)}`)
              // Overwrite templates and dockerhub results with what the backend returns,
              // as it's likely more robust (and avoids fetching ALL templates every keystroke).
              if (searchRes.data.templates) {
