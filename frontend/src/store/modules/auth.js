@@ -32,6 +32,13 @@ const actions = {
     return new Promise((resolve, reject) => {
       commit(AUTH_REQUEST);
       const url = "/auth/login";
+
+      // Fix: Backend expects 'username', but Login.vue sends 'email'.
+      // If username is missing but email exists, map it.
+      if (credentials.email && !credentials.username) {
+        credentials.username = credentials.email;
+      }
+
       axios
         .post(url, credentials, { withCredentials: true })
         .then(resp => {
