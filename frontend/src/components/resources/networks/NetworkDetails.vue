@@ -111,7 +111,7 @@
             Created
           </v-list-item-content>
           <v-list-item-content>
-            {{ network.Created | formatDate }}
+            {{ $formatDate(network.Created) }}
           </v-list-item-content>
         </v-list-item>
         <v-list-item v-if="Object.keys(network.Labels).length > 1">

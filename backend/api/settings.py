@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     SAME_SITE_COOKIES: str = os.environ.get("SAME_SITE_COOKIES", "lax")
     SECURE_COOKIES: bool = os.environ.get("SECURE_COOKIES", "False").lower() == "true"
     DISABLE_AUTH: bool = os.environ.get("DISABLE_AUTH", "False").lower() == "true"
+    # Discourage '*' in production, but keep as default for easy deployment.
     ALLOWED_HOSTS: List[str] = os.environ.get("ALLOWED_HOSTS", "*").split(",")
     # Allowing CORS origins.
     ALLOWED_ORIGINS: List[str] = os.environ.get(

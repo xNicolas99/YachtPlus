@@ -150,7 +150,7 @@
         <template v-slot:item.CreatedAt="{ item }">
           <span
             class="d-inline-block text-truncate flex-grow-1 flex-shrink-0"
-            >{{ item.CreatedAt | formatDate }}</span
+            >{{ $formatDate(item.CreatedAt) }}</span
           >
         </template>
       </v-data-table>

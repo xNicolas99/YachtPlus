@@ -50,9 +50,9 @@
                 Back link required!
                 Perhaps display the description scrollable and add an action
                 "Deploy"
-                {{ item.description ? item.description : "" | truncate(200) }}
+                {{ $truncate(item.description ? item.description : "", 200) }}
               -->
-              {{ item.description ? item.description : "" | truncate(120) }}
+              {{ $truncate(item.description ? item.description : "", 120) }}
             </v-card-text>
 
             <v-card-actions>
