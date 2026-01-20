@@ -200,6 +200,7 @@ async def check_setup_status(request: Request, call_next):
         allowed_prefixes = [
             "/setup",
             "/auth/login", # Need to login to finalize
+            "/auth/register", # Allow registration during setup
             "/auth/me", # Check auth status immediately after login
             "/auth/jwt/login", # Alternate login
             "/auth/2fa", # 2FA setup
