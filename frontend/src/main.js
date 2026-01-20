@@ -7,6 +7,7 @@ import { loadFonts } from './plugins/webfontloader'
 import VueUtils from './plugins/vueutils'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
+import './assets/styles/main.css'
 
 // Load fonts
 loadFonts()

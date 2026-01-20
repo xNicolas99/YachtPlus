@@ -1,8 +1,15 @@
 <template>
   <v-app id="yacht">
-    <Sidebar v-if="isLoggedIn && $vuetify.display.mdAndUp" />
-    <Bottombar v-if="isLoggedIn && $vuetify.display.smAndDown" />
-    <Appbar v-if="isLoggedIn" />
+    <Sidebar
+      v-if="isLoggedIn"
+      v-model="drawer"
+    />
+
+    <Appbar
+      v-if="isLoggedIn"
+      @toggle-drawer="drawer = !drawer"
+    />
+
     <v-main>
       <!-- Provides the application the proper gutter -->
       <v-container fluid>
@@ -24,17 +31,18 @@
 import { mapGetters, mapActions } from "vuex";
 import Sidebar from "./components/nav/Sidebar.vue";
 import Appbar from "./components/nav/Appbar.vue";
-import Bottombar from "./components/nav/Bottombar.vue";
 
 export default {
   name: "App",
 
   components: {
     Sidebar: Sidebar,
-    Appbar: Appbar,
-    Bottombar: Bottombar
+    Appbar: Appbar
   },
   data: () => ({
+    // Initialize drawer to null (Vuetify handles responsive defaults)
+    // or false to ensure closed on mobile load.
+    drawer: null,
     refreshTimer: null,
     inactivityTimer: null,
     lastActivity: Date.now(),
@@ -111,7 +119,6 @@ export default {
       if (this.refreshTimer) clearInterval(this.refreshTimer);
     },
     updateGlobalBackground() {
-      // Stub for now, Vuetify 3 handles theme differently
       document.body.style.backgroundColor = this.$vuetify.theme.global.current.colors.background
     }
   },
@@ -133,9 +140,8 @@ export default {
   mounted() {
     // Basic theme restoration
     const dark_theme = localStorage.getItem("dark_theme");
-    // Fix: direct assignment if not a ref, or handle ref
     const targetTheme = dark_theme == "false" ? 'light' : 'dark';
-    // Check if name is an object (ref) or string
+
     if (typeof this.$vuetify.theme.global.name === 'object' && 'value' in this.$vuetify.theme.global.name) {
       this.$vuetify.theme.global.name.value = targetTheme;
     } else {

@@ -1,0 +1,68 @@
+:root {
+  --v-border-radius: 8px;
+}
+
+/* Transitions */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.slide-enter-from {
+  transform: translateX(10px);
+  opacity: 0;
+}
+.slide-leave-to {
+  transform: translateX(-10px);
+  opacity: 0;
+}
+
+/* Global scrollbar for Webkit */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Utility to remove outline on click */
+button:focus {
+  outline: none;
+}
+
+/* Card hover scaling override if needed */
+.v-card--hover {
+  transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out !important;
+}
+
+.v-card--hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3) !important;
+}
+
+/* Button overrides for emphasis */
+.v-btn--variant-elevated.v-btn--color-primary {
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}

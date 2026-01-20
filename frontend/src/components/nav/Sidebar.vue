@@ -1,42 +1,48 @@
 <template>
   <v-navigation-drawer
     app
-    clipped
-    permanent
-    mini-variant
+    :model-value="modelValue"
+    @update:model-value="$emit('update:modelValue', $event)"
+    :permanent="$vuetify.display.mdAndUp"
+    :temporary="$vuetify.display.smAndDown"
+    :rail="$vuetify.display.mdAndUp"
     expand-on-hover
-    color="secondary"
-    style="transform: translateX(0) !important;"
+    color="surface"
+    class="sidebar-nav"
   >
-    <!-- -->
-
-    <v-list nav dense>
+    <v-list nav density="compact">
       <template v-for="(link, i) in links">
-        <!-- Render divider if present in link object, but only if it's explicitly set to true -->
         <v-divider :key="`divider-${i}`" v-if="link.divider" class="my-4" />
 
+        <!-- Single Link -->
         <v-list-item
           :key="`item-${i}`"
           v-if="!link.subLinks"
           :to="link.to"
           exact
-          class="mt-1"
+          class="nav-item mb-1"
+          active-class="nav-item-active"
+          rounded="lg"
         >
-          <v-list-item-icon>
-            <v-icon>{{ link.icon }}</v-icon>
-          </v-list-item-icon>
-
-          <v-list-item-title v-text="link.text" />
+          <template v-slot:prepend>
+            <v-icon :icon="link.icon"></v-icon>
+          </template>
+          <v-list-item-title class="text-body-2 font-weight-medium">{{ link.text }}</v-list-item-title>
         </v-list-item>
 
+        <!-- Group Link -->
         <v-list-group
           v-else
           :key="`group-${i}`"
-          :prepend-icon="link.icon"
-          :value="false"
+          :value="link.text"
         >
-          <template v-slot:activator>
-            <v-list-item-title>{{ link.text }}</v-list-item-title>
+          <template v-slot:activator="{ props }">
+            <v-list-item v-bind="props" class="nav-item mb-1" rounded="lg">
+              <template v-slot:prepend>
+                 <v-icon :icon="link.icon"></v-icon>
+              </template>
+              <v-list-item-title class="text-body-2 font-weight-medium">{{ link.text }}</v-list-item-title>
+            </v-list-item>
           </template>
 
           <v-list-item
@@ -44,22 +50,30 @@
             :to="sublink.to"
             :key="sublink.text"
             exact
-            class="mb-1"
+            class="nav-item mb-1 pl-6"
+            active-class="nav-item-active"
+            rounded="lg"
           >
-            <v-list-item-icon>
-              <v-icon>{{ sublink.icon }}</v-icon>
-            </v-list-item-icon>
-            <v-list-item-title>{{ sublink.text }}</v-list-item-title>
+            <template v-slot:prepend>
+              <v-icon :icon="sublink.icon" size="small"></v-icon>
+            </template>
+            <v-list-item-title class="text-body-2">{{ sublink.text }}</v-list-item-title>
           </v-list-item>
         </v-list-group>
       </template>
     </v-list>
-    <template v-slot:append> </template>
   </v-navigation-drawer>
 </template>
 
 <script>
 export default {
+  props: {
+    modelValue: {
+      type: Boolean,
+      default: true
+    }
+  },
+  emits: ['update:modelValue'],
   data: () => ({
     links: [
       {
@@ -112,7 +126,7 @@ export default {
         to: "/settings/info",
         icon: "mdi-cog",
         text: "Settings",
-        divider: true // Visual separator before Settings
+        divider: true
       }
     ]
   })
@@ -120,22 +134,27 @@ export default {
 </script>
 
 <style scoped>
-.v-application--is-ltr
-  .v-list--dense.v-list--nav
-  .v-list-group--no-action
-  > .v-list-group__items
-  > .v-list-item {
-  padding: 0 8px;
+.sidebar-nav {
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-/* Active state styling */
-.v-list-item--active {
-  background-color: rgba(255, 255, 255, 0.1) !important;
-  border-left: 4px solid var(--v-primary-base) !important;
+.nav-item {
+  transition: all 0.2s ease-in-out;
 }
 
-/* Ensure the border doesn't mess up padding */
-.v-list-item {
-  border-left: 4px solid transparent;
+.nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item-active {
+  background: rgba(var(--v-theme-primary), 0.15) !important;
+  color: rgb(var(--v-theme-primary)) !important;
+  border-left: 4px solid rgb(var(--v-theme-primary)) !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
+:deep(.v-list-item__prepend) {
+  width: 24px;
 }
 </style>
