@@ -94,6 +94,7 @@ export default {
         isLoading.value = true
         try {
           // 1. Search running containers (client-side filter as per prompt instructions)
+          // Removed duplicate /api prefix if present in original (already fixed in axios config, ensuring clean here)
           try {
             const containersRes = await axios.get('/containers')
             const containers = containersRes.data

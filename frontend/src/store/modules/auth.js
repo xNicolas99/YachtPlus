@@ -17,14 +17,19 @@ const state = {
   status: "",
   username: localStorage.getItem("username") || "",
   authDisabled: null,
-  isSetup: false // Default to false to ensure check is performed
+  isSetup: false, // Default to false to ensure check is performed
+  setupStep: 1, // Setup Wizard Step
+  setupSecret: null, // Temporary storage for 2FA secret
+  setupQrCode: null, // Temporary storage for QR Code
 };
 
 const getters = {
   isAuthenticated: state => !!state.username,
   authStatus: state => state.status,
   getUsername: state => state.username,
-  isSetup: state => state.isSetup
+  isSetup: state => state.isSetup,
+  setupStep: state => state.setupStep,
+  setupQrCode: state => state.setupQrCode
 };
 
 const actions = {
@@ -183,14 +188,44 @@ const actions = {
       })
       .catch(err => {
         console.error("Setup check failed", err);
-        // If check fails (e.g. network error), we might want to fail safe.
-        // But if 404, it means setup endpoint missing? No, 404 handled above.
-        // If 403, it means... disallowed?
-        // Let's assume if check fails, we keep isSetup as false (safe) or true?
-        // If we keep it as false, user is redirected to setup.
-        // If backend is down, setup page won't work either.
-        // But if 404 (endpoint not found), it implies old version?
         commit("SET_SETUP_STATUS", false);
+      });
+  },
+
+  // SETUP ACTIONS
+  SETUP_REGISTER: ({ commit }, user) => {
+    return axios.post("/setup/register", user)
+      .then(resp => {
+        commit("SET_SETUP_STEP", 2);
+        return resp;
+      });
+  },
+
+  SETUP_2FA_GENERATE: ({ commit }) => {
+    return axios.get("/auth/2fa/generate")
+      .then(resp => {
+        commit("SET_SETUP_SECRET", resp.data);
+        return resp;
+      });
+  },
+
+  SETUP_2FA_ENABLE: ({ commit, state }, code) => {
+    return axios.post("/auth/2fa/enable", {
+      secret: state.setupSecret,
+      code: code
+    })
+      .then(resp => {
+        commit("SET_SETUP_STEP", 3);
+        return resp;
+      });
+  },
+
+  SETUP_FINALIZE: ({ commit }) => {
+    return axios.post("/setup/finalize")
+      .then(resp => {
+        commit("SET_SETUP_STATUS", true);
+        commit("SET_SETUP_STEP", 4); // Completed
+        return resp;
       });
   }
 };
@@ -201,6 +236,13 @@ const mutations = {
   },
   SET_SETUP_STATUS: (state, isSetup) => {
     state.isSetup = isSetup;
+  },
+  SET_SETUP_STEP: (state, step) => {
+    state.setupStep = step;
+  },
+  SET_SETUP_SECRET: (state, data) => {
+    state.setupSecret = data.secret;
+    state.setupQrCode = data.qr_code;
   },
   [AUTH_SUCCESS]: (state, resp) => {
     state.status = "success";

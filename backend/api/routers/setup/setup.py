@@ -7,6 +7,7 @@ from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
 from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check
+from api.models.setup import SetupStatus
 import os
 
 router = APIRouter()
@@ -14,28 +15,39 @@ router = APIRouter()
 SETUP_FLAG_FILE = os.environ.get("SETUP_FLAG_FILE", "/config/.setup_completed")
 
 def is_setup_completed(db: Session = None):
-    # 1. Fast check: File existence
+    if not db:
+        # Cannot check without DB
+        if os.path.exists(SETUP_FLAG_FILE):
+             return True
+        return False
+
+    status = db.query(SetupStatus).first()
+    if status and status.is_complete:
+        return True
+
+    # Fallback to file check (legacy/migration)
     if os.path.exists(SETUP_FLAG_FILE):
         return True
 
-    # 2. Robust check: Database users
-    # If file is missing (e.g. container recreation without config persistence,
-    # but DB persists?), check if admin user exists.
-    if db:
-        from api.db.crud.users import get_users
-        users = get_users(db, limit=1)
-        if users:
-            # Self-repair: If DB has users but file missing, restore the file
-            mark_setup_completed()
-            return True
-
     return False
 
-def mark_setup_completed():
-    # Ensure directory exists
-    os.makedirs(os.path.dirname(SETUP_FLAG_FILE), exist_ok=True)
-    with open(SETUP_FLAG_FILE, "w") as f:
-        f.write("Setup completed")
+def mark_setup_completed(db: Session):
+    # Update DB
+    status = db.query(SetupStatus).first()
+    if not status:
+        status = SetupStatus(is_complete=True)
+        db.add(status)
+    else:
+        status.is_complete = True
+    db.commit()
+
+    # Legacy file (optional but good for backwards compatibility)
+    try:
+        os.makedirs(os.path.dirname(SETUP_FLAG_FILE), exist_ok=True)
+        with open(SETUP_FLAG_FILE, "w") as f:
+            f.write("Setup completed")
+    except Exception:
+        pass # Don't fail if filesystem is read-only, we rely on DB now
 
 @router.get("/status")
 def get_setup_status(db: Session = Depends(get_db)):
@@ -55,11 +67,8 @@ def register_first_user(
     existing_user = get_user_by_name(db, user.username)
 
     if existing_user:
-        if not existing_user.is_superuser:
-             # Should not happen during setup unless DB is messy
-             raise HTTPException(status_code=400, detail="User exists but is not admin.")
-
-        # Update existing user credentials/state
+        # If user exists but setup not complete, we allow overwrite/update
+        # This handles the case where setup was aborted halfway
         user_update = UserUpdate(
             username=user.username,
             password=user.password,
@@ -140,5 +149,5 @@ def finalize_setup(
     if not user.is_2fa_enabled:
         raise HTTPException(status_code=400, detail="2FA must be enabled to finalize setup.")
 
-    mark_setup_completed()
+    mark_setup_completed(db)
     return {"message": "Setup finalized"}
