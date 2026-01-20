@@ -74,13 +74,13 @@ export default {
       this.loading = true;
 
       try {
-        await axios.post('/auth/register', {
-          email: this.email,
+        await axios.post('/setup/register', {
+          username: this.email,
           password: this.password
         });
         // After registration, login
         await this.$store.dispatch("auth/AUTH_REQUEST", {
-           email: this.email,
+           username: this.email,
            password: this.password
         });
         this.$router.push("/");
