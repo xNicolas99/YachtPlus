@@ -106,6 +106,12 @@ def login(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
+    if not user_data.username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
+    if not user_data.username:
+        raise HTTPException(status_code=400, detail="Username is required")
+
     client_ip = check_ip_restriction(request, db, user_data.username)
 
     _user = (

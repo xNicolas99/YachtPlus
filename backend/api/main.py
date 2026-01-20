@@ -9,12 +9,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
+from api.utils.security_logging import sanitize_error_message
 from api.db.models.settings import TokenBlacklist
 from api.settings import Settings
 from api.utils.auth import get_db
@@ -149,6 +151,40 @@ app = FastAPI(root_path="/api", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """
+    Overrides the default validation error handler to sanitize sensitive data.
+    Logs the full error server-side, but returns a generic or sanitized message to the client.
+    """
+    # Log the full details for debugging (Server Side)
+    # Be careful not to log sensitive data even in logs if possible, or mark as sensitive.
+    # For now, we follow instructions to log full error server-side.
+    logger.warning(f"Validation Error: {exc.errors()} - Body: {exc.body}")
+
+    # Sanitize the response
+    sanitized_errors = sanitize_error_message(exc.errors())
+
+    # Optionally, just return a generic message as requested in "Beispiel Error Response (nachher)"
+    # The requirement said: "Stattdessen nur generische Meldungen zeigen"
+    # But later it showed "sanitize_error_message" function which strips fields.
+    # The example response showed: {"detail": "Validation error: required field(s) missing or invalid..."}
+    # I will provide a generic detail but keeping the structure allows frontend to know which field failed (without value).
+    # However, strict requirement: "Sensible Felder ... AUS der Error-Response entfernen."
+    # AND "Beispiel Error Response (nachher): { 'detail': 'Validation error...' }"
+
+    # If we return the sanitized_errors list, it might still leak which fields are missing/wrong.
+    # Security best practice for auth is generic.
+    # But for general API use, knowing which field is wrong is helpful.
+    # Since this is a global handler, let's try to be safe but helpful.
+    # The user explicitly gave a generic string example. I should probably stick to that for high security.
+    # "Validation error: required field(s) missing or invalid. Please check your input."
+
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Validation error: required field(s) missing or invalid. Please check your input."}
+    )
+
 # Middleware
 # Handle CORS: If "*" is present in allowed origins, we must use allow_origin_regex
 # to avoid the "AssertionError: Allowed origins cannot be set to ['*'] when allow_credentials=True"
@@ -182,8 +218,16 @@ async def check_setup_status(request: Request, call_next):
     # Use a helper or import from setup module. Since circular imports are risky,
     # we replicate the check or import locally.
     from api.routers.setup.setup import is_setup_completed
+    from api.db.database import SessionLocal
 
-    if not is_setup_completed():
+    # We must use a separate session for middleware to check DB state
+    db = SessionLocal()
+    try:
+        setup_done = is_setup_completed(db)
+    finally:
+        db.close()
+
+    if not setup_done:
         path = request.url.path
 
         # Normalize path: If it starts with /api/, strip it to match our router definitions

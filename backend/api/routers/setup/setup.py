@@ -13,8 +13,23 @@ router = APIRouter()
 
 SETUP_FLAG_FILE = os.environ.get("SETUP_FLAG_FILE", "/config/.setup_completed")
 
-def is_setup_completed():
-    return os.path.exists(SETUP_FLAG_FILE)
+def is_setup_completed(db: Session = None):
+    # 1. Fast check: File existence
+    if os.path.exists(SETUP_FLAG_FILE):
+        return True
+
+    # 2. Robust check: Database users
+    # If file is missing (e.g. container recreation without config persistence,
+    # but DB persists?), check if admin user exists.
+    if db:
+        from api.db.crud.users import get_users
+        users = get_users(db, limit=1)
+        if users:
+            # Self-repair: If DB has users but file missing, restore the file
+            mark_setup_completed()
+            return True
+
+    return False
 
 def mark_setup_completed():
     # Ensure directory exists
@@ -23,8 +38,8 @@ def mark_setup_completed():
         f.write("Setup completed")
 
 @router.get("/status")
-def get_setup_status():
-    return {"is_setup": is_setup_completed()}
+def get_setup_status(db: Session = Depends(get_db)):
+    return {"is_setup": is_setup_completed(db)}
 
 @router.post("/register")
 def register_first_user(
@@ -33,7 +48,7 @@ def register_first_user(
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    if is_setup_completed():
+    if is_setup_completed(db):
          raise HTTPException(status_code=403, detail="Setup already completed.")
 
     # Check if user already exists
@@ -113,7 +128,7 @@ def finalize_setup(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
-    if is_setup_completed():
+    if is_setup_completed(db):
         return {"message": "Setup already completed"}
 
     username = Authorize.get_jwt_subject()
