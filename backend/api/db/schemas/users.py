@@ -20,6 +20,10 @@ class UserCreate(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserLogin(UserCreate):
+    otp_token: Optional[str] = None
+
+
 class UserUpdate(UserBase):
     password: Optional[str] = None
     is_active: Optional[bool] = None

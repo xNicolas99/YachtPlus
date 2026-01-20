@@ -101,24 +101,23 @@ def create_user(
 @limiter.limit("5/minute")
 def login(
     request: Request,
-    user: schemas.UserCreate,
-    otp_token: Optional[str] = Body(None),
+    user_data: schemas.UserLogin = Body(..., embed=False),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
-    client_ip = check_ip_restriction(request, db, user.username)
+    client_ip = check_ip_restriction(request, db, user_data.username)
 
     _user = (
         db.query(models.User)
-        .filter(models.User.username == user.username.casefold())
+        .filter(models.User.username == user_data.username.casefold())
         .first()
     )
-    if _user is not None and crud.verify_password(user.password, _user.hashed_password):
+    if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
 
         # Check 2FA
         if _user.is_2fa_enabled:
-            if not otp_token:
+            if not user_data.otp_token:
                 return {
                     "login": "2fa_required",
                     "username": _user.username
@@ -127,18 +126,18 @@ def login(
                 try:
                     secret = decrypt(_user.otp_secret)
                     totp = pyotp.TOTP(secret)
-                    if not totp.verify(otp_token):
-                        record_login_attempt(db, client_ip, user.username, False)
+                    if not totp.verify(user_data.otp_token):
+                        record_login_attempt(db, client_ip, user_data.username, False)
                         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                         raise HTTPException(status_code=400, detail="Invalid 2FA code")
                 except Exception as e:
                     logger.error(f"2FA Verify Error: {e}")
-                    record_login_attempt(db, client_ip, user.username, False)
+                    record_login_attempt(db, client_ip, user_data.username, False)
                     logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                     raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
         # Success
-        record_login_attempt(db, client_ip, user.username, True)
+        record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
 
         return {
@@ -147,7 +146,7 @@ def login(
             "access_token": access_token,
         }
     else:
-        record_login_attempt(db, client_ip, user.username, False)
+        record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Invalid Username or Password.")
 
@@ -156,38 +155,37 @@ def login(
 def login_cookie(
     request: Request,
     response: Response,
-    user: schemas.UserCreate,
-    otp_token: Optional[str] = Body(None),
+    user_data: schemas.UserLogin = Body(..., embed=False),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
-    client_ip = check_ip_restriction(request, db, user.username)
+    client_ip = check_ip_restriction(request, db, user_data.username)
 
     _user = (
         db.query(models.User)
-        .filter(models.User.username == user.username.casefold())
+        .filter(models.User.username == user_data.username.casefold())
         .first()
     )
-    if _user is not None and crud.verify_password(user.password, _user.hashed_password):
+    if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
         if _user.is_2fa_enabled:
-             if not otp_token:
+             if not user_data.otp_token:
                 return {"login": "2fa_required", "username": _user.username}
 
              try:
                  secret = decrypt(_user.otp_secret)
                  totp = pyotp.TOTP(secret)
-                 if not totp.verify(otp_token):
-                     record_login_attempt(db, client_ip, user.username, False)
+                 if not totp.verify(user_data.otp_token):
+                     record_login_attempt(db, client_ip, user_data.username, False)
                      logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                      raise HTTPException(status_code=400, detail="Invalid 2FA code")
              except Exception as e:
                  logger.error(f"2FA Verify Error: {e}")
-                 record_login_attempt(db, client_ip, user.username, False)
+                 record_login_attempt(db, client_ip, user_data.username, False)
                  logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                  raise HTTPException(status_code=400, detail="Authentication failed (2FA error)")
 
-        record_login_attempt(db, client_ip, user.username, True)
+        record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
         Authorize.set_access_cookies(access_token, response)
         return {
@@ -196,7 +194,7 @@ def login_cookie(
             "access_token": access_token,
         }
     else:
-        record_login_attempt(db, client_ip, user.username, False)
+        record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Invalid Username or Password.")
 
