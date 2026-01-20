@@ -218,8 +218,16 @@ async def check_setup_status(request: Request, call_next):
     # Use a helper or import from setup module. Since circular imports are risky,
     # we replicate the check or import locally.
     from api.routers.setup.setup import is_setup_completed
+    from api.db.database import SessionLocal
 
-    if not is_setup_completed():
+    # We must use a separate session for middleware to check DB state
+    db = SessionLocal()
+    try:
+        setup_done = is_setup_completed(db)
+    finally:
+        db.close()
+
+    if not setup_done:
         path = request.url.path
 
         # Normalize path: If it starts with /api/, strip it to match our router definitions
