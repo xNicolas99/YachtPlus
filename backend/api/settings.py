@@ -60,23 +60,19 @@ def get_or_create_secret_key():
 
 def get_or_create_admin_password():
     """
-    Get ADMIN_PASSWORD from env or generate a random one.
+    Get ADMIN_PASSWORD from env.
+    We no longer auto-generate random passwords to allow the Setup Wizard to function.
     """
     password = os.environ.get("ADMIN_PASSWORD")
     if password:
         return password
 
-    # Generate random password
-    logger.warning("ADMIN_PASSWORD not set in environment. Generating a random password.")
-    password = secrets.token_urlsafe(16)
-    logger.warning(f"GENERATED ADMIN PASSWORD: {password}")
-    logger.warning("Please set ADMIN_PASSWORD in your environment variables to persist this password.")
-    return password
+    return None
 
 class Settings(BaseSettings):
     app_name: str = "Yacht API"
     SECRET_KEY: str = get_or_create_secret_key()
-    ADMIN_PASSWORD: str = get_or_create_admin_password()
+    ADMIN_PASSWORD: Optional[str] = get_or_create_admin_password()
     ADMIN_EMAIL: str = os.environ.get("ADMIN_EMAIL", "admin@yachtplus")
     ACCESS_TOKEN_EXPIRES: int = int(os.environ.get("ACCESS_TOKEN_EXPIRES", 3600)) # 1 Hour
     REFRESH_TOKEN_EXPIRES: int = int(os.environ.get("REFRESH_TOKEN_EXPIRES", 2592000)) # 30 Days
