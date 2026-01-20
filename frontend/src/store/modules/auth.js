@@ -17,7 +17,7 @@ const state = {
   status: "",
   username: localStorage.getItem("username") || "",
   authDisabled: null,
-  isSetup: true // Assume setup by default until checked
+  isSetup: false // Default to false to ensure check is performed
 };
 
 const getters = {
@@ -171,7 +171,15 @@ const actions = {
         commit("SET_SETUP_STATUS", resp.data.is_setup);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Setup check failed", err);
+        // If check fails (e.g. network error), we might want to fail safe.
+        // But if 404, it means setup endpoint missing? No, 404 handled above.
+        // If 403, it means... disallowed?
+        // Let's assume if check fails, we keep isSetup as false (safe) or true?
+        // If we keep it as false, user is redirected to setup.
+        // If backend is down, setup page won't work either.
+        // But if 404 (endpoint not found), it implies old version?
+        commit("SET_SETUP_STATUS", false);
       });
   }
 };
