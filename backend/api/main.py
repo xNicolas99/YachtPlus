@@ -222,15 +222,12 @@ async def add_security_headers(request: Request, call_next):
     # 63072000 seconds = 2 years. Preload enabled.
     response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
 
-    # CSP: Mitigate XSS risks (especially important for Vue 2 EOL).
-    # We allow 'unsafe-inline' for styles because Vuetify 2 uses them heavily.
-    # We allow 'unsafe-eval' for Vue 2 runtime compiler if used (often needed).
-    # Ideally, this should be stricter, but 'self' is a good start.
-    # NOTE: 'unsafe-eval' is REQUIRED for Vue 2 runtime template compilation.
-    # Removing it will break the application. Migration to Vue 3 + Vite is the only permanent fix.
+    # CSP: Mitigate XSS risks.
+    # We allow 'unsafe-inline' for styles because Vuetify 3 uses them.
+    # We have removed 'unsafe-eval' as we have migrated to Vue 3 + Vite (Runtime only).
     csp_policy = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-eval' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: https:; "
         "font-src 'self' data: https:; "

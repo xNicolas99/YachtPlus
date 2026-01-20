@@ -101,7 +101,7 @@
         <span class="ml-2"> {{ item.key_name }} </span>
       </template>
       <template v-slot:item.created_at="{ item }">
-        <span class="CreatedAt"> {{ item.created_at | formatDate }} </span>
+          <span class="CreatedAt"> {{ $formatDate(item.created_at) }} </span>
       </template>
     </v-data-table>
   </v-card>
