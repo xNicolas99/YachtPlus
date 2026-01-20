@@ -133,10 +133,13 @@ export default {
   mounted() {
     // Basic theme restoration
     const dark_theme = localStorage.getItem("dark_theme");
-    if (dark_theme == "false") {
-      this.$vuetify.theme.global.name.value = 'light';
+    // Fix: direct assignment if not a ref, or handle ref
+    const targetTheme = dark_theme == "false" ? 'light' : 'dark';
+    // Check if name is an object (ref) or string
+    if (typeof this.$vuetify.theme.global.name === 'object' && 'value' in this.$vuetify.theme.global.name) {
+      this.$vuetify.theme.global.name.value = targetTheme;
     } else {
-      this.$vuetify.theme.global.name.value = 'dark';
+      this.$vuetify.theme.global.name = targetTheme;
     }
   }
 };

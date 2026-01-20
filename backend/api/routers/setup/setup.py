@@ -11,7 +11,7 @@ import os
 
 router = APIRouter()
 
-SETUP_FLAG_FILE = "/config/.setup_completed"
+SETUP_FLAG_FILE = os.environ.get("SETUP_FLAG_FILE", "/config/.setup_completed")
 
 def is_setup_completed():
     return os.path.exists(SETUP_FLAG_FILE)

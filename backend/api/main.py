@@ -25,7 +25,7 @@ from api.db.schemas.users import UserCreate
 from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
 from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search
-from api.routers.setup import setup
+from api.routers import setup
 from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
 from api.db.models.containers import Template
 from api.services.watchtower import start_scheduler, stop_scheduler
@@ -185,6 +185,12 @@ async def check_setup_status(request: Request, call_next):
 
     if not is_setup_completed():
         path = request.url.path
+
+        # Normalize path: If it starts with /api/, strip it to match our router definitions
+        # This handles cases where Nginx doesn't strip it, or local dev mode
+        if path.startswith("/api/"):
+            path = path[4:] # Remove /api prefix
+
         # Allow setup endpoints, static files (if any served by this app, though nginx handles them usually),
         # and auth endpoints required for setup (like login/token generation).
         # We also need to allow /api/settings/theme probably if used during setup?
@@ -194,6 +200,8 @@ async def check_setup_status(request: Request, call_next):
         allowed_prefixes = [
             "/setup",
             "/auth/login", # Need to login to finalize
+            "/auth/register", # Allow registration during setup
+            "/auth/me", # Check auth status immediately after login
             "/auth/jwt/login", # Alternate login
             "/auth/2fa", # 2FA setup
             "/auth/logout",
