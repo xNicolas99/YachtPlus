@@ -10,7 +10,8 @@ class UserBase(BaseModel):
 
 
 class UserCreate(UserBase):
-    password: Optional[str] = None
+    username: str
+    password: str
     is_active: bool = True
     is_superuser: bool = False
     perm_start: bool = False

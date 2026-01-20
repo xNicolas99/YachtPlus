@@ -43,10 +43,14 @@ const actions = {
           resolve(resp);
         })
         .catch(err => {
+          // Log full error server-side (console), but show generic message to user
+          console.error("[AUTH_REQUEST] Error (logs only):", err.response?.data);
+
           commit(AUTH_ERROR, err);
-          commit("snackbar/setErr", err, { root: true });
+          // Don't show raw error payload to user
+          commit("snackbar/setErr", new Error("Authentication failed. Please check your credentials."), { root: true });
           localStorage.removeItem("username");
-          reject(err);
+          reject(new Error("Authentication failed. Please check your credentials."));
         });
     });
   },
