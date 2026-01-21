@@ -16,7 +16,8 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
-from api.utils.security_logging import sanitize_error_message
+# Use the new error handler
+from api.utils.error_handler import sanitize_error_message
 from api.db.models.settings import TokenBlacklist
 from api.settings import Settings
 from api.utils.auth import get_db
@@ -30,7 +31,9 @@ from api.routers import apps, app_settings, compose, resources, templates, users
 from api.routers import setup
 from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
 from api.db.models.containers import Template
+from api.models.setup import SetupStatus
 from api.services.watchtower import start_scheduler, stop_scheduler
+import os
 import docker.errors
 import requests.exceptions
 
@@ -157,32 +160,22 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     Overrides the default validation error handler to sanitize sensitive data.
     Logs the full error server-side, but returns a generic or sanitized message to the client.
     """
-    # Log the full details for debugging (Server Side)
-    # Be careful not to log sensitive data even in logs if possible, or mark as sensitive.
-    # For now, we follow instructions to log full error server-side.
     logger.warning(f"Validation Error: {exc.errors()} - Body: {exc.body}")
 
-    # Sanitize the response
+    # Check if this is an auth endpoint where we want to be extra generic
+    path = request.url.path
+    if "/auth/login" in path or "/auth/register" in path or "/setup" in path:
+         return JSONResponse(
+            status_code=422,
+            content={"detail": "Validation error: required field(s) missing or invalid. Please check your input."}
+        )
+
+    # For other endpoints, we can be more specific but still sanitized
     sanitized_errors = sanitize_error_message(exc.errors())
-
-    # Optionally, just return a generic message as requested in "Beispiel Error Response (nachher)"
-    # The requirement said: "Stattdessen nur generische Meldungen zeigen"
-    # But later it showed "sanitize_error_message" function which strips fields.
-    # The example response showed: {"detail": "Validation error: required field(s) missing or invalid..."}
-    # I will provide a generic detail but keeping the structure allows frontend to know which field failed (without value).
-    # However, strict requirement: "Sensible Felder ... AUS der Error-Response entfernen."
-    # AND "Beispiel Error Response (nachher): { 'detail': 'Validation error...' }"
-
-    # If we return the sanitized_errors list, it might still leak which fields are missing/wrong.
-    # Security best practice for auth is generic.
-    # But for general API use, knowing which field is wrong is helpful.
-    # Since this is a global handler, let's try to be safe but helpful.
-    # The user explicitly gave a generic string example. I should probably stick to that for high security.
-    # "Validation error: required field(s) missing or invalid. Please check your input."
 
     return JSONResponse(
         status_code=422,
-        content={"detail": "Validation error: required field(s) missing or invalid. Please check your input."}
+        content={"detail": sanitized_errors}
     )
 
 # Middleware
@@ -215,15 +208,31 @@ async def check_setup_status(request: Request, call_next):
     if settings.DISABLE_AUTH is True:
         return await call_next(request)
 
-    # Use a helper or import from setup module. Since circular imports are risky,
-    # we replicate the check or import locally.
-    from api.routers.setup.setup import is_setup_completed
-    from api.db.database import SessionLocal
-
-    # We must use a separate session for middleware to check DB state
+    # Use a separate session for middleware to check DB state
     db = SessionLocal()
+    setup_done = False
     try:
-        setup_done = is_setup_completed(db)
+        # Primary: Check DB
+        setup_status = db.query(SetupStatus).first()
+        if setup_status:
+            setup_done = setup_status.is_complete
+
+        # Fallback: Check file (for old deployments or migration safety)
+        if not setup_done and os.path.exists("/config/.setup_completed"):
+            setup_done = True
+            # Write to DB for future if not present
+            if not setup_status:
+                new_status = SetupStatus(is_complete=True)
+                db.add(new_status)
+                db.commit()
+            elif not setup_status.is_complete:
+                 setup_status.is_complete = True
+                 db.commit()
+    except Exception as e:
+        logger.error(f"Setup check failed: {e}")
+        # Fail safe? Or Fail secure?
+        # If DB is down, we probably can't do much anyway.
+        pass
     finally:
         db.close()
 
@@ -231,31 +240,23 @@ async def check_setup_status(request: Request, call_next):
         path = request.url.path
 
         # Normalize path: If it starts with /api/, strip it to match our router definitions
-        # This handles cases where Nginx doesn't strip it, or local dev mode
         if path.startswith("/api/"):
             path = path[4:] # Remove /api prefix
 
-        # Allow setup endpoints, static files (if any served by this app, though nginx handles them usually),
-        # and auth endpoints required for setup (like login/token generation).
-        # We also need to allow /api/settings/theme probably if used during setup?
-
-        # FIX: The Nginx proxy strips '/api' from the path, so FastAPI sees '/setup/status' instead of '/api/setup/status'.
-        # We must allow paths relative to the FastAPI root.
         allowed_prefixes = [
             "/setup",
-            "/auth/login", # Need to login to finalize
-            "/auth/register", # Allow registration during setup
-            "/auth/me", # Check auth status immediately after login
-            "/auth/jwt/login", # Alternate login
-            "/auth/2fa", # 2FA setup
+            "/auth/login",
+            "/auth/register",
+            "/auth/me",
+            "/auth/jwt/login",
+            "/auth/2fa",
             "/auth/logout",
-            "/auth/users", # Check if users exist (trigger setup wizard)
-            "/settings", # Theme, version, and other non-sensitive settings needed for UI init
-            "/manifest.json", # PWA manifest
-            "/docs", "/openapi.json", "/redoc" # Allow docs for debugging? Maybe restrict in strict mode.
+            "/auth/users",
+            "/settings",
+            "/manifest.json",
+            "/docs", "/openapi.json", "/redoc"
         ]
 
-        # Check if path starts with any allowed prefix
         if not any(path.startswith(prefix) for prefix in allowed_prefixes):
             return JSONResponse(
                 status_code=403,

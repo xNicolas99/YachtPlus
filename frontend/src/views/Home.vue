@@ -1,10 +1,13 @@
 <template>
-  <v-container fluid class="pa-6">
+  <v-container fluid class="pa-6 dashboard-container">
     <!-- Header Section -->
-    <div class="d-flex align-center justify-space-between mb-6">
-      <h1 class="text-h4 font-weight-bold">Dashboard</h1>
+    <div class="d-flex flex-wrap align-center justify-space-between mb-6 gap-2">
+      <div>
+        <h1 class="text-h4 font-weight-bold">Dashboard</h1>
+        <div class="text-subtitle-2 text-medium-emphasis">Overview of your Docker environment</div>
+      </div>
 
-      <div class="d-flex align-center">
+      <div class="d-flex align-center controls-wrapper">
         <!-- Polling Controls -->
         <v-menu>
           <template v-slot:activator="{ props }">
@@ -15,6 +18,7 @@
               v-bind="props"
               prepend-icon="mdi-clock-outline"
               append-icon="mdi-chevron-down"
+              size="small"
             >
               {{ pollingIntervalText }}
             </v-btn>
@@ -36,6 +40,7 @@
           :icon="polling ? 'mdi-pause' : 'mdi-play'"
           :color="polling ? 'warning' : 'success'"
           variant="tonal"
+          size="small"
           class="mr-2"
           @click="togglePolling"
         >
@@ -49,6 +54,7 @@
           icon="mdi-refresh"
           color="primary"
           variant="flat"
+          size="small"
           @click="refresh()"
           :loading="loading"
         >
@@ -58,151 +64,129 @@
       </div>
     </div>
 
-    <!-- Overview Stats Cards -->
-     <!--
-    <v-alert type="info" variant="tonal" class="mb-6 border-dashed">
-      Visualization widgets coming soon.
-    </v-alert>
-    -->
-
+    <!-- KPI Cards Grid -->
     <div class="dashboard-grid mb-8">
-      <v-card class="stat-card" elevation="2">
-        <v-card-text>
-          <div class="text-overline mb-1 text-medium-emphasis">Containers</div>
-          <div class="text-h4 font-weight-bold text-primary">{{ overview.containers.total }}</div>
-          <div class="d-flex mt-2">
-            <v-chip size="x-small" color="success" class="mr-1">{{ overview.containers.running }} Running</v-chip>
-            <v-chip size="x-small" color="error">{{ overview.containers.stopped }} Stopped</v-chip>
+      <!-- Containers KPI -->
+      <v-card class="kpi-card container-kpi" elevation="2">
+        <div class="kpi-icon-wrapper">
+           <span class="kpi-emoji">🐳</span>
+        </div>
+        <div class="kpi-content">
+          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Containers</div>
+          <div class="text-h3 font-weight-bold text-primary mb-1">{{ overview.containers.total }}</div>
+          <div class="d-flex align-center gap-2">
+            <v-chip size="x-small" color="success" variant="flat" class="font-weight-bold">
+              {{ overview.containers.running }} Running
+            </v-chip>
+            <v-chip size="x-small" color="medium-emphasis" variant="tonal">
+              {{ overview.containers.stopped }} Stopped
+            </v-chip>
           </div>
-        </v-card-text>
+        </div>
       </v-card>
 
-      <v-card class="stat-card" elevation="2">
-        <v-card-text>
-          <div class="text-overline mb-1 text-medium-emphasis">Images</div>
-          <div class="text-h4 font-weight-bold text-info">{{ overview.images.total }}</div>
-          <div class="text-caption text-medium-emphasis mt-1">
-            {{ formatBytes(overview.images.total_size) }} Total Size
+      <!-- Images KPI -->
+      <v-card class="kpi-card image-kpi" elevation="2">
+        <div class="kpi-icon-wrapper">
+           <span class="kpi-emoji">📦</span>
+        </div>
+        <div class="kpi-content">
+          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Images</div>
+          <div class="text-h3 font-weight-bold text-info mb-1">{{ overview.images.total }}</div>
+          <div class="text-caption text-medium-emphasis">
+            Total Size: <span class="font-weight-bold text-white">{{ formatBytes(overview.images.total_size) }}</span>
           </div>
-        </v-card-text>
+        </div>
       </v-card>
 
-      <v-card class="stat-card" elevation="2">
-        <v-card-text>
-          <div class="text-overline mb-1 text-medium-emphasis">Volumes</div>
-          <div class="text-h4 font-weight-bold text-warning">{{ overview.volumes.total }}</div>
-          <div class="text-caption text-medium-emphasis mt-1">
-             {{ overview.volumes.unused }} Unused
+      <!-- Volumes KPI -->
+      <v-card class="kpi-card volume-kpi" elevation="2">
+        <div class="kpi-icon-wrapper">
+           <span class="kpi-emoji">💾</span>
+        </div>
+        <div class="kpi-content">
+          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Volumes</div>
+          <div class="text-h3 font-weight-bold text-warning mb-1">{{ overview.volumes.total }}</div>
+          <div class="text-caption text-medium-emphasis">
+             <span class="text-warning font-weight-bold">{{ overview.volumes.unused }}</span> Unused
           </div>
-        </v-card-text>
+        </div>
       </v-card>
 
-      <v-card class="stat-card" elevation="2">
-         <v-card-text>
-          <div class="text-overline mb-1 text-medium-emphasis">Networks</div>
-          <div class="text-h4 font-weight-bold text-secondary">{{ overview.networks.total }}</div>
-           <div class="text-caption text-medium-emphasis mt-1">
+      <!-- Networks KPI -->
+      <v-card class="kpi-card network-kpi" elevation="2">
+        <div class="kpi-icon-wrapper">
+           <span class="kpi-emoji">🌐</span>
+        </div>
+        <div class="kpi-content">
+          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Networks</div>
+          <div class="text-h3 font-weight-bold text-secondary mb-1">{{ overview.networks.total }}</div>
+           <div class="text-caption text-medium-emphasis">
              {{ overview.networks.custom }} Custom
           </div>
-        </v-card-text>
+        </div>
       </v-card>
     </div>
 
-    <!-- Containers Section -->
+    <!-- Active Containers Section -->
     <div class="d-flex align-center mb-4">
       <h2 class="text-h5 font-weight-bold">Active Containers</h2>
-      <v-chip color="primary" size="small" class="ml-3">{{ apps.length }}</v-chip>
+      <v-chip color="primary" size="small" class="ml-3 font-weight-bold" variant="tonal">
+        {{ apps.length }}
+      </v-chip>
     </div>
 
-    <div class="container-grid">
-      <v-card
+    <!-- Empty State -->
+    <v-fade-transition>
+      <div v-if="!loading && apps.length === 0" class="empty-state-wrapper text-center pa-8 border-dashed rounded-lg">
+        <v-icon size="64" color="medium-emphasis" class="mb-4">mdi-docker</v-icon>
+        <h3 class="text-h5 font-weight-medium mb-2">No Containers Running</h3>
+        <p class="text-body-1 text-medium-emphasis mb-6">
+          Your dashboard looks a bit empty. Start a container to see stats here.
+        </p>
+        <div class="d-flex justify-center gap-4">
+          <v-btn color="primary" to="/templates" prepend-icon="mdi-store">
+            Deploy from Templates
+          </v-btn>
+          <v-btn variant="outlined" to="/apps" prepend-icon="mdi-plus">
+            Launch New App
+          </v-btn>
+        </div>
+      </div>
+    </v-fade-transition>
+
+    <!-- Container Grid -->
+    <div v-if="apps.length > 0" class="container-grid">
+      <ContainerCard
         v-for="app in sortByTitle(apps)"
         :key="app.name"
-        class="container-card d-flex flex-column"
-        elevation="2"
+        :container="app"
+        :stats="stats[app.name]"
         @click="handleAppClick(app.name)"
-        link
-      >
-        <v-card-title class="d-flex justify-space-between align-start pt-4 px-4 pb-0">
-          <div class="text-truncate pr-2 font-weight-bold text-body-1" :title="app.name">
-            {{ app.name }}
-          </div>
-          <v-chip
-            :color="getStatusColor(app.State.Status)"
-            size="small"
-            variant="flat"
-            class="font-weight-bold text-uppercase"
-            style="height: 20px; font-size: 0.7rem;"
-          >
-            {{ app.State.Status }}
-          </v-chip>
-        </v-card-title>
-
-        <v-card-text class="pt-4 flex-grow-1">
-          <!-- Stats Present -->
-          <div v-if="stats[app.name]">
-            <!-- CPU -->
-            <div class="d-flex justify-space-between text-caption mb-1">
-              <span class="text-medium-emphasis font-weight-medium">CPU</span>
-              <span :class="`text-${getUsageColor(stats[app.name].cpu_percent)}`">{{ stats[app.name].cpu_percent }}%</span>
-            </div>
-            <v-progress-linear
-              :model-value="stats[app.name].cpu_percent"
-              :color="getUsageColor(stats[app.name].cpu_percent)"
-              height="6"
-              rounded
-              class="mb-3"
-            ></v-progress-linear>
-
-            <!-- MEM -->
-            <div class="d-flex justify-space-between text-caption mb-1">
-              <span class="text-medium-emphasis font-weight-medium">RAM</span>
-              <span :class="`text-${getUsageColor(stats[app.name].mem_percent)}`">{{ stats[app.name].mem_percent }}%</span>
-            </div>
-            <v-progress-linear
-              :model-value="stats[app.name].mem_percent"
-              :color="getUsageColor(stats[app.name].mem_percent)"
-              height="6"
-              rounded
-            ></v-progress-linear>
-
-            <div class="d-flex justify-end mt-1">
-              <span class="text-caption text-disabled" style="font-size: 0.7rem !important;">
-                {{ stats[app.name].mem_current }} / {{ stats[app.name].mem_total }}
-              </span>
-            </div>
-          </div>
-
-          <!-- Stats Loading/Missing -->
-          <div v-else-if="app.State.Status === 'running'" class="d-flex align-center justify-center fill-height" style="min-height: 80px;">
-            <v-progress-circular indeterminate color="primary" size="24"></v-progress-circular>
-            <span class="ml-3 text-caption text-medium-emphasis">Fetching stats...</span>
-          </div>
-
-          <!-- Stopped -->
-          <div v-else class="d-flex align-center justify-center fill-height" style="min-height: 80px;">
-            <v-icon color="disabled" size="large" class="mb-1">mdi-stop-circle-outline</v-icon>
-            <span class="text-caption text-disabled ml-2">Container Offline</span>
-          </div>
-        </v-card-text>
-
-        <!-- Optional Actions Footer could go here -->
-      </v-card>
+        @logs="handleLogs(app.name)"
+        @action="(action) => handleContainerAction(action, app.name)"
+        class="cursor-pointer"
+      />
     </div>
+
   </v-container>
 </template>
 
 <script>
 import { mapActions, mapState } from "vuex";
 import axios from "axios";
+import ContainerCard from "@/components/ContainerCard.vue";
 
 export default {
+  components: {
+    ContainerCard
+  },
   data() {
     return {
       stats: {},
       statsInterval: null,
       polling: true,
-      pollingInterval: 5000, // Default to 5s as requested
+      pollingInterval: 5000,
       loading: false,
       pollingOptions: [
         { text: "2s (Fast)", value: 2000 },
@@ -253,8 +237,6 @@ export default {
       }, this.pollingInterval);
     },
     async pollAll() {
-      // Don't show loading spinner on background polls
-      // this.loading = true;
       await this.fetchOverviewStats();
       try {
         const response = await axios.get("/containers/stats", {
@@ -266,8 +248,6 @@ export default {
           this.apps.forEach(app => {
             const stat = statsData[app.name];
             if (stat) {
-               // Calculate values properly, checking for bytes or MB
-               // Fallback logic for memory_usage if raw bytes missing but MB present
                let memUsage = stat.memory_usage;
                let memLimit = stat.memory_limit;
 
@@ -286,7 +266,6 @@ export default {
                  name: app.name
                };
             } else {
-                // If stopped or no stats yet
                 if(app.State.Status !== 'running') {
                     this.stats[app.name] = null;
                 }
@@ -295,8 +274,6 @@ export default {
         }
       } catch (error) {
         console.error("Failed to fetch global stats", error);
-      } finally {
-        // this.loading = false;
       }
     },
     togglePolling() {
@@ -323,19 +300,24 @@ export default {
     handleAppClick(appName) {
       this.$router.push({ path: `/apps/${appName}/info` });
     },
-    getStatusColor(status) {
-        switch(status.toLowerCase()) {
-            case 'running': return 'success';
-            case 'stopped': return 'grey-darken-1';
-            case 'exited': return 'error';
-            case 'restarting': return 'warning';
-            default: return 'grey';
-        }
+    handleLogs(appName) {
+      // Assuming logs route
+       this.$router.push({ path: `/apps/${appName}/logs` });
     },
-    getUsageColor(percent) {
-        if (percent < 50) return 'success';
-        if (percent < 80) return 'warning';
-        return 'error';
+    async handleContainerAction(action, appName) {
+        try {
+            this.loading = true;
+            await axios.get(`/containers/${appName}/${action}`);
+            // Wait a bit for state to change then refresh
+            setTimeout(() => {
+                this.refresh();
+            }, 1000);
+            this.$store.commit('snackbar/setSnack', { message: `Container ${action}ed successfully.`, color: 'success' }, { root: true });
+        } catch(err) {
+             this.$store.commit('snackbar/setErr', err, { root: true });
+        } finally {
+            this.loading = false;
+        }
     },
     formatBytes(bytes, decimals = 2) {
         if (!+bytes) return '0 B';
@@ -372,36 +354,54 @@ export default {
 <style scoped>
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 1.5rem;
 }
 
 .container-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1.5rem;
 }
 
-.stat-card {
-  transition: transform 0.2s, box-shadow 0.2s;
-  border-radius: 12px;
-}
-.stat-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15) !important;
-}
-
-.container-card {
-  transition: all 0.2s ease-in-out;
-  border-radius: 12px;
+.kpi-card {
+  padding: 1.25rem;
+  border-radius: 16px;
+  display: flex;
+  align-items: flex-start;
+  min-height: 140px;
+  background: linear-gradient(135deg, rgba(30, 30, 46, 0.9) 0%, rgba(20, 20, 35, 0.95) 100%);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  cursor: pointer;
+  position: relative;
+  overflow: hidden;
 }
 
-.container-card:hover {
-  transform: scale(1.02);
-  box-shadow: 0 8px 25px rgba(0,0,0,0.2) !important;
-  z-index: 2;
-  border-color: rgba(var(--v-theme-primary), 0.3);
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(to bottom right, rgba(255,255,255,0.05), transparent);
+  pointer-events: none;
 }
+
+.kpi-icon-wrapper {
+  margin-right: 1rem;
+  padding: 10px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 12px;
+}
+
+.kpi-emoji {
+  font-size: 2rem;
+}
+
+.kpi-content {
+  flex: 1;
+  z-index: 1;
+}
+
+.gap-2 { gap: 0.5rem; }
+.gap-4 { gap: 1rem; }
+.cursor-pointer { cursor: pointer; }
+.border-dashed { border: 1px dashed rgba(255,255,255,0.15); }
 </style>
