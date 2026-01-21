@@ -1,15 +1,42 @@
 <template>
   <v-navigation-drawer
     app
-    :model-value="modelValue"
-    @update:model-value="$emit('update:modelValue', $event)"
-    :permanent="$vuetify.display.mdAndUp"
-    :temporary="$vuetify.display.smAndDown"
-    :rail="$vuetify.display.mdAndUp"
-    expand-on-hover
+    :model-value="drawerOpen"
+    @update:model-value="handleDrawerUpdate"
+    :rail="isRail && !isMobile"
+    :permanent="!isMobile"
+    :temporary="isMobile"
     color="surface"
     class="sidebar-nav"
+    :width="250"
   >
+    <!-- Header with Toggle -->
+    <div class="sidebar-header d-flex align-center px-4 py-3" :class="{ 'justify-center': isRail && !isMobile }">
+      <img
+        v-if="!isRail || isMobile"
+        src="@/assets/logo.png"
+        alt="Logo"
+        height="32"
+        class="mr-2 fade-transition"
+      />
+
+      <v-spacer v-if="!isRail && !isMobile"></v-spacer>
+
+      <!-- Desktop Toggle Button -->
+      <v-btn
+        v-if="!isMobile"
+        icon
+        variant="text"
+        size="small"
+        @click="toggleRail"
+        color="medium-emphasis"
+      >
+        <v-icon>{{ isRail ? 'mdi-chevron-right' : 'mdi-chevron-left' }}</v-icon>
+      </v-btn>
+    </div>
+
+    <v-divider class="mb-2"></v-divider>
+
     <v-list nav density="compact">
       <template v-for="(link, i) in links">
         <v-divider :key="`divider-${i}`" v-if="link.divider" class="my-4" />
@@ -23,6 +50,7 @@
           class="nav-item mb-1"
           active-class="nav-item-active"
           rounded="lg"
+          :title="link.text"
         >
           <template v-slot:prepend>
             <v-icon :icon="link.icon"></v-icon>
@@ -37,7 +65,7 @@
           :value="link.text"
         >
           <template v-slot:activator="{ props }">
-            <v-list-item v-bind="props" class="nav-item mb-1" rounded="lg">
+            <v-list-item v-bind="props" class="nav-item mb-1" rounded="lg" :title="link.text">
               <template v-slot:prepend>
                  <v-icon :icon="link.icon"></v-icon>
               </template>
@@ -53,6 +81,7 @@
             class="nav-item mb-1 pl-6"
             active-class="nav-item-active"
             rounded="lg"
+            :title="sublink.text"
           >
             <template v-slot:prepend>
               <v-icon :icon="sublink.icon" size="small"></v-icon>
@@ -70,11 +99,12 @@ export default {
   props: {
     modelValue: {
       type: Boolean,
-      default: true
+      default: true // Controls visibility on mobile (drawer open/close)
     }
   },
   emits: ['update:modelValue'],
   data: () => ({
+    isRail: false, // Controls collapsed/expanded state on desktop
     links: [
       {
         to: "/",
@@ -129,13 +159,42 @@ export default {
         divider: true
       }
     ]
-  })
+  }),
+  computed: {
+    isMobile() {
+        return this.$vuetify.display.smAndDown;
+    },
+    drawerOpen() {
+        return this.modelValue;
+    }
+  },
+  methods: {
+      handleDrawerUpdate(val) {
+          this.$emit('update:modelValue', val);
+      },
+      toggleRail() {
+          this.isRail = !this.isRail;
+          localStorage.setItem('sidebar_collapsed', this.isRail);
+      }
+  },
+  created() {
+      // Restore expanded/collapsed state from local storage on desktop
+      const collapsed = localStorage.getItem('sidebar_collapsed');
+      if (collapsed !== null) {
+          this.isRail = collapsed === 'true';
+      }
+  }
 };
 </script>
 
 <style scoped>
 .sidebar-nav {
   border-right: 1px solid rgba(255, 255, 255, 0.05);
+  transition: width 0.3s ease, transform 0.3s ease;
+}
+
+.sidebar-header {
+  height: 64px; /* Match standard app bar height */
 }
 
 .nav-item {
@@ -154,7 +213,17 @@ export default {
   border-bottom-left-radius: 0 !important;
 }
 
+/* Fix icon size in collapsed mode */
 :deep(.v-list-item__prepend) {
   width: 24px;
+}
+
+.fade-transition {
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 </style>
