@@ -2,6 +2,14 @@ from sqlalchemy import Column, String, Boolean, DateTime, Integer
 from api.db.database import Base
 
 
+class Settings(Base):
+    __tablename__ = "settings"
+    id = Column(Integer, primary_key=True, index=True)
+    # Generic settings model placeholder if needed by import references
+    # Currently populated to satisfy imports expecting 'Settings' class
+    # Real settings might be in api.settings (Pydantic) but this handles DB side.
+
+
 class SecretKey(Base):
     __tablename__ = "secret_key"
     key = Column(String, primary_key=True, index=True)

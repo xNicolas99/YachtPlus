@@ -39,6 +39,9 @@
                 <v-tab class="text-left">
                   <v-icon left class="mr-1">mdi-shield-lock</v-icon>Security
                 </v-tab>
+                <v-tab class="text-left">
+                  <v-icon left class="mr-1">mdi-history</v-icon>Audit Logs
+                </v-tab>
               </v-tabs>
               <transition
                 name="slide"
@@ -69,6 +72,9 @@
                   <v-tab-item>
                     <TwoFactor @notify="notify" />
                   </v-tab-item>
+                  <v-tab-item>
+                    <AuditLogs />
+                  </v-tab-item>
                 </v-tabs-items>
               </transition>
             </div>
@@ -96,6 +102,7 @@ import Prune from "../components/serverSettings/Prune";
 import Update from "../components/serverSettings/ServerUpdate";
 import SMTPSettings from "../components/settings/SMTPSettings";
 import TwoFactor from "../components/settings/TwoFactor";
+import AuditLogs from "../components/serverSettings/AuditLogs.vue";
 
 export default {
   components: {
@@ -105,7 +112,8 @@ export default {
     Prune,
     Update,
     SMTPSettings,
-    TwoFactor
+    TwoFactor,
+    AuditLogs
   },
   data() {
     return {

@@ -41,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx \
     curl \
     procps \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker Compose 2.x as a standalone binary
@@ -80,6 +81,6 @@ EXPOSE 8080
 COPY --chown=appuser:appuser backend/start.sh /start.sh
 RUN chmod +x /start.sh
 
-# Run as appuser
-USER appuser
+# Run as root (start.sh handles dropping privileges)
+USER root
 CMD ["/start.sh"]

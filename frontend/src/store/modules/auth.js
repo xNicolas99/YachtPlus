@@ -40,6 +40,7 @@ const actions = {
 
       // Fix: Backend expects 'username', but Login.vue sends 'email'.
       // If username is missing but email exists, map it.
+      // Verified: This mapping is required for OAuth2PasswordRequestForm compatibility.
       if (credentials.email && !credentials.username) {
         credentials.username = credentials.email;
       }
