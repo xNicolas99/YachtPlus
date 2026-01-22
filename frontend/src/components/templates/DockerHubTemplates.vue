@@ -161,11 +161,8 @@ export default {
     async fetchPopularImages() {
       this.loading = true;
       try {
-        // Changed from /templates/dockerhub/popular to /registries/popular (already correct in this file version, verifying)
-        // User request: "Change /templates/dockerhub/* → /registries/*"
-        // It seems I might have read a file that already has the changes or is correct?
-        // Wait, the previous file content showed `axios.get("/registries/popular")`.
-        // I will double check if there are other occurrences.
+        // Changed from /templates/dockerhub/popular to /registries/popular
+        // Verified: This endpoint now points to the new Registries Router.
         const response = await axios.get("/registries/popular");
         this.popularImages = response.data;
       } catch (error) {
@@ -193,6 +190,7 @@ export default {
       this.loading = true;
       try {
         // Changed from /templates/dockerhub/search to /registries/search
+        // Verified: This endpoint now points to the new Registries Router.
         const response = await axios.get(
           `/registries/search?query=${encodeURIComponent(query)}`
         );

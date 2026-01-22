@@ -104,6 +104,31 @@ async def lifespan(app: FastAPI):
 
         if users_exist:
             logger.info("Users Exist")
+            # Auto-Discovery: If users exist, ensure setup is marked as complete.
+            # This handles cases where the volume is persistent but the flag file is missing.
+            try:
+                setup_status = db.query(SetupStatus).first()
+                if not setup_status:
+                    setup_status = SetupStatus(is_complete=True)
+                    db.add(setup_status)
+                    db.commit()
+                    logger.info("Auto-Discovery: Created SetupStatus entry for existing users.")
+                elif not setup_status.is_complete:
+                    setup_status.is_complete = True
+                    db.commit()
+                    logger.info("Auto-Discovery: Updated SetupStatus to complete for existing users.")
+
+                # Ensure legacy marker file exists
+                if not os.path.exists("/config/.setup_completed"):
+                    try:
+                        os.makedirs("/config", exist_ok=True)
+                        with open("/config/.setup_completed", "w") as f:
+                            f.write("Setup completed")
+                        logger.info("Auto-Discovery: Created .setup_completed marker file.")
+                    except OSError as e:
+                        logger.warning(f"Auto-Discovery: Failed to create marker file: {e}")
+            except Exception as e:
+                logger.error(f"Auto-Discovery Error: {e}")
 
         template_variables_exist = read_template_variables(db)
         if template_variables_exist:
