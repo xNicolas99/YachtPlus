@@ -60,71 +60,22 @@
 export default {
   data() {
     return {
-      color_toggle: null,
+      color_toggle: null, // Kept for compatibility per request
       selectedPreset: null,
+      primaryColor: null,
+      secondaryColor: null,
       presets: {
         Ocean: {
-          dark: {
-            primary: "#00E5FF", // Cyan A400
-            secondary: "#1E293B", // Slate 800
-            background: "#0F172A", // Slate 900
-            foreground: "#1E293B",
-            tabs: "#1E293B",
-            accent: "#10B981",
-            error: "#EF4444",
-            info: "#3B82F6",
-            success: "#10B981",
-            warning: "#F59E0B"
-          },
-          light: {
-            primary: "#0EA5E9",
-            secondary: "#F1F5F9",
-            background: "#FFFFFF",
-            foreground: "#FFFFFF",
-            tabs: "#FFFFFF"
-          }
+          primary: "#0EA5E9",
+          secondary: "#1E293B"
         },
         Forest: {
-          dark: {
-            primary: "#66BB6A", // Green 400
-            secondary: "#2E4C2E", // Dark Green
-            background: "#1B2E1B", // Deep Green
-            foreground: "#2E4C2E",
-            tabs: "#2E4C2E",
-            accent: "#10B981",
-            error: "#EF4444",
-            info: "#3B82F6",
-            success: "#10B981",
-            warning: "#F59E0B"
-          },
-          light: {
-            primary: "#2E7D32",
-            secondary: "#E8F5E9",
-            background: "#FFFFFF",
-            foreground: "#FFFFFF",
-            tabs: "#FFFFFF"
-          }
+          primary: "#2E7D32",
+          secondary: "#E8F5E9"
         },
         Sunset: {
-          dark: {
-            primary: "#FF7043", // Deep Orange 400
-            secondary: "#4A274A", // Dark Purple
-            background: "#2D1B2E", // Deep Purple/Brown
-            foreground: "#4A274A",
-            tabs: "#4A274A",
-            accent: "#10B981",
-            error: "#EF4444",
-            info: "#3B82F6",
-            success: "#10B981",
-            warning: "#F59E0B"
-          },
-          light: {
-            primary: "#F4511E",
-            secondary: "#FCE4EC",
-            background: "#FFFFFF",
-            foreground: "#FFFFFF",
-            tabs: "#FFFFFF"
-          }
+          primary: "#F4511E",
+          secondary: "#FCE4EC"
         }
       }
     };
