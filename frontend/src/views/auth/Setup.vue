@@ -4,7 +4,7 @@
       <v-col cols="12" sm="8" md="4">
         <v-card class="elevation-12">
           <v-toolbar color="primary" dark flat>
-            <v-toolbar-title>Setup Yacht - Step {{ currentStep }} of 3</v-toolbar-title>
+            <v-toolbar-title>Setup YachtPlus - Step {{ currentStep }} of 3</v-toolbar-title>
           </v-toolbar>
 
           <v-window v-model="currentStep">
@@ -78,7 +78,7 @@
               <v-card-text class="text-center">
                 <v-icon color="success" size="64" class="mb-4">mdi-check-circle</v-icon>
                 <h2>Setup Complete!</h2>
-                <p>Yacht has been successfully configured.</p>
+                <p>YachtPlus has been successfully configured.</p>
                 <p class="caption">Redirecting to login...</p>
               </v-card-text>
             </v-window-item>
