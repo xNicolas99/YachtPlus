@@ -52,7 +52,7 @@ const actions = {
   },
   readImage({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/images/${id}`;
+    const url = `/resources/images/${id}`;
     axios
       .get(url)
       .then(response => {
@@ -85,7 +85,7 @@ const actions = {
   },
   updateImage({ commit, dispatch }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/images/${id}/pull`;
+    const url = `/resources/images/${id}/pull`;
     axios
       .get(url)
       .then(response => {
@@ -102,7 +102,7 @@ const actions = {
   },
   deleteImage({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/images/${id}`;
+    const url = `/resources/images/${id}`;
     axios
       .delete(url)
       .then(response => {

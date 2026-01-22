@@ -2,6 +2,7 @@ from fastapi import HTTPException
 import aiodocker
 import asyncio
 import logging
+import psutil
 from api.utils.compose import find_yml_files
 from api.settings import Settings
 
@@ -24,6 +25,25 @@ async def get_dashboard_stats():
     volumes = []
     networks = []
 
+    # System Resources
+    try:
+        cpu_percent = psutil.cpu_percent()
+        mem = psutil.virtual_memory()
+        resources = {
+            "cpu": cpu_percent,
+            "ram": mem.percent,
+            "ram_total": mem.total,
+            "ram_used": mem.used
+        }
+    except Exception as e:
+        logger.error(f"Error fetching system resources: {e}")
+        resources = {
+            "cpu": 0,
+            "ram": 0,
+            "ram_total": 0,
+            "ram_used": 0
+        }
+
     # Increase timeout for Docker stats collection
     # We split this into two parts: Critical (Containers) and Secondary (Images, Volumes, Networks)
     # If Secondary fails, we still return Containers.
@@ -44,7 +64,8 @@ async def get_dashboard_stats():
                 "projects": {"total": 0, "active": 0, "inactive": 0},
                 "images": {"total": 0, "used": 0, "dangling": 0, "total_size": 0},
                 "volumes": {"total": 0, "in_use": 0, "unused": 0},
-                "networks": {"total": 0, "custom": 0, "default": 0}
+                "networks": {"total": 0, "custom": 0, "default": 0},
+                "resources": resources
             }
 
         # Part 2: Secondary - Images, Volumes, Networks
@@ -192,5 +213,6 @@ async def get_dashboard_stats():
             "total": len(networks),
             "custom": custom_networks,
             "default": default_networks
-        }
+        },
+        "resources": resources
     }

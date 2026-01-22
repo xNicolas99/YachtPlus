@@ -83,7 +83,7 @@ const actions = {
     await commit("setAction", "Checking for updates...");
     await Promise.all(
       apps.map(async _app => {
-        let url = `/api/apps/${_app.name}/updates`;
+        let url = `/apps/${_app.name}/updates`;
         await axios
           .get(url)
           .then(response => {
@@ -104,7 +104,7 @@ const actions = {
     });
   },
   readApp({ commit }, Name) {
-    const url = `/api/apps/${Name}`;
+    const url = `/apps/${Name}`;
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios
@@ -123,7 +123,7 @@ const actions = {
     });
   },
   async readAppProcesses({ commit }, Name) {
-    const url = `/api/apps/${Name}/processes`;
+    const url = `/apps/${Name}/processes`;
     try {
       let response = await axios.get(url);
       if (response) {
@@ -135,7 +135,7 @@ const actions = {
     }
   },
   async readAppLogs({ commit }, Name) {
-    let url = `/api/apps/${Name}/logs`;
+    let url = `/apps/${Name}/logs`;
     axios
       .get(url)
       .then(response => {
@@ -157,7 +157,7 @@ const actions = {
     commit("setLoading", true);
     commit("setAction", "Updating " + Name + " ...");
     console.log("Update started for " + Name + ", please wait...");
-    const url = `/api/apps/${Name}/update`;
+    const url = `/apps/${Name}/update`;
     axios
       .get(url)
       .then(response => {
@@ -183,7 +183,7 @@ const actions = {
       Action.charAt(0).toUpperCase() + Action.slice(1) + "ing " + Name + "..."
     );
 
-    const url = `/api/apps/actions/${Name}/${Action}`;
+    const url = `/apps/actions/${Name}/${Action}`;
     axios
       .get(url)
       .then(response => {

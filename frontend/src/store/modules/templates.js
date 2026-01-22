@@ -69,7 +69,7 @@ const actions = {
       .then(response => {
         const templates = response.data;
         templates.forEach(function(template) {
-          let temp_url = `/api/templates/${template.id}`;
+          let temp_url = `/templates/${template.id}`;
           axios
             .get(temp_url)
             .then(response => {
@@ -90,7 +90,7 @@ const actions = {
   },
   readTemplate({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/templates/${id}`;
+    const url = `/templates/${id}`;
     axios
       .get(url)
       .then(response => {
@@ -123,7 +123,7 @@ const actions = {
   },
   updateTemplate({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/templates/${id}/refresh`;
+    const url = `/templates/${id}/refresh`;
     axios
       .get(url)
       .then(response => {
@@ -139,7 +139,7 @@ const actions = {
   },
   deleteTemplate({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/templates/${id}`;
+    const url = `/templates/${id}`;
     axios
       .delete(url)
       .then(response => {
@@ -154,7 +154,7 @@ const actions = {
       });
   },
   readTemplateApp({ commit }, Name) {
-    const url = `/api/templates/app/${Name}`;
+    const url = `/templates/app/${Name}`;
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios

@@ -73,7 +73,7 @@ const actions = {
   },
   readVolume({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/volumes/${id}`;
+    const url = `/resources/volumes/${id}`;
     axios
       .get(url)
       .then(response => {
@@ -122,7 +122,7 @@ const actions = {
   },
   deleteVolume({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/volumes/${id}`;
+    const url = `/resources/volumes/${id}`;
     axios
       .delete(url)
       .then(response => {
