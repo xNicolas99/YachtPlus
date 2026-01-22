@@ -27,11 +27,11 @@ from api.db.database import SessionLocal, engine
 from api.db.schemas.users import UserCreate
 from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
-from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search
+from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search, audit
 from api.routers import setup
 from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
 from api.db.models.containers import Template
-from api.models.setup import SetupStatus
+from api.db.models.setup import SetupStatus
 from api.services.watchtower import start_scheduler, stop_scheduler
 import os
 import docker.errors
@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     # 2. Scheduler Locking (Concurrency Control)
-    scheduler_lock_file = "/tmp/yacht_scheduler.lock"
+    scheduler_lock_file = "/tmp/yachtplus_scheduler.lock"
     scheduler_lock_fp = open(scheduler_lock_file, "w")
     try:
         # Try to acquire an exclusive non-blocking lock
@@ -385,6 +385,7 @@ app.include_router(app_settings.router, prefix="/settings", tags=["settings"])
 app.include_router(setup.router, prefix="/setup", tags=["setup"])
 app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(search.router, prefix="/search", tags=["search"])
+app.include_router(audit.router, prefix="/audit", tags=["audit"])
 
 if __name__ == "__main__":
     # FIX: Use 'api.main:app' to ensure correct module resolution when running via python -m

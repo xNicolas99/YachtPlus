@@ -286,7 +286,7 @@
                     >
                       <v-text-field
                         label="Host"
-                        placeholder="/yacht/image/share"
+                        placeholder="/yachtplus/image/share"
                         v-model="item['bind']"
                         :error-messages="errors"
                         :success="valid"
@@ -944,7 +944,7 @@ export default {
           continue;
         }
         var proto = _port[1] || "";
-        var label = app.Config.Labels[`local.yacht.port.${hport}`] || "";
+        var label = app.Config.Labels[`local.yachtplus.port.${hport}`] || "";
         let port_entry = {
           cport: cport,
           hport: hport,
@@ -1138,7 +1138,7 @@ export default {
               // Generate a random string for unique volume names
               const rand = Math.random().toString(36).substring(2, 8);
               this.form.volumes = Object.keys(data.Volumes).map(v => {
-                return { container: v, bind: `yacht_${namePart}_${rand}_${v.replace(/\//g, '_')}` };
+                return { container: v, bind: `yachtplus_${namePart}_${rand}_${v.replace(/\//g, '_')}` };
               });
             }
           }
