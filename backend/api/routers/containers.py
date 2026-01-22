@@ -10,11 +10,21 @@ import jwt
 import json
 from datetime import datetime, timedelta
 from api.settings import Settings
+from sqlalchemy.orm import Session
+from api.db.database import SessionLocal
+from api.utils.audit import log_activity
 
 logger = logging.getLogger(__name__)
 settings = Settings()
 
 router = APIRouter()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 @router.get("/stats")
 async def get_all_container_stats(
@@ -63,6 +73,91 @@ async def get_container_stats(
     """
     auth_check(Authorize)
     return await actions.get_stats(container_id)
+
+@router.post("/{container_id}/start")
+async def start_container(
+    container_id: str,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    user = Authorize.get_jwt_subject()
+
+    # Perform action
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        container = await docker.containers.get(container_id)
+        await container.start()
+        log_activity(db, user=user, action="start", resource=container_id)
+        return {"message": "Container started"}
+    except Exception as e:
+        logger.error(f"Error starting container {container_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await docker.close()
+
+@router.post("/{container_id}/stop")
+async def stop_container(
+    container_id: str,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    user = Authorize.get_jwt_subject()
+
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        container = await docker.containers.get(container_id)
+        await container.stop()
+        log_activity(db, user=user, action="stop", resource=container_id)
+        return {"message": "Container stopped"}
+    except Exception as e:
+        logger.error(f"Error stopping container {container_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await docker.close()
+
+@router.post("/{container_id}/restart")
+async def restart_container(
+    container_id: str,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    user = Authorize.get_jwt_subject()
+
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        container = await docker.containers.get(container_id)
+        await container.restart()
+        log_activity(db, user=user, action="restart", resource=container_id)
+        return {"message": "Container restarted"}
+    except Exception as e:
+        logger.error(f"Error restarting container {container_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await docker.close()
+
+@router.delete("/{container_id}")
+async def delete_container(
+    container_id: str,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    auth_check(Authorize)
+    user = Authorize.get_jwt_subject()
+
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        container = await docker.containers.get(container_id)
+        await container.delete(force=True)
+        log_activity(db, user=user, action="delete", resource=container_id)
+        return {"message": "Container deleted"}
+    except Exception as e:
+        logger.error(f"Error deleting container {container_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        await docker.close()
 
 @router.websocket("/{container_id}/exec")
 async def container_exec(

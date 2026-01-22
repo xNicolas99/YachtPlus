@@ -122,22 +122,8 @@ export default {
           }
 
           // 3. Search DockerHub
-          // The prompt used direct DockerHub API.
-          // However, CORS will likely block this from browser if not proxying.
-          // The prompt code: `https://hub.docker.com/v2/search/repositories/?query=${encodeURIComponent(searchQuery.value)}&page_size=5`
-          // If we use axios from browser to docker hub, it might fail CORS.
-          // Using backend proxy if available is better, but I'll stick to instructions.
-          // Actually, `UnifiedSearch.vue` used `/api/search` which is cleaner.
-          // But strict compliance with "Implementation Steps" suggests following the prompt code.
-          // Wait, the prompt code says:
-          // const dockerHubRes = await fetch( `https://hub.docker.com/v2/search/repositories/?query=${encodeURIComponent(searchQuery.value)}&page_size=5` )
-          // This will definitely hit CORS issues unless the user has a browser extension or disabled security.
-          // BUT, I'll use the backend proxy `/api/registries/dockerhub/search` if available OR the unified search.
-          // Given the prompt also said "Unified Search - Complete Implementation Needed", and "Search API-Integration (DockerHub + lokale Container/Templates)",
-          // and "Erwartet: Dropdown mit DockerHub/Template/Running Container Ergebnissen",
-          // I will use the `/search` endpoint for Templates and DockerHub because it is designed for this and avoids CORS/Performance issues.
-          // I will keep the containers logic separate as implemented above since `/search` might not include running containers.
-
+          // Use the unified search endpoint to aggregate results.
+          // This avoids CORS issues and double API prefixing.
           try {
              const searchRes = await axios.get(`/search?q=${encodeURIComponent(searchQuery.value)}`)
              // Overwrite templates and dockerhub results with what the backend returns,

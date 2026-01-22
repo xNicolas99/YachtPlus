@@ -12,6 +12,7 @@ from api.auth.auth import auth_check, check_permission
 from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
 
 from api.auth.jwt import get_auth_wrapper
+from api.utils.audit import log_activity
 import aiodocker
 import json
 import asyncio
@@ -82,6 +83,13 @@ async def container_actions(app_name, action, background_tasks: BackgroundTasks,
     elif action == "kill" or action == "remove":
         check_permission("perm_delete", Authorize, db)
 
+    # Audit Log
+    try:
+        user = Authorize.get_jwt_subject()
+        log_activity(db, user=user, action=action, resource=app_name)
+    except Exception as e:
+        print(f"Audit Log Error: {e}")
+
     return await actions.app_action(app_name, action, background_tasks)
 
 @router.post("/deploy", response_model=schemas.DeployLogs)
@@ -111,6 +119,13 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
 
     if isinstance(result, dict) and result.get("success") is False:
         return JSONResponse(status_code=409, content=result)
+
+    # Audit Log
+    try:
+        user = Authorize.get_jwt_subject()
+        log_activity(db, user=user, action="deploy", resource=template.name, details=f"Image: {template.image}")
+    except Exception as e:
+        print(f"Audit Log Error: {e}")
 
     return result
 
