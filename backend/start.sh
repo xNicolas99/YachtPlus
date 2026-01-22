@@ -21,13 +21,6 @@ echo "Starting Application as appuser (UID 1000)..."
 
 exec gosu appuser /bin/bash -c '
 set -e
-
-# Prepare logs
-touch /var/log/nginx/access.log /var/log/nginx/error.log
-# Pipe logs to stdout/stderr in background so docker logs still works
-tail -F /var/log/nginx/access.log &
-tail -F /var/log/nginx/error.log >&2 &
-
 echo "Starting Nginx..."
 nginx
 
