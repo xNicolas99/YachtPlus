@@ -80,6 +80,27 @@ export default {
       }
     };
   },
+  data() {
+    return {
+      selectedPreset: null,
+      primaryColor: null,
+      secondaryColor: null,
+      presets: {
+        Ocean: {
+          primary: "#0EA5E9",
+          secondary: "#1E293B"
+        },
+        Forest: {
+          primary: "#2E7D32",
+          secondary: "#E8F5E9"
+        },
+        Sunset: {
+          primary: "#F4511E",
+          secondary: "#FCE4EC"
+        }
+      }
+    };
+  },
   mounted() {
     const currentTheme = this.$vuetify.theme.global.current;
     this.primaryColor = currentTheme.colors.primary;
