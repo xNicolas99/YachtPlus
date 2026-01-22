@@ -76,7 +76,7 @@ const actions = {
       });
   },
   readProject({ commit }, Name) {
-    const url = `/api/compose/${Name}`;
+    const url = `/compose/${Name}`;
     commit("setLoading", true);
     return new Promise((resolve, reject) => {
       axios
@@ -116,7 +116,7 @@ const actions = {
   ProjectAction({ commit, dispatch }, { Name, Action }) {
     commit("setLoading", true);
     commit("setAction", Action);
-    const url = `/api/compose/${Name}/actions/${Action}`;
+    const url = `/compose/${Name}/actions/${Action}`;
     axios
       .get(url)
       .then(response => {
@@ -138,7 +138,7 @@ const actions = {
   ProjectAppAction({ commit, dispatch }, { Project, Name, Action }) {
     commit("setLoading", true);
     commit("setAction", Action);
-    const url = `/api/compose/${Project}/actions/${Action}/${Name}`;
+    const url = `/compose/${Project}/actions/${Action}/${Name}`;
     axios
       .get(url)
       .then(response => {

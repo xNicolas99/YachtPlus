@@ -89,7 +89,7 @@ export default {
       }
     },
     submitCompose() {
-      let url = `/api/compose/${this.form.name}/edit`;
+      let url = `/compose/${this.form.name}/edit`;
       axios
         .post(url, this.form, {})
         .then(response => {

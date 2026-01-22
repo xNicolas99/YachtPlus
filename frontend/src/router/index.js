@@ -55,6 +55,7 @@ import ServerVariables from "../components/serverSettings/ServerVariables.vue";
 import Prune from "../components/serverSettings/Prune.vue";
 import ServerUpdate from "../components/serverSettings/ServerUpdate.vue";
 import Theme from "../components/serverSettings/Theme.vue";
+import AuditLogs from "../components/serverSettings/AuditLogs.vue";
 import UserManagement from "../views/UserManagement.vue";
 
 const routes = [
@@ -214,12 +215,17 @@ const routes = [
         component: ServerVariables
       },
       {
+        name: "Audit Logs",
+        path: "audit",
+        component: AuditLogs
+      },
+      {
         name: "Prune",
         path: "prune",
         component: Prune
       },
       {
-        name: "Update Yacht",
+        name: "Update YachtPlus",
         path: "update",
         component: ServerUpdate
       }

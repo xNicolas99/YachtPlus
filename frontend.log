@@ -1,0 +1,11 @@
+
+> yachtplus@2.0.0 dev
+> vite
+
+[33mThe CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.[39m
+Port 8080 is in use, trying another one...
+
+  VITE v5.4.21  ready in 485 ms
+
+  ➜  Local:   http://localhost:8081/
+  ➜  Network: use --host to expose

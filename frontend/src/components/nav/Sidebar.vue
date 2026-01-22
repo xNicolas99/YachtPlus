@@ -50,12 +50,9 @@
           class="nav-item mb-1"
           active-class="nav-item-active"
           rounded="lg"
-          :title="link.text"
+          :prepend-icon="link.icon"
+          :title="isRail ? '' : link.text"
         >
-          <template v-slot:prepend>
-            <v-icon :icon="link.icon"></v-icon>
-          </template>
-          <v-list-item-title class="text-body-2 font-weight-medium">{{ link.text }}</v-list-item-title>
         </v-list-item>
 
         <!-- Group Link -->
@@ -65,11 +62,13 @@
           :value="link.text"
         >
           <template v-slot:activator="{ props }">
-            <v-list-item v-bind="props" class="nav-item mb-1" rounded="lg" :title="link.text">
-              <template v-slot:prepend>
-                 <v-icon :icon="link.icon"></v-icon>
-              </template>
-              <v-list-item-title class="text-body-2 font-weight-medium">{{ link.text }}</v-list-item-title>
+            <v-list-item
+              v-bind="props"
+              class="nav-item mb-1"
+              rounded="lg"
+              :prepend-icon="link.icon"
+              :title="isRail ? '' : link.text"
+            >
             </v-list-item>
           </template>
 
@@ -81,12 +80,9 @@
             class="nav-item mb-1 pl-6"
             active-class="nav-item-active"
             rounded="lg"
-            :title="sublink.text"
+            :prepend-icon="sublink.icon"
+            :title="isRail ? '' : sublink.text"
           >
-            <template v-slot:prepend>
-              <v-icon :icon="sublink.icon" size="small"></v-icon>
-            </template>
-            <v-list-item-title class="text-body-2">{{ sublink.text }}</v-list-item-title>
           </v-list-item>
         </v-list-group>
       </template>
