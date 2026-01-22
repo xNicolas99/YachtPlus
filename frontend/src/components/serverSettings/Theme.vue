@@ -15,44 +15,31 @@
           @change="applyPreset"
         ></v-select>
 
-        <h2 class="mt-2">Colors:</h2>
-        <br />
-        <v-btn-toggle v-model="color_toggle">
-          <v-btn
-            :color="$vuetify.theme.themes[theme].primary"
-            class="secondary--text"
-            >Primary</v-btn
-          >
-          <v-btn
-            :color="$vuetify.theme.themes[theme].secondary"
-            class="primary--text"
-            >Secondary</v-btn
-          >
-          <v-btn
-            :color="$vuetify.theme.themes[theme].background"
-            class="primary--text"
-            >Background</v-btn
-          >
-          <v-btn
-            :color="$vuetify.theme.themes[theme].foreground"
-            class="primary--text"
-            >Foreground</v-btn
-          >
-          <v-btn
-            :color="$vuetify.theme.themes[theme].tabs"
-            class="primary--text"
-            >Tabs</v-btn
-          >
-        </v-btn-toggle>
-        <v-color-picker
-          v-if="color_toggle !== undefined"
-          v-model="picker"
-          show-swatches
-          swatches-max-height="200"
-          class="mt-2 ml-2"
-          mode="hexa"
-          :value="picker"
-        />
+        <h2 class="mt-2">Customize Colors:</h2>
+        <v-row class="mt-2">
+          <v-col cols="12" sm="6">
+            <h3 class="mb-2">Primary Color</h3>
+            <v-color-picker
+              v-model="primaryColor"
+              hide-canvas
+              hide-inputs
+              show-swatches
+              swatches-max-height="100"
+              class="mx-auto"
+            ></v-color-picker>
+          </v-col>
+          <v-col cols="12" sm="6">
+            <h3 class="mb-2">Secondary Color</h3>
+            <v-color-picker
+              v-model="secondaryColor"
+              hide-canvas
+              hide-inputs
+              show-swatches
+              swatches-max-height="100"
+              class="mx-auto"
+            ></v-color-picker>
+          </v-col>
+        </v-row>
         <br />
         <h2 class="mt-2">Logo:</h2>
         <v-switch
@@ -142,72 +129,71 @@ export default {
       }
     };
   },
+  data() {
+    return {
+      selectedPreset: null,
+      primaryColor: null,
+      secondaryColor: null,
+      presets: {
+        Ocean: {
+          primary: "#0EA5E9",
+          secondary: "#1E293B"
+        },
+        Forest: {
+          primary: "#2E7D32",
+          secondary: "#E8F5E9"
+        },
+        Sunset: {
+          primary: "#F4511E",
+          secondary: "#FCE4EC"
+        }
+      }
+    };
+  },
+  mounted() {
+    const currentTheme = this.$vuetify.theme.global.current;
+    this.primaryColor = currentTheme.colors.primary;
+    this.secondaryColor = currentTheme.colors.secondary;
+  },
   computed: {
     presetOptions() {
       return Object.keys(this.presets);
-    },
-    theme() {
-      return this.$vuetify.theme.dark ? "dark" : "light";
-    },
-    picker: {
-      get() {
-        if (this.color_toggle == 0) {
-          return this.$vuetify.theme.themes[this.theme].primary;
-        } else if (this.color_toggle == 1) {
-          return this.$vuetify.theme.themes[this.theme].secondary;
-        } else if (this.color_toggle == 2) {
-          return this.$vuetify.theme.themes[this.theme].background;
-        } else if (this.color_toggle == 3) {
-          return this.$vuetify.theme.themes[this.theme].foreground;
-        } else if (this.color_toggle == 4) {
-          return this.$vuetify.theme.themes[this.theme].tabs;
-        } else return null;
-      },
-      set(v) {
-        if (this.color_toggle == 0) {
-          this.$vuetify.theme.themes[this.theme].primary = v;
-        } else if (this.color_toggle == 1) {
-          this.$vuetify.theme.themes[this.theme].secondary = v;
-        } else if (this.color_toggle == 2) {
-          this.$vuetify.theme.themes[this.theme].background = v;
-        } else if (this.color_toggle == 3) {
-          this.$vuetify.theme.themes[this.theme].foreground = v;
-        } else if (this.color_toggle == 4) {
-          this.$vuetify.theme.themes[this.theme].tabs = v;
-        } else return null;
-      }
-    },
-    setColor() {
-      this.$vuetify.theme.themes[this.theme][this.picker] == this.color;
-      return this.color;
     }
   },
   methods: {
     applyPreset() {
       if (this.selectedPreset && this.presets[this.selectedPreset]) {
         const preset = this.presets[this.selectedPreset];
-
-        // Update both dark and light themes for consistency
-        Object.keys(preset.dark).forEach(key => {
-          this.$vuetify.theme.themes.dark[key] = preset.dark[key];
-        });
-        Object.keys(preset.light).forEach(key => {
-          this.$vuetify.theme.themes.light[key] = preset.light[key];
-        });
-
-        // Immediately save to persistence
-        this.setTheme();
+        this.primaryColor = preset.primary;
+        this.secondaryColor = preset.secondary;
       }
     },
     setTheme() {
-      localStorage.setItem("dark_theme", this.$vuetify.theme.dark.toString());
-      localStorage.setItem("theme", JSON.stringify(this.$vuetify.theme.themes));
+      // Save to localStorage
+      localStorage.setItem("theme_primary", this.primaryColor);
+      localStorage.setItem("theme_secondary", this.secondaryColor);
+      localStorage.setItem("dark_theme", this.$vuetify.theme.global.name.value === "dark");
+
+      // Update Runtime
+      const themes = ['light', 'dark'];
+      themes.forEach(t => {
+        if (this.$vuetify.theme.themes[t]) {
+           this.$vuetify.theme.themes[t].colors.primary = this.primaryColor;
+           this.$vuetify.theme.themes[t].colors.secondary = this.secondaryColor;
+        }
+      });
+
+      // Also update current theme directly to see instant effect
+      this.$vuetify.theme.global.current.colors.primary = this.primaryColor;
+      this.$vuetify.theme.global.current.colors.secondary = this.secondaryColor;
     },
     setDarkmode() {
-      localStorage.setItem("dark_theme", this.$vuetify.theme.dark.toString());
+      // Vuetify 3 toggle
+      localStorage.setItem("dark_theme", this.$vuetify.theme.global.name.value === "dark");
     },
     resetTheme() {
-      localStorage.removeItem("theme");
+      localStorage.removeItem("theme_primary");
+      localStorage.removeItem("theme_secondary");
       localStorage.removeItem("dark_theme");
       window.location.reload();
     }

@@ -7,7 +7,7 @@ from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
 from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check
-from api.models.setup import SetupStatus
+from api.db.models.setup import SetupStatus
 import os
 
 router = APIRouter()

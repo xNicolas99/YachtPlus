@@ -1,5 +1,5 @@
 <template>
-  <v-app id="yacht">
+  <v-app id="yachtplus">
     <Sidebar
       v-if="isLoggedIn"
       v-model="drawer"

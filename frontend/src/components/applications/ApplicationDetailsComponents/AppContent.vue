@@ -82,7 +82,7 @@
                     >
                       <td v-if="network_labels.includes('Label')">
                         {{
-                          app.Config.Labels[`local.yacht.port.${port.hport}`]
+                          app.Config.Labels[`local.yachtplus.port.${port.hport}`]
                         }}
                       </td>
                       <td>{{ port.cport }}</td>
@@ -377,7 +377,7 @@ export default {
       for (var port in this.convPorts(this.app.ports)) {
         if (
           this.app.Config.Labels[
-            `local.yacht.port.${this.convPorts(this.app.ports)[port].hport}`
+            `local.yachtplus.port.${this.convPorts(this.app.ports)[port].hport}`
           ]
         ) {
           var label_found = true;
