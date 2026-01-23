@@ -32,7 +32,6 @@ from api.db.models.setup import SetupStatus
 from api.services.watchtower import start_scheduler, stop_scheduler
 import os
 
-from api.routers import apps, dashboard, templates, resources, compose, settings as settings_router, users, auth_2fa, audit, registries
 from api.db.database import engine, Base, SessionLocal
 from api.db.models.users import User
 from api.settings import get_settings
