@@ -1,10 +1,6 @@
-import logging
-import uvicorn
-import fcntl
-import asyncio
-import aiodocker
-from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -35,66 +31,27 @@ from api.db.models.containers import Template
 from api.db.models.setup import SetupStatus
 from api.services.watchtower import start_scheduler, stop_scheduler
 import os
-import docker.errors
-import requests.exceptions
 
-# Setup Logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from api.routers import apps, dashboard, templates, resources, compose, settings as settings_router, users, auth_2fa, audit, registries
+from api.db.database import engine, Base, SessionLocal
+from api.db.models.users import User
+from api.settings import get_settings
 
-settings = Settings()
+# Create DB Tables
+Base.metadata.create_all(bind=engine)
 
-if settings.DOCKER_HOST:
-    logger.info(f"Using DOCKER_HOST: {settings.DOCKER_HOST}")
-else:
-    logger.info("Using default Docker socket (local).")
+app = FastAPI(title="YachtPlus API")
 
-if settings.ALLOWED_HOSTS == ["*"]:
-    logger.warning("CRITICAL SECURITY WARNING: ALLOWED_HOSTS is set to ['*']. This is insecure for production.")
-    logger.warning("Please set ALLOWED_HOSTS to your specific domain or IP address in environment variables to prevent Host Header attacks.")
+# Setup Status Logic
+class SetupStatus:
+    is_complete = False
 
-# Setup Rate Limiter
-limiter = Limiter(key_func=get_remote_address)
+setup_status = SetupStatus()
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    logger.info("Starting up...")
-
-    # 1. Proxy Availability Check (Retry Logic)
-    logger.info("Checking Docker Socket/Proxy availability...")
-    docker_connected = False
-    for i in range(5):
-        try:
-            docker_client = aiodocker.Docker(url=settings.DOCKER_HOST)
-            await docker_client.version()
-            await docker_client.close()
-            docker_connected = True
-            logger.info("Docker Socket/Proxy is available.")
-            break
-        except Exception as e:
-            logger.warning(f"Docker connection attempt {i+1}/5 failed: {e}. Retrying in 2s...")
-            await asyncio.sleep(2)
-
-    if not docker_connected:
-        logger.error("CRITICAL: Failed to connect to Docker after 5 attempts. Application may not function correctly.")
-
-    Base.metadata.create_all(bind=engine)
-
-    # 2. Scheduler Locking (Concurrency Control)
-    scheduler_lock_file = "/tmp/yachtplus_scheduler.lock"
-    scheduler_lock_fp = open(scheduler_lock_file, "w")
-    try:
-        # Try to acquire an exclusive non-blocking lock
-        fcntl.lockf(scheduler_lock_fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        logger.info("Scheduler Lock acquired. Starting Scheduler...")
-        start_scheduler()
-        app.state.scheduler_started_by_me = True
-    except IOError:
-        logger.info("Scheduler Lock already held by another worker. Skipping Scheduler start.")
-        app.state.scheduler_started_by_me = False
-
-    # Initialize App State
+@app.on_event("startup")
+def startup_event():
+    # Check if user exists to skip setup
+    db = SessionLocal()
     try:
         db = SessionLocal()
         # Secret Key is now handled in settings.py (immutable env or file)
@@ -153,67 +110,30 @@ async def lifespan(app: FastAPI):
 
         db.close()
     except Exception as e:
-        logger.error(f"Startup Initialization Error: {e}")
-        # Consider re-raising if critical
+        print(f"Database check failed: {e}")
+    finally:
+        db.close()
 
-    yield
-
-    # Shutdown
-    logger.info("Shutting down...")
-
-    # Only stop scheduler if we started it
-    if getattr(app.state, "scheduler_started_by_me", False):
-        logger.info("Stopping Scheduler (I hold the lock)...")
-        stop_scheduler()
-        # Lock is released when file descriptor is closed or process exits
-        # Explicitly closing file is good practice, though OS cleans up locks on process exit
-        try:
-            scheduler_lock_fp.close()
-        except Exception:
-            pass
-
-app = FastAPI(root_path="/api", lifespan=lifespan)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    Overrides the default validation error handler to sanitize sensitive data.
-    Logs the full error server-side, but returns a generic or sanitized message to the client.
-    """
-    logger.warning(f"Validation Error: {exc.errors()} - Body: {exc.body}")
-
-    # Check if this is an auth endpoint where we want to be extra generic
+@app.middleware("http")
+async def check_setup_status(request: Request, call_next):
     path = request.url.path
-    if "/auth/login" in path or "/auth/register" in path or "/setup" in path:
-         return JSONResponse(
-            status_code=422,
-            content={"detail": "Validation error: required field(s) missing or invalid. Please check your input."}
-        )
+    if (path.startswith("/api/auth") or
+        path.startswith("/assets") or
+        path.startswith("/img") or
+        "/favicon.ico" in path or
+        request.method == "OPTIONS"):
+        return await call_next(request)
 
-    # For other endpoints, we can be more specific but still sanitized
-    sanitized_errors = sanitize_error_message(exc.errors())
+    if not setup_status.is_complete:
+        if not path.startswith("/api/setup"):
+             if path.startswith("/api"):
+                 return JSONResponse(status_code=428, content={"detail": "Setup required"})
 
-    return JSONResponse(
-        status_code=422,
-        content={"detail": sanitized_errors}
-    )
-
-# Middleware
-# Handle CORS: If "*" is present in allowed origins, we must use allow_origin_regex
-# to avoid the "AssertionError: Allowed origins cannot be set to ['*'] when allow_credentials=True"
-allow_origins = settings.ALLOWED_ORIGINS
-allow_origin_regex = None
-
-if "*" in allow_origins:
-    allow_origins = []
-    allow_origin_regex = ".*"
+    return await call_next(request)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
-    allow_origin_regex=allow_origin_regex,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -388,7 +308,14 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(search.router, prefix="/search", tags=["search"])
 app.include_router(audit.router, prefix="/audit", tags=["audit"])
 
-if __name__ == "__main__":
-    # FIX: Use 'api.main:app' to ensure correct module resolution when running via python -m
-    # Or better, pass the app object directly if possible, but Uvicorn reloader needs import string.
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(apps.router, prefix="/api/apps", tags=["apps"])
+app.include_router(templates.router, prefix="/api/templates", tags=["templates"])
+app.include_router(resources.router, prefix="/api/resources", tags=["resources"])
+app.include_router(compose.router, prefix="/api/compose", tags=["compose"])
+app.include_router(registries.router, prefix="/api/registries", tags=["registries"])
+app.include_router(users.router, prefix="/api/auth", tags=["auth"])
+app.include_router(audit.router, prefix="/api/audit", tags=["audit"])
+
+if os.path.exists("../frontend/dist"):
+    app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="static")
