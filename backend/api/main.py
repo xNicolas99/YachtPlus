@@ -29,7 +29,8 @@ from api.db.crud.settings import generate_secret_key
 from api.db.crud.users import create_user, get_users
 from api.routers import apps, app_settings, compose, resources, templates, users, smtp, auth_2fa, watchtower, containers, dashboard, registries, search, audit
 from api.routers import setup
-from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template
+from api.db.models.users import User
+from api.db.crud.templates import read_template_variables, set_template_variables, get_templates, add_template, init_templates
 from api.db.models.containers import Template
 from api.db.models.setup import SetupStatus
 from api.services.watchtower import start_scheduler, stop_scheduler
@@ -113,10 +114,13 @@ async def lifespan(app: FastAPI):
                     db.add(setup_status)
                     db.commit()
                     logger.info("Auto-Discovery: Created SetupStatus entry for existing users.")
-                elif not setup_status.is_complete:
-                    setup_status.is_complete = True
-                    db.commit()
-                    logger.info("Auto-Discovery: Updated SetupStatus to complete for existing users.")
+
+                # Fix Setup Loop: If users exist in DB, force setup complete
+                if db.query(User).first():
+                    if not setup_status.is_complete:
+                        setup_status.is_complete = True
+                        db.commit()
+                        logger.info("Auto-Discovery: Updated SetupStatus to complete for existing users.")
 
                 # Ensure legacy marker file exists
                 if not os.path.exists("/config/.setup_completed"):
@@ -145,14 +149,7 @@ async def lifespan(app: FastAPI):
             set_template_variables(new_variables=t_var_list, db=db)
 
         # Check for Default Template
-        templates_exist = get_templates(db)
-        if not templates_exist:
-            logger.info("No templates found. Adding default SelfhostedPro template.")
-            default_template = Template(
-                title="SelfhostedPro Templates",
-                url="https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/template.json"
-            )
-            add_template(db, default_template)
+        init_templates(db)
 
         db.close()
     except Exception as e:
@@ -279,8 +276,12 @@ async def check_setup_status(request: Request, call_next):
             "/auth/users",
             "/settings",
             "/manifest.json",
+            "/assets", "/img",
             "/docs", "/openapi.json", "/redoc"
         ]
+
+        if path.endswith(".js") or path.endswith(".css") or path == "/favicon.ico":
+             return await call_next(request)
 
         if not any(path.startswith(prefix) for prefix in allowed_prefixes):
             return JSONResponse(
