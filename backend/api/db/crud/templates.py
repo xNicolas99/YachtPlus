@@ -366,3 +366,30 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
 
 def read_template_variables(db: Session):
     return db.query(models.TemplateVariables).all()
+
+def init_templates(db: Session):
+    """
+    Initializes default templates if none exist.
+    """
+    templates_exist = get_templates(db)
+    if not templates_exist:
+        print("No templates found. Adding default templates.")
+        defaults = [
+            {
+                "title": "Yacht Default",
+                "url": "https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/yacht.json"
+            },
+            {
+                "title": "LSIO Portainer",
+                "url": "https://raw.githubusercontent.com/technorabilia/portainer-templates/main/lsio/templates/templates.json"
+            }
+        ]
+
+        for default in defaults:
+            try:
+                template = models.Template(title=default["title"], url=default["url"])
+                # add_template handles validation and fetching
+                add_template(db, template)
+                print(f"Added default template: {default['title']}")
+            except Exception as e:
+                print(f"Failed to add default template {default['title']}: {e}")

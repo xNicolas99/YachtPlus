@@ -1,45 +1,24 @@
 from fastapi import APIRouter, Depends, Query
-from typing import List, Dict, Optional
-from api.auth.jwt import get_auth_wrapper
-from api.auth.auth import auth_check
-import api.utils.registries as registries
-import api.utils.image_inspect as image_inspect
+from sqlalchemy.orm import Session
+from api.db.database import get_db
+from api.auth.auth import get_auth_wrapper
+from api.utils import registries as registry_utils
+from typing import List, Dict, Any
 
-router = APIRouter(prefix="/registries", tags=["registries"])
+router = APIRouter()
 
-@router.get("/popular")
-async def get_popular(
-    registry: str = Query("dockerhub", regex="^(dockerhub|ghcr|linuxserver)$"),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    auth_check(Authorize)
-    return await registries.get_popular_images(registry)
+# Removed strict response_model to prevent serialization crashes
+@router.get("/", response_model=None)
+async def get_registries(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    Authorize.jwt_required()
+    registries = registry_utils.get_registries(db)
+    return registries
 
 @router.get("/search")
-async def search(
+async def search_registry(
     query: str,
-    registry: str = Query("dockerhub", regex="^(dockerhub|ghcr|linuxserver)$"),
+    registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    return await registries.search_registry(registry, query)
-
-@router.get("/tags")
-async def get_tags(
-    image: str,
-    registry: str = Query("dockerhub", regex="^(dockerhub|ghcr|linuxserver)$"),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    auth_check(Authorize)
-    return await registries.get_image_tags(registry, image)
-
-@router.get("/inspect")
-async def inspect_image(
-    image: str,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    """
-    Fetch remote image configuration (Ports, Volumes) from registry.
-    """
-    auth_check(Authorize)
-    return await image_inspect.get_image_config(image)
+    Authorize.jwt_required()
+    return registry_utils.search_registry(query, registry)
