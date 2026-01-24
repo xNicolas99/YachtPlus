@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: list = ["*"]
 
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./config/yacht.db")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")
 
     class Config:
         env_file = ".env"
