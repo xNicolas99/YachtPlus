@@ -1,7 +1,7 @@
 <template lang="html">
   <div class="networks-list component" style="max-width: 90%">
     <v-card color="foreground">
-      <ValidationObserver ref="general" v-slot="{ invalid }">
+      <Form ref="general" v-slot="{ invalid }">
         <v-fade-transition>
           <v-progress-linear
             indeterminate
@@ -22,40 +22,40 @@
             General
           </v-card-text>
 
-          <ValidationProvider
+          <Field v-bind="field"
             name="Name"
             rules="required"
-            v-slot="{ errors, valid }"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-text-field
               label="Name *"
               class="mx-7"
               placeholder="yacht_network"
               :error-messages="errors"
-              :success="valid"
+              :success="fieldMeta.valid"
               required
-              v-model="form.name"
+              v-bind="field"
             />
-          </ValidationProvider>
-          <ValidationProvider
+          </Field>
+          <Field v-bind="field"
             name="Driver"
             rules="required"
-            v-slot="{ errors, valid }"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-select
               class="mx-7"
               label="Driver *"
               placeholder="bridge"
               :error-messages="errors"
-              :success="valid"
+              :success="fieldMeta.valid"
               :items="network_drivers"
-              v-model="form.networkDriver"
+              v-bind="field"
             />
-          </ValidationProvider>
-          <ValidationProvider
+          </Field>
+          <Field v-bind="field"
             name="Network Interface"
             rules="required"
-            v-slot="{ errors, valid }"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-text-field
               v-if="form.networkDriver == 'macvlan'"
@@ -63,10 +63,10 @@
               label="Network Interface *"
               placeholder="eth0"
               :error-messages="errors"
-              :success="valid"
-              v-model="form.network_devices"
+              :success="fieldMeta.valid"
+              v-bind="field"
             />
-          </ValidationProvider>
+          </Field>
           <v-row class="mx-5">
             <v-col>
               <v-checkbox v-model="form.internal" label="Internal Only" />
@@ -88,40 +88,40 @@
             <v-card-text> IPv4 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <!-- <ValidationProvider
+                <!-- <Field v-bind="field"
                   name="IPv4 Subnet"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 > -->
                 <v-text-field
                   label="Subnet"
                   placeholder="10.0.200.0/24"
-                  v-model="form.ipv4subnet"
+                  v-bind="field"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
               <v-col>
-                <!-- <ValidationProvider
+                <!-- <Field v-bind="field"
                   name="IPv4 Gateway"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 > -->
                 <v-text-field
                   label="Gateway"
                   placeholder="10.0.200.1"
-                  v-model="form.ipv4gateway"
+                  v-bind="field"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <!-- <ValidationProvider name="IP Range" v-slot="{ errors, valid }"> -->
+                <!-- <Field v-bind="field" name="IP Range" v-slot="{ field, errors, meta: fieldMeta }"> -->
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
                   placeholder="10.0.200.0/24"
-                  v-model="form.ipv4range"
+                  v-bind="field"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
             </v-row>
           </div>
@@ -133,46 +133,46 @@
             <v-card-text> IPv6 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <!-- <ValidationProvider
+                <!-- <Field v-bind="field"
                   name="IPv6 Subnet"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 > -->
                 <v-text-field
                   label="Subnet"
                   placeholder="2001:db8::/32"
-                  v-model="form.ipv6subnet"
+                  v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
               <v-col>
-                <!-- <ValidationProvider
+                <!-- <Field v-bind="field"
                   name="IPv6 Gateway"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 > -->
                 <v-text-field
                   label="Gateway"
                   placeholder="2001:db8::1"
-                  v-model="form.ipv6gateway"
+                  v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <!-- <ValidationProvider
+                <!-- <Field v-bind="field"
                   name="IPv6 Gateway"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 > -->
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
                   placeholder="2001:db8::1"
-                  v-model="form.ipv6range"
+                  v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </ValidationProvider> -->
+                <!-- </Field> -->
               </v-col>
             </v-row>
           </div>
@@ -185,7 +185,7 @@
           <v-btn
             text
             color="primary"
-            :disabled="invalid"
+            :disabled="!meta.valid"
             @click="
               submit();
               createDialog = false;
@@ -194,20 +194,20 @@
             Create
           </v-btn>
         </v-card-actions>
-      </ValidationObserver>
+      </Form>
     </v-card>
   </div>
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field } from "vee-validate";
 import axios from "axios";
 import { mapMutations } from "vuex";
 
 export default {
   components: {
-    ValidationProvider,
-    ValidationObserver
+    Field,
+    Form
   },
   data() {
     return {

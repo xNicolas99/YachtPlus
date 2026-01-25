@@ -32,7 +32,7 @@
 
 <script>
 import axios from "axios";
-import dayjs from "dayjs";
+import { format, parseISO } from "date-fns";
 
 export default {
   data() {
@@ -74,7 +74,12 @@ export default {
         });
     },
     formatDate(date) {
-      return dayjs(date).format("YYYY-MM-DD HH:mm:ss");
+      try {
+        const d = typeof date === 'string' ? parseISO(date) : date;
+        return format(d, "yyyy-MM-dd HH:mm:ss");
+      } catch (e) {
+        return date;
+      }
     },
     getActionColor(action) {
       if (action.includes("delete") || action.includes("remove") || action.includes("kill")) return "error";

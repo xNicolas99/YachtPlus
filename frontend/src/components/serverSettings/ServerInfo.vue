@@ -8,7 +8,7 @@
       This is where you can change settings related to your server.
     </v-card-text>
     <h2 class="font-weight-bold ml-5">Import</h2>
-    <ValidationObserver ref="obs1" v-slot="{ invalid }">
+    <Form ref="obs1" v-slot="{ invalid }">
       <validationProvider
         name="importFile"
         rules="required"
@@ -29,11 +29,11 @@
       <v-btn
         class="mx-5"
         color="primary"
-        :disabled="invalid"
+        :disabled="!meta.valid"
         @click="import_settings(importFile)"
         >Import
       </v-btn>
-    </ValidationObserver>
+    </Form>
     <h2 class="font-weight-bold mt-5 ml-5">Export</h2>
     <v-btn class="mx-5 mb-5" color="primary" @click="export_settings()"
       >Export
@@ -42,13 +42,13 @@
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field } from "vee-validate";
 import axios from "axios";
 import { mapMutations } from "vuex";
 export default {
   components: {
-    ValidationObserver,
-    ValidationProvider
+    Form,
+    Field
   },
   data() {
     return {

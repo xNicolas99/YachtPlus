@@ -64,64 +64,67 @@
 
       <v-stepper-items>
         <v-stepper-content step="1">
-          <ValidationObserver ref="obs1" v-slot="{ invalid }">
+          <Form ref="obs1" v-slot="{ meta }" as="div">
             <form>
-              <ValidationProvider
+              <Field
                 name="Name"
                 rules="required"
-                v-slot="{ errors, valid }"
+                v-model="form.name"
+                v-slot="{ field, errors, meta: fieldMeta }"
               >
                 <v-text-field
+                  v-bind="field"
                   label="Name"
                   placeholder="My Container"
-                  v-model="form.name"
                   :error-messages="errors"
-                  :success="valid"
+                  :success="fieldMeta.valid"
                   required
                 ></v-text-field>
-              </ValidationProvider>
-              <ValidationProvider
+              </Field>
+              <Field
                 name="Image"
                 rules="required"
-                v-slot="{ errors, valid }"
+                v-model="form.image"
+                v-slot="{ field, errors, meta: fieldMeta }"
               >
                 <v-text-field
+                  v-bind="field"
                   label="Image"
                   placeholder="image:my-image"
-                  v-model="form.image"
                   :error-messages="errors"
-                  :success="valid"
+                  :success="fieldMeta.valid"
                   required
                 ></v-text-field>
-              </ValidationProvider>
-              <ValidationProvider
+              </Field>
+              <Field
                 name="Restart Policy"
                 rules="required"
-                v-slot="{ errors, valid }"
+                v-model="form['restart_policy']"
+                v-slot="{ field, errors, meta: fieldMeta }"
               >
                 <v-select
+                  v-bind="field"
                   :items="['always', 'on-failure', 'unless-stopped', 'none']"
                   label="Restart Policy"
-                  v-model="form['restart_policy']"
                   :error-messages="errors"
-                  :success="valid"
+                  :success="fieldMeta.valid"
                   required
                 ></v-select>
-              </ValidationProvider>
+              </Field>
             </form>
             <v-btn
               color="primary"
               @click="deployStep = 2"
-              :disabled="invalid"
+              :disabled="!meta.valid"
               class="float-right"
             >
               Continue
             </v-btn>
-          </ValidationObserver>
+          </Form>
         </v-stepper-content>
 
         <v-stepper-content step="2">
-          <ValidationObserver ref="obs2" v-slot="{ invalid }">
+          <Form ref="obs2" v-slot="{ meta }" as="div">
             <form>
               <v-row>
                 <v-col>
@@ -156,26 +159,26 @@
                 >item
                 <v-row v-for="(item, index) in form.ports" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Label"
                       rules=""
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="string"
                         label="Label"
                         placeholder="webui"
-                        v-model="item['label']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Host"
                       rules=""
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="number"
@@ -183,17 +186,17 @@
                         placeholder="80"
                         min="0"
                         max="65535"
-                        v-model="item['hport']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Container"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="number"
@@ -201,28 +204,28 @@
                         placeholder="80"
                         min="0"
                         max="65535"
-                        v-model="item['cport']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Protocol"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-select
                         :items="['tcp', 'udp']"
                         label="Protocol"
-                        v-model="item['proto']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-select>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
 
                   <v-col class="d-flex justify-end" cols="1">
@@ -254,7 +257,7 @@
             <v-btn
               color="primary"
               @click="deployStep = 3"
-              :disabled="invalid"
+              :disabled="!meta.valid"
               class="float-right"
             >
               Continue
@@ -266,11 +269,11 @@
             >
               Back
             </v-btn>
-          </ValidationObserver>
+          </Form>
         </v-stepper-content>
 
         <v-stepper-content step="3">
-          <ValidationObserver ref="obs3" v-slot="{ invalid }">
+          <Form ref="obs3" v-slot="{ meta }" as="div">
             <form>
               <transition-group
                 name="slide"
@@ -279,36 +282,36 @@
               >
                 <v-row v-for="(item, index) in form.volumes" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Host"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Host"
                         placeholder="/yachtplus/image/share"
-                        v-model="item['bind']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Container"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Container"
                         placeholder="/share"
-                        v-model="item['container']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -332,7 +335,7 @@
             <v-btn
               color="primary"
               @click="deployStep = 4"
-              :disabled="invalid"
+              :disabled="!meta.valid"
               class="float-right"
             >
               Continue
@@ -344,11 +347,11 @@
             >
               Back
             </v-btn>
-          </ValidationObserver>
+          </Form>
         </v-stepper-content>
 
         <v-stepper-content step="4">
-          <ValidationObserver ref="obs4" v-slot="{ invalid }">
+          <Form ref="obs4" v-slot="{ meta }" as="div">
             <form>
               <transition-group
                 name="slide"
@@ -357,35 +360,35 @@
               >
                 <v-row v-for="(item, index) in form.env" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Name"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         :label="item['label']"
-                        v-model="item['name']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Value"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-model="item['default']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         :messages="item.description"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -410,7 +413,7 @@
               v-if="form.edit == true"
               color="primary"
               @click="editDialog = true"
-              :disabled="invalid"
+              :disabled="!meta.valid"
               class="float-right"
             >
               <div v-if="isLoading">
@@ -428,7 +431,7 @@
               v-else
               color="primary"
               @click="nextStep(4)"
-              :disabled="invalid"
+              :disabled="!meta.valid"
               class="float-right"
             >
               <div v-if="isLoading">
@@ -449,7 +452,7 @@
             >
               Back
             </v-btn>
-          </ValidationObserver>
+          </Form>
         </v-stepper-content>
       </v-stepper-items>
     </v-stepper>
@@ -488,19 +491,19 @@
               >
                 <v-row v-for="(item, index) in form.command" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Command"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         :label="'Command ' + index + ':'"
-                        v-model="form.command[index]"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -541,34 +544,34 @@
               >
                 <v-row v-for="(item, index) in form.devices" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Container"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Container"
-                        v-model="item['container']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Host"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Host"
-                        v-model="item['host']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -609,33 +612,33 @@
               >
                 <v-row v-for="(item, index) in form.labels" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Label"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Label"
-                        v-model="item['label']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Value"
                       rules=""
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-model="item['value']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -674,34 +677,34 @@
               >
                 <v-row v-for="(item, index) in form.sysctls" :key="index">
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Name"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Name"
-                        v-model="item['name']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col>
-                    <ValidationProvider
+                    <Field v-bind="field"
                       name="Value"
                       rules="required"
-                      v-slot="{ errors, valid }"
+                      v-slot="{ field, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-model="item['value']"
+                        v-bind="field"
                         :error-messages="errors"
-                        :success="valid"
+                        :success="fieldMeta.valid"
                         required
                       ></v-text-field>
-                    </ValidationProvider>
+                    </Field>
                   </v-col>
                   <v-col class="d-flex justify-end" cols="1">
                     <v-btn
@@ -809,12 +812,12 @@
 <script>
 import axios from "axios";
 import { mapActions, mapMutations, mapState } from "vuex";
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field } from "vee-validate";
 
 export default {
   components: {
-    ValidationProvider,
-    ValidationObserver
+    Field,
+    Form
   },
   data() {
     return {
