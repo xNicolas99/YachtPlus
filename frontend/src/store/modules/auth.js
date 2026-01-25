@@ -186,10 +186,15 @@ const actions = {
       .get("/setup/status")
       .then(resp => {
         commit("SET_SETUP_STATUS", resp.data.is_setup);
+        return resp.data.is_setup;
       })
       .catch(err => {
         console.error("Setup check failed", err);
+        // If the check fails (e.g., network error), we shouldn't assume false
+        // But for safety, we might default to false or handle it better.
+        // Given the requirement, we want to avoid incorrect redirects.
         commit("SET_SETUP_STATUS", false);
+        return false;
       });
   },
 

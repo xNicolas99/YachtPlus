@@ -1,15 +1,16 @@
-import dayjs from "dayjs";
-import utc from "dayjs/plugin/utc";
-import localizedFormat from "dayjs/plugin/localizedFormat";
-
-dayjs.extend(utc);
-dayjs.extend(localizedFormat);
+import { format, parseISO } from "date-fns";
 
 const VueUtils = {
   install(app) {
-    app.config.globalProperties.$formatDate = (value, format) => {
+    app.config.globalProperties.$formatDate = (value, formatStr) => {
       if (value) {
-        return dayjs.utc(value).local().format(format || "LLL");
+        try {
+          const date = typeof value === 'string' ? parseISO(value) : value;
+          return format(date, formatStr || "PPpp");
+        } catch (e) {
+          console.error("Date format error:", e);
+          return value;
+        }
       }
       return '';
     };

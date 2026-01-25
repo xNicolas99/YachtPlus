@@ -1,88 +1,83 @@
+<template>
+  <LineChart :data="chartdata" :options="options" />
+</template>
+
 <script>
-import { Line, mixins } from "vue-chartjs"; // We specify what type of chart we want from vue-chartjs and the mixins module
-const { reactiveProp } = mixins;
+import { Line } from "vue-chartjs";
+import { Chart as ChartJS, Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, TimeScale } from 'chart.js';
+import 'chartjs-adapter-date-fns';
+
+ChartJS.register(Title, Tooltip, Legend, LineElement, PointElement, CategoryScale, LinearScale, TimeScale);
+
 export default {
-  extends: Line, //We are extending the base chart class as mentioned above
-  mixins: [reactiveProp],
+  name: 'PercentLineChart',
+  components: { LineChart: Line },
   props: {
     chartdata: {
       type: Object,
-      default: null
+      default: () => ({ labels: [], datasets: [] })
     }
   },
   data() {
     return {
       options: {
-        //Chart.js options
         animation: {
           duration: 0
         },
-        responsiveAnimationDuration: 0,
-        tooltips: {
-          mode: "index",
-          intersect: false,
-          callbacks: {
-            label: function(tooltipItems) {
-              return tooltipItems.yLabel + "%";
+        plugins: {
+          tooltip: {
+            mode: "index",
+            intersect: false,
+            callbacks: {
+              label: function(context) {
+                return context.parsed.y + "%";
+              }
             }
+          },
+          legend: {
+            display: true
           }
         },
         hover: {
           mode: "index",
-          intersect: true,
-          animationDuration: 0
+          intersect: true
         },
         scales: {
-          yAxes: [
-            {
-              ticks: {
-                beginAtZero: true,
-                stepSize: 1,
-                min: 0,
-                max: 100,
-                maxTicksLimit: 10
-              },
-              gridLines: {
-                display: true
-              }
+          y: {
+            beginAtZero: true,
+            min: 0,
+            max: 100,
+            ticks: {
+              stepSize: 1,
+              maxTicksLimit: 10
+            },
+            grid: {
+              display: true
             }
-          ],
-          xAxes: [
-            {
-              ticks: {
-                min: 1,
-                sampleSize: 5,
-                autoSkip: true,
-                autoSkipPadding: 15,
-                maxRotation: 0,
-                maxTicksLimit: 2,
-                padding: 10
-              },
-              type: "time",
-              time: {
-                unit: "second"
-              },
+          },
+          x: {
+            type: "time",
+            time: {
+              unit: "second",
               displayFormats: {
                 second: "h:mm:ss a"
-              },
-              gridLines: {
-                display: false
-              },
-              distribution: "series"
+              }
+            },
+            ticks: {
+              autoSkip: true,
+              autoSkipPadding: 15,
+              maxRotation: 0,
+              maxTicksLimit: 5
+            },
+            grid: {
+              display: false
             }
-          ]
-        },
-        legend: {
-          display: true
+          }
         },
         responsive: true,
         maintainAspectRatio: false
       }
     };
-  },
-  mounted() {
-    // this.chartData is created in the mixin
-    this.renderChart(this.chartData, this.options);
   }
 };
 </script>

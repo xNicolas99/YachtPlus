@@ -1,13 +1,20 @@
+<template>
+  <Bar :data="chartdata" :options="options" />
+</template>
+
 <script>
-import { mixins, Bar } from "vue-chartjs"; // We specify what type of chart we want from vue-chartjs and the mixins module
-const { reactiveProp } = mixins;
+import { Bar } from "vue-chartjs";
+import { Chart as ChartJS, Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale } from 'chart.js';
+
+ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale);
+
 export default {
-  extends: Bar, //We are extending the base chart class as mentioned above
-  mixins: [reactiveProp],
+  name: 'PercentBarChart',
+  components: { Bar },
   props: {
     chartdata: {
       type: Object,
-      default: null
+      default: () => ({ labels: [], datasets: [] })
     }
   },
   data() {
@@ -18,23 +25,18 @@ export default {
           duration: 0
         },
         scales: {
-          yAxes: [
-            {
-              ticks: {
-                beginAtZero: true,
-                stepSize: 1,
-                min: 0,
-                max: 100,
-                maxTicksLimit: 5
-              }
-            }
-          ]
+          y: {
+             beginAtZero: true,
+             min: 0,
+             max: 100,
+             ticks: {
+               stepSize: 1,
+               maxTicksLimit: 5
+             }
+          }
         }
       }
     };
-  },
-  mounted() {
-    this.renderChart(this.chartData, this.options);
   }
 };
 </script>

@@ -9,6 +9,17 @@ import axios from 'axios'
 import DOMPurify from 'dompurify'
 import './assets/styles/main.css'
 
+// Vee Validate Rules
+import { defineRule } from 'vee-validate';
+import { required, email, min, max, regex, confirmed } from '@vee-validate/rules';
+
+defineRule('required', required);
+defineRule('email', email);
+defineRule('min', min);
+defineRule('max', max);
+defineRule('regex', regex);
+defineRule('confirmed', confirmed);
+
 // Load fonts
 loadFonts()
 

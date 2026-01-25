@@ -4,7 +4,7 @@
       <v-toolbar-title>Server Template Variables</v-toolbar-title>
     </v-toolbar>
     <v-card-text>
-      <ValidationObserver v-slot="{ invalid }">
+      <Form v-slot="{ invalid }">
         <form>
           <transition-group
             name="slide"
@@ -13,34 +13,34 @@
           >
             <v-row v-for="(item, index) in form.templateVariables" :key="index">
               <v-col>
-                <ValidationProvider
+                <Field v-bind="field"
                   name="Variable"
                   rules="required"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 >
                   <v-text-field
                     label="Variable"
-                    v-model="item['variable']"
+                    v-bind="field"
                     :error-messages="errors"
-                    :success="valid"
+                    :success="fieldMeta.valid"
                     required
                   ></v-text-field>
-                </ValidationProvider>
+                </Field>
               </v-col>
               <v-col>
-                <ValidationProvider
+                <Field v-bind="field"
                   name="Replacement"
                   rules="required"
-                  v-slot="{ errors, valid }"
+                  v-slot="{ field, errors, meta: fieldMeta }"
                 >
                   <v-text-field
                     label="Replacement"
-                    v-model="item['replacement']"
+                    v-bind="field"
                     :error-messages="errors"
-                    :success="valid"
+                    :success="fieldMeta.valid"
                     required
                   ></v-text-field>
-                </ValidationProvider>
+                </Field>
               </v-col>
               <v-col class="d-flex justify-end" cols="1">
                 <v-btn
@@ -68,11 +68,11 @@
             class="float-right"
             @click="submitFormData()"
             color="primary"
-            :disabled="invalid"
+            :disabled="!meta.valid"
             >Save</v-btn
           >
         </form>
-      </ValidationObserver>
+      </Form>
     </v-card-text>
     <v-snackbar v-model="saved" bottom color="secondary">
       Saved
@@ -86,12 +86,12 @@
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field } from "vee-validate";
 import { mapActions } from "vuex";
 export default {
   components: {
-    ValidationProvider,
-    ValidationObserver
+    Field,
+    Form
   },
   data() {
     return {

@@ -1,5 +1,5 @@
 <template>
-  <ValidationObserver ref="obs1" v-slot="{ invalid, validated }">
+  <Form as="div" v-slot="{ meta }">
     <v-container class="fill-height" fluid>
       <img class="mx-auto mt-12 main-logo" alt="Vue logo" :src="themeLogo()" />
       <v-row align="center" justify="center" class="mt-12">
@@ -11,50 +11,52 @@
             </v-toolbar>
             <v-card-text>
               <div v-if="!requires2FA">
-                <v-form @keyup.native.enter="onSubmit()">
-                  <ValidationProvider
+                <v-form @submit.prevent="onSubmit">
+                  <Field
                     name="username"
                     rules="required"
-                    v-slot="{ errors, valid }"
+                    v-model="username"
+                    v-slot="{ field, errors, meta: fieldMeta }"
                   >
                     <v-text-field
+                      v-bind="field"
                       label="Email"
-                      v-model="username"
                       :error-messages="errors"
-                      :success="valid"
+                      :success="fieldMeta.valid"
                       required
                     />
-                  </ValidationProvider>
+                  </Field>
 
-                  <ValidationProvider
+                  <Field
                     name="password"
                     rules="required"
-                    v-slot="{ errors, valid }"
+                    v-model="password"
+                    v-slot="{ field, errors, meta: fieldMeta }"
                   >
                     <v-text-field
+                      v-bind="field"
                       label="Password"
-                      v-model="password"
                       :error-messages="errors"
-                      :success="valid"
+                      :success="fieldMeta.valid"
                       :type="show ? 'text' : 'password'"
                       :append-icon="show ? 'mdi-eye' : 'mdi-eye-off'"
                       clearable
                       required
                       @click:append="show = !show"
                     />
-                  </ValidationProvider>
+                  </Field>
                   <v-btn
                     class="float-right"
                     @click="onSubmit()"
                     color="primary"
-                    :disabled="invalid || !validated"
+                    :disabled="!meta.valid"
                     >Login</v-btn
                   >
                 </v-form>
               </div>
               <div v-else>
                 <p>Please enter your 2FA code.</p>
-                <v-form @keyup.native.enter="onSubmit2FA()">
+                <v-form @submit.prevent="onSubmit2FA">
                   <v-text-field
                     label="2FA Code"
                     v-model="otpToken"
@@ -79,21 +81,24 @@
         {{ errorMessage }}
       </v-snackbar>
     </v-container>
-  </ValidationObserver>
+  </Form>
 </template>
 
 <script>
 import lightLogo from "@/assets/logo-light.svg";
 import darkLogo from "@/assets/logo.svg";
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field, defineRule } from "vee-validate";
+import { required } from "@vee-validate/rules";
 import { mapActions } from "vuex";
 import { themeLogo } from "../../config.js";
 import axios from "axios";
 
+defineRule('required', required);
+
 export default {
   components: {
-    ValidationProvider,
-    ValidationObserver
+    Form,
+    Field
   },
   data() {
     return {
@@ -115,20 +120,15 @@ export default {
     async onSubmit() {
       // We will handle the login request manually here to intercept 2FA requirement
       try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
+        const payload = {
             username: this.username,
             password: this.password
-          }
-        });
+        };
+        const response = await axios.post("/auth/login_cookie", payload);
 
         if (response.data.login === "2fa_required") {
           this.requires2FA = true;
         } else if (response.data.login === "successful") {
-          // Dispatch action to update state, but we already called API
-          // So we might need to adjust the Vuex action or just commit directly
-          // Assuming AUTH_REQUEST does the API call usually.
-          // Let's manually trigger the success path in Vuex or reload
           this.$store.commit("auth/AUTH_SUCCESS", response.data);
           this.$router.push("/");
         }
@@ -143,13 +143,12 @@ export default {
 
     async onSubmit2FA() {
       try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
+        const payload = {
             username: this.username,
-            password: this.password
-          },
-          otp_token: this.otpToken
-        });
+            password: this.password,
+            otp_token: this.otpToken
+        };
+        const response = await axios.post("/auth/login_cookie", payload);
 
         if (response.data.login === "successful") {
           this.$store.commit("auth/AUTH_SUCCESS", response.data);

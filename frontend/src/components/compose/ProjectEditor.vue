@@ -38,7 +38,7 @@
           </v-row>
         </div>
         <editor
-          v-model="form.content"
+          v-model:value="form.content"
           @init="editorInit"
           lang="yaml"
           :theme="editorTheming()"
@@ -54,6 +54,11 @@
 <script>
 import { mapActions, mapMutations } from "vuex";
 import axios from "axios";
+import { VAceEditor } from "vue3-ace-editor";
+import "ace-builds/src-noconflict/mode-yaml";
+import "ace-builds/src-noconflict/theme-twilight";
+import "ace-builds/src-noconflict/theme-textmate";
+
 export default {
   data() {
     return {
@@ -67,7 +72,7 @@ export default {
     };
   },
   components: {
-    editor: () => import("vue2-ace-editor")
+    editor: VAceEditor
   },
   methods: {
     ...mapMutations({
@@ -77,9 +82,7 @@ export default {
       readProject: "projects/readProject"
     }),
     editorInit() {
-      import("brace/mode/yaml");
-      import("brace/theme/twilight");
-      import("brace/theme/textmate");
+      // Ace modes/themes are imported at the top
     },
     editorTheming() {
       if (this.$vuetify.theme.dark == false) {
