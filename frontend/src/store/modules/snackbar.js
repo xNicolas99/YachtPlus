@@ -8,7 +8,22 @@ const state = {
 
 const mutations = {
   setErr(state, err) {
-    state.content = err.response.statusText + ": " + err.response.data.detail;
+    // Robust error handling
+    let message = "An error occurred";
+    if (err.response && err.response.data && err.response.data.detail) {
+      message = err.response.data.detail;
+    } else if (err.message) {
+      message = err.message;
+    } else if (typeof err === "string") {
+      message = err;
+    }
+
+    // Add status text if available
+    if (err.response && err.response.statusText) {
+      message = `${err.response.statusText}: ${message}`;
+    }
+
+    state.content = message;
     state.bottom = true;
     state.btnColor = "white";
     state.color = "error";

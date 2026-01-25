@@ -120,20 +120,15 @@ export default {
     async onSubmit() {
       // We will handle the login request manually here to intercept 2FA requirement
       try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
+        const payload = {
             username: this.username,
             password: this.password
-          }
-        });
+        };
+        const response = await axios.post("/auth/login_cookie", payload);
 
         if (response.data.login === "2fa_required") {
           this.requires2FA = true;
         } else if (response.data.login === "successful") {
-          // Dispatch action to update state, but we already called API
-          // So we might need to adjust the Vuex action or just commit directly
-          // Assuming AUTH_REQUEST does the API call usually.
-          // Let's manually trigger the success path in Vuex or reload
           this.$store.commit("auth/AUTH_SUCCESS", response.data);
           this.$router.push("/");
         }
@@ -148,13 +143,12 @@ export default {
 
     async onSubmit2FA() {
       try {
-        const response = await axios.post("/auth/login_cookie", {
-          user: {
+        const payload = {
             username: this.username,
-            password: this.password
-          },
-          otp_token: this.otpToken
-        });
+            password: this.password,
+            otp_token: this.otpToken
+        };
+        const response = await axios.post("/auth/login_cookie", payload);
 
         if (response.data.login === "successful") {
           this.$store.commit("auth/AUTH_SUCCESS", response.data);
