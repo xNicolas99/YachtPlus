@@ -1,5 +1,5 @@
 <template>
-  <ValidationObserver ref="obs1" v-slot="{ invalid }">
+  <Form as="div" v-slot="{ meta }">
     <v-card color="foreground" class="elevation-12 pb-8">
       <v-toolbar color="primary" dark flat>
         <v-toolbar-title>Change Password</v-toolbar-title>
@@ -7,73 +7,75 @@
       <v-card-text>
         You can also change just your email here (or both your email and
         password).
-        <v-form @keyup.native.enter="onSubmit()">
-          <ValidationProvider
+        <v-form @submit.prevent="onSubmit">
+          <Field
             name="username"
             rules="required|email"
-            immediate
-            v-slot="{ errors, valid }"
+            v-model="username"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-text-field
+              v-bind="field"
               label="Email"
-              v-model="username"
               :error-messages="errors"
-              :success="valid"
+              :success="fieldMeta.valid"
               required
             />
-          </ValidationProvider>
+          </Field>
 
-          <ValidationProvider
+          <Field
             name="password"
             rules="required"
-            v-slot="{ errors, valid }"
+            v-model="password"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-text-field
+              v-bind="field"
               label="Password"
-              v-model="password"
               :error-messages="errors"
-              :success="valid"
+              :success="fieldMeta.valid"
               :type="show1 ? 'text' : 'password'"
               :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
               required
               @click:append="show1 = !show1"
             />
-          </ValidationProvider>
-          <ValidationProvider
+          </Field>
+          <Field
             name="confirm"
-            rules="confirmed:password"
-            v-slot="{ errors, valid }"
+            rules="confirmed:@password"
+            v-model="confirm"
+            v-slot="{ field, errors, meta: fieldMeta }"
           >
             <v-text-field
+              v-bind="field"
               label="Confirm Password"
-              v-model="confirm"
               :error-messages="errors"
-              :success="valid"
+              :success="fieldMeta.valid"
               :type="show2 ? 'text' : 'password'"
               :append-icon="show2 ? 'mdi-eye' : 'mdi-eye-off'"
               @click:append="show2 = !show2"
             />
-          </ValidationProvider>
+          </Field>
           <v-btn
             class="float-right"
             @click="onSubmit()"
             color="primary"
-            :disabled="invalid"
+            :disabled="!meta.valid"
             >Change User Info</v-btn
           >
         </v-form>
       </v-card-text>
     </v-card>
-  </ValidationObserver>
+  </Form>
 </template>
 
 <script>
-import { ValidationObserver, ValidationProvider } from "vee-validate";
+import { Form, Field } from "vee-validate";
 import { mapActions } from "vuex";
 export default {
   components: {
-    ValidationProvider,
-    ValidationObserver
+    Field,
+    Form
   },
   props: ["currentUsername"],
   data() {

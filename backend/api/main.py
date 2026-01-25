@@ -19,27 +19,7 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="YachtPlus API")
 
 # --- ROBUST SETUP CHECK ---
-# We intentionally skip the complex 'Setup' model for now to ensure boot.
-# If an Admin User exists, we consider the system "Ready".
-class SetupStatus:
-    is_complete = False
-
-setup_status = SetupStatus()
-
-@app.on_event("startup")
-def startup_event():
-    db = SessionLocal()
-    try:
-        # Simple fail-safe: If a user exists, the app is ready.
-        if db.query(User).first():
-            setup_status.is_complete = True
-            print("Startup: Admin user found. Setup marked as COMPLETE.")
-        else:
-            print("Startup: No user found. Setup required.")
-    except Exception as e:
-        print(f"Startup DB Check failed: {e}")
-    finally:
-        db.close()
+from api.routers.setup.setup import is_setup_completed
 
 @app.middleware("http")
 async def check_setup_status(request: Request, call_next):
@@ -50,7 +30,15 @@ async def check_setup_status(request: Request, call_next):
         request.method == "OPTIONS"):
         return await call_next(request)
 
-    if not setup_status.is_complete:
+    # Check setup status using the router's logic (DB + File)
+    # We use a fresh session for the check to ensure we get the latest DB state
+    db = SessionLocal()
+    try:
+        setup_complete = is_setup_completed(db)
+    finally:
+        db.close()
+
+    if not setup_complete:
         # Allow access to setup endpoints
         if not path.startswith("/api/setup"):
              if path.startswith("/api"):
@@ -65,6 +53,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    # CSP: Allow self, unsafe-inline, NO unsafe-eval
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+    return response
 
 # --- REGISTER ALL ROUTERS ---
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
