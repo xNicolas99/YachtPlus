@@ -9,9 +9,9 @@ from api.settings import Settings
 logger = logging.getLogger(__name__)
 settings = Settings()
 
-# Cache stats for 2 seconds
+# Cache stats for 5 seconds
 stats_cache = {}
-CACHE_TTL = 2  # seconds
+CACHE_TTL = 5  # seconds
 
 async def get_containers():
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:

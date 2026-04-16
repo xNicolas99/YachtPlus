@@ -8,7 +8,7 @@
       Start the app to view logs
     </v-card-text>
     <v-virtual-scroll
-      v-chat-scroll="scrollOptions"
+      ref="logcontainer"
       v-else
       :bench="20"
       :items="logs"
@@ -27,18 +27,20 @@
 </template>
 
 <script>
-// import axios from "axios";
 export default {
   props: ["app", "logs"],
-  data() {
-    return {
-      scrollOptions: {
-        enable: true,
-        always: false,
-        smooth: false,
-        notSmoothOnInit: true
-      }
-    };
+  watch: {
+    logs: {
+      handler() {
+        this.$nextTick(() => {
+          if (this.$refs.logcontainer && this.$refs.logcontainer.$el) {
+            const container = this.$refs.logcontainer.$el;
+            container.scrollTop = container.scrollHeight;
+          }
+        });
+      },
+      deep: true
+    }
   }
 };
 </script>

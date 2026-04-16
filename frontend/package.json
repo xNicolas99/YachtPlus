@@ -20,7 +20,7 @@
     "chartjs-adapter-date-fns": "^3.0.0",
     "core-js": "^3.13.1",
     "date-fns": "^4.1.0",
-    "dayjs": "^1.11.19",
+    "dayjs": "^1.11.20",
     "dompurify": "^3.3.1",
     "register-service-worker": "^1.7.1",
     "vee-validate": "^4.15.1",
