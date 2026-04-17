@@ -11,8 +11,10 @@ class Settings(BaseSettings):
 
     # Auth & Cookies (Fixes for jwt.py/auth.py)
     DISABLE_AUTH: bool = False
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
+    # Erzwinge HTTPS-Cookies, wenn wir nicht in der Entwicklung sind
+    SECURE_COOKIES: bool = os.getenv("SECURE_COOKIES", ENVIRONMENT == "production")
     SAME_SITE_COOKIES: str = "lax"
-    SECURE_COOKIES: bool = False
 
     # Networking
     ALLOWED_HOSTS: list = os.getenv("YACHT_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if os.getenv("YACHT_ALLOWED_HOSTS") else ["localhost", "127.0.0.1", "[::1]"]
