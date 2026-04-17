@@ -58,7 +58,7 @@ app.add_middleware(
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     # CSP: Allow self, unsafe-inline, NO unsafe-eval
-    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'"
+    response.headers["Content-Security-Policy"] = "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self';"
     return response
 
 # --- REGISTER ALL ROUTERS ---

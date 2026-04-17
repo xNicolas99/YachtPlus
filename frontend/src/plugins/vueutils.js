@@ -1,31 +1,19 @@
-import { format, parseISO } from "date-fns";
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+dayjs.extend(relativeTime);
 
-const VueUtils = {
+export default {
   install(app) {
-    app.config.globalProperties.$formatDate = (value, formatStr) => {
-      if (value) {
-        try {
-          const date = typeof value === 'string' ? parseISO(value) : value;
-          return format(date, formatStr || "PPpp");
-        } catch (e) {
-          console.error("Date format error:", e);
-          return value;
-        }
-      }
-      return '';
-    };
-
-    app.config.globalProperties.$truncate = (value, limit, suffix) => {
+    app.config.globalProperties.$formatDate = (value, format = 'YYYY-MM-DD HH:mm:ss') => {
       if (!value) return '';
-      value = value.toString();
-      if (value.length > limit) {
-        let idx = value.lastIndexOf(" ", limit - 1);
-        // Ensure we don't cut off at the very beginning if no space found
-        value = value.substring(0, idx > 0 ? idx : limit - 1) + (suffix || "…");
-      }
-      return value;
+      return dayjs(value).format(format);
+    };
+    app.config.globalProperties.$timeAgo = (value) => {
+      if (!value) return '';
+      return dayjs(value).fromNow();
+    };
+    app.config.globalProperties.$truncate = (text, length, clamp = '...') => {
+      return text?.length > length ? text.slice(0, length) + clamp : text;
     };
   }
 };
-
-export default VueUtils;

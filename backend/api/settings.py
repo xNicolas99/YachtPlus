@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     SECURE_COOKIES: bool = False
 
     # Networking
-    ALLOWED_HOSTS: list = ["*"]
+    ALLOWED_HOSTS: list = os.getenv("YACHT_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if os.getenv("YACHT_ALLOWED_HOSTS") else ["localhost", "127.0.0.1", "[::1]"]
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")

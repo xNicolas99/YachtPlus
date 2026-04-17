@@ -37,15 +37,14 @@
             </v-col>
           </v-row>
         </div>
-        <editor
+        <v-ace-editor
           v-model:value="form.content"
           @init="editorInit"
           lang="yaml"
           :theme="editorTheming()"
-          :height="windowHeight"
-          :width="windowWidth"
+          :style="{ height: windowHeight + 'px', width: windowWidth + 'px' }"
           class="editor"
-        ></editor>
+        ></v-ace-editor>
       </v-form>
     </v-card>
   </div>
@@ -72,7 +71,7 @@ export default {
     };
   },
   components: {
-    editor: VAceEditor
+    VAceEditor
   },
   methods: {
     ...mapMutations({
