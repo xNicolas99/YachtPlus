@@ -27,6 +27,37 @@ async def get_containers():
             logger.error(f"Error fetching containers: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
+async def stream_stats_generator(request, container_id: str):
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+        try:
+            container = await docker.containers.get(container_id)
+            # Nutze den nativen Docker Stats Stream
+            async for stats in container.stats(stream=True):
+                if await request.is_disconnected():
+                    break
+
+                # Gleiche CPU/RAM Kalkulation wie in get_stats()...
+                # (Nutze deine interne Logik aus get_stats, um mem_percent und cpu_percent zu berechnen)
+                mem_usage = stats.get("memory_stats", {}).get("usage", 0)
+                mem_limit = stats.get("memory_stats", {}).get("limit", 1)
+                mem_percent = (mem_usage / mem_limit) * 100.0
+
+                # Vereinfachte CPU Calc für Stream
+                cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
+                system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
+                online_cpus = stats["cpu_stats"].get("online_cpus", 1)
+                cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0 if system_delta > 0 else 0.0
+
+                payload = {
+                    "cpu_percent": round(cpu_percent, 2),
+                    "memory_percent": round(mem_percent, 2),
+                    "memory_usage_mb": round(mem_usage / 1024 / 1024, 2)
+                }
+                yield {"event": "stats", "data": json.dumps(payload)}
+        except Exception as e:
+            logger.error(f"SSE Stream Error: {e}")
+            yield {"event": "error", "data": str(e)}
+
 async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = True, timestamps: bool = False):
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     try:

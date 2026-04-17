@@ -43,6 +43,8 @@
 </template>
 
 <script>
+import { useAuthStore } from '@/stores/authStore'
+
 export default {
   data() {
     return {
@@ -57,8 +59,10 @@ export default {
       this.error = null;
       this.loading = true;
       const { email, password } = this;
-      this.$store
-        .dispatch("auth/AUTH_REQUEST", { email, password })
+      const authStore = useAuthStore();
+
+      // Note: the login credentials expect 'username' so we map 'email' to 'username'
+      authStore.login({ username: email, password })
         .then(() => {
           this.$router.push("/");
         })

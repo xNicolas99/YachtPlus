@@ -74,6 +74,16 @@ async def get_container_stats(
     auth_check(Authorize)
     return await actions.get_stats(container_id)
 
+@router.get("/{container_id}/stats/stream")
+async def stream_container_stats(
+    request: Request,
+    container_id: str,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    """Echtzeit-Stream für CPU/RAM Metriken via SSE"""
+    auth_check(Authorize)
+    return EventSourceResponse(actions.stream_stats_generator(request, container_id))
+
 @router.post("/{container_id}/start")
 async def start_container(
     container_id: str,

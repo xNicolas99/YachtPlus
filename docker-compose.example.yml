@@ -1,6 +1,6 @@
 version: "3"
 services:
-  socket-proxy:
+  dockerproxy:
     image: tecnativa/docker-socket-proxy
     container_name: yacht-socket-proxy
     restart: unless-stopped
@@ -11,17 +11,7 @@ services:
       - IMAGES=1
       - NETWORKS=1
       - VOLUMES=1
-      - INFO=1
-      - EXEC=1
-      - POST=1
-      # Restrictions
-      - AUTH=0
-      - SECRETS=0
-      - SWARM=0
-      - SYSTEM=0
-      - NODES=0
-      - CONFIGS=0
-      - PLUGINS=0
+      - POST=1 # Erlaubt Steuerung (Start/Stop), blockiert aber gefährliche Host-Befehle
     networks:
       - yacht-net
 
@@ -30,10 +20,10 @@ services:
     container_name: yachtplus
     restart: unless-stopped
     depends_on:
-      - socket-proxy
+      - dockerproxy
     environment:
       - DOCKER_GID=${DOCKER_GID:-}
-      - DOCKER_HOST=tcp://socket-proxy:2375
+      - DOCKER_HOST=tcp://dockerproxy:2375 # Proxy statt direktem Socket
     ports:
       - "8000:8080"
     volumes:
