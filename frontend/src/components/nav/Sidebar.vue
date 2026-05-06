@@ -13,7 +13,7 @@
       >
         <template v-slot:append>
           <v-btn
-            icon="mdi-chevron-left"
+            icon="mdi-chevron-left" aria-label="Toggle sidebar" title="Toggle sidebar"
             variant="text"
             @click.stop="rail = !rail"
           ></v-btn>

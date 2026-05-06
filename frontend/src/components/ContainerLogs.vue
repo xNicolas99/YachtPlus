@@ -13,7 +13,7 @@
 
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="toggleFollow" v-bind="attrs" v-on="on">
+            <v-btn icon @click="toggleFollow" v-bind="attrs" v-on="on" :aria-label="following ? 'Pause Auto-scroll' : 'Resume Auto-scroll'">
               <v-icon>{{ following ? "mdi-pause" : "mdi-play" }}</v-icon>
             </v-btn>
           </template>
@@ -56,14 +56,14 @@
 
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="downloadLogs" v-bind="attrs" v-on="on">
+            <v-btn icon @click="downloadLogs" v-bind="attrs" v-on="on" aria-label="Download Logs">
               <v-icon>mdi-download</v-icon>
             </v-btn>
           </template>
           <span>Download Logs</span>
         </v-tooltip>
 
-        <v-btn icon @click="close"><v-icon>mdi-close</v-icon></v-btn>
+        <v-btn icon @click="close" aria-label="Close logs"><v-icon>mdi-close</v-icon></v-btn>
       </v-toolbar>
 
       <v-card-text class="flex-grow-1 d-flex flex-column pa-0">

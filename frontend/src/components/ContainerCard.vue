@@ -20,13 +20,13 @@
 
       <!-- Quick Actions (Hover visible or always visible based on pref? Keep always visible for utility) -->
       <div class="actions d-flex ml-2">
-        <v-btn icon size="x-small" variant="text" color="medium-emphasis" @click.stop="$emit('logs', container.name)" title="Logs">
+        <v-btn icon size="x-small" variant="text" color="medium-emphasis" @click.stop="$emit('logs', container.name)" title="View Logs" aria-label="View Logs">
           <v-icon>mdi-file-document-outline</v-icon>
         </v-btn>
 
         <v-menu location="bottom end">
           <template v-slot:activator="{ props }">
-            <v-btn icon size="x-small" variant="text" color="medium-emphasis" v-bind="props">
+            <v-btn icon size="x-small" variant="text" color="medium-emphasis" v-bind="props" aria-label="Container Actions" title="Container Actions">
               <v-icon>mdi-dots-vertical</v-icon>
             </v-btn>
           </template>
