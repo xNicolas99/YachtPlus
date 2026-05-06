@@ -327,6 +327,8 @@ export default {
     },
     handleSearch() {
       if (this.searchDebounce) clearTimeout(this.searchDebounce);
+      // Clear images immediately to fix Bug #4
+      this.images = [];
       this.searchDebounce = setTimeout(() => {
         this.fetchImages();
       }, 500);
