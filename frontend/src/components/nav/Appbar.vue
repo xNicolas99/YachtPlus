@@ -1,7 +1,7 @@
 <template>
   <v-app-bar app clipped-left color="background" elevation="1">
     <!-- Mobile Menu Button (Hamburger) -->
-    <v-app-bar-nav-icon
+    <v-app-bar-nav-icon aria-label="Toggle navigation menu" title="Toggle navigation menu"
       class="hidden-md-and-up mr-2"
       @click="$emit('toggle-drawer')"
     ></v-app-bar-nav-icon>
@@ -28,7 +28,7 @@
     <!-- Right Actions -->
     <div class="d-flex align-center pr-2">
       <!-- Notifications (Placeholder) -->
-      <v-btn icon color="medium-emphasis" class="mr-2">
+      <v-btn icon color="medium-emphasis" class="mr-2" aria-label="View notifications" title="View notifications">
         <v-badge content="0" color="error" dot>
           <v-icon>mdi-bell-outline</v-icon>
         </v-badge>

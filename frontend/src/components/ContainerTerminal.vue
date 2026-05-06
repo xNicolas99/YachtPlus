@@ -31,7 +31,7 @@
 
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="reconnect" v-bind="attrs" v-on="on">
+            <v-btn icon @click="reconnect" v-bind="attrs" v-on="on" aria-label="Reconnect terminal">
               <v-icon>mdi-refresh</v-icon>
             </v-btn>
           </template>
@@ -40,14 +40,14 @@
 
         <v-tooltip bottom>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="pasteFromClipboard" v-bind="attrs" v-on="on">
+            <v-btn icon @click="pasteFromClipboard" v-bind="attrs" v-on="on" aria-label="Paste from clipboard">
               <v-icon>mdi-content-paste</v-icon>
             </v-btn>
           </template>
           <span>Paste</span>
         </v-tooltip>
 
-        <v-btn icon @click="close">
+        <v-btn icon @click="close" aria-label="Close terminal">
           <v-icon>mdi-close</v-icon>
         </v-btn>
       </v-toolbar>

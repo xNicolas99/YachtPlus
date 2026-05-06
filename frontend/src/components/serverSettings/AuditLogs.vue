@@ -24,7 +24,7 @@
         </v-data-table>
       </v-card-text>
       <v-card-actions>
-         <v-btn icon @click="fetchLogs"><v-icon>mdi-refresh</v-icon></v-btn>
+         <v-btn icon @click="fetchLogs" aria-label="Refresh audit logs" title="Refresh audit logs"><v-icon>mdi-refresh</v-icon></v-btn>
       </v-card-actions>
     </v-card>
   </div>
