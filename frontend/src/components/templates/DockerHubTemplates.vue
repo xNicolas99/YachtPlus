@@ -160,6 +160,7 @@ export default {
   methods: {
     async fetchPopularImages() {
       this.loading = true;
+      this.popularImages = {}; // Clear immediately to fix Bug #4
       try {
         // Changed from /templates/dockerhub/popular to /registries/popular
         // Verified: This endpoint now points to the new Registries Router.
@@ -177,8 +178,10 @@ export default {
     handleSearchInput(val) {
       if (this.debounceTimer) clearTimeout(this.debounceTimer);
 
+      // Clear search results immediately to fix Bug #4
+      this.searchResults = [];
+
       if (!val || val.length < 2) {
-        this.searchResults = [];
         return;
       }
 
@@ -188,6 +191,7 @@ export default {
     },
     async searchDockerHub(query) {
       this.loading = true;
+      this.searchResults = []; // Clear immediately to fix Bug #4
       try {
         // Changed from /templates/dockerhub/search to /registries/search
         // Verified: This endpoint now points to the new Registries Router.
