@@ -29,18 +29,22 @@ async def search(
 
     # Create tasks
     # 1. DockerHub (Async)
-    task_dockerhub = registries.search_registry("dockerhub", q)
+    # Schedule the network request to run concurrently in the background
+    task_dockerhub = asyncio.create_task(registries.search_registry("dockerhub", q))
 
     # 2. Templates (Sync - wrap in thread or just run)
     # Since it's a DB call, it's blocking. For optimal performance we could use run_in_executor
     # But usually it's fast. Let's just call it.
-    # Wait, we can't run sync function in gather easily without to_thread.
-    # Let's run async first, then sync.
 
-    dockerhub_results = await task_dockerhub
+    # Yield control back to the event loop so task_dockerhub can actually begin executing
+    # the network I/O before we block the thread with our synchronous database query.
+    await asyncio.sleep(0)
 
-    # Templates
+    # Execute synchronous database query (CPU/Disk blocking)
     template_results_orm = match_templates(db, q)
+
+    # Await the completion of the background network task
+    dockerhub_results = await task_dockerhub
     # Convert ORM objects to dicts or Pydantic models
     template_results = []
     for t in template_results_orm:
