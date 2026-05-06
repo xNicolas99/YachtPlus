@@ -56,6 +56,13 @@ def validate_url(url: str):
 
     return True
 
+
+class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        validate_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def get_templates(db: Session):
     return db.query(models.Template).all()
 
@@ -105,7 +112,8 @@ def add_template(db: Session, template: models.Template):
         ext = os.path.splitext(_template_path)[1]
         # Opens the JSON and iterate over the content.
         _template = models.Template(title=template.title, url=template.url)
-        with urllib.request.urlopen(template.url) as file:
+        opener = urllib.request.build_opener(SafeRedirectHandler())
+        with opener.open(template.url) as file:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(file, Loader=yaml.SafeLoader)
             elif ext.rstrip() in (".json", "json"):
@@ -222,7 +230,8 @@ def refresh_template(db: Session, template_id: id):
 
     items = []
     try:
-        with urllib.request.urlopen(template.url) as fp:
+        opener = urllib.request.build_opener(SafeRedirectHandler())
+        with opener.open(template.url) as fp:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(fp, Loader=yaml.SafeLoader)
             elif ext.rstrip() in (".json"):
