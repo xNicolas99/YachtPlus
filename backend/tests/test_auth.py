@@ -41,3 +41,25 @@ def test_auth_check_invalid_signature(mock_settings):
 
     assert excinfo.value.status_code == 401
     assert "Invalid token signature" in excinfo.value.detail
+
+def test_auth_check_success(mock_settings):
+    # Mock AuthWrapper to simulate successful token validation
+    mock_auth = MagicMock()
+
+    # auth_check should return None/pass without raising exception
+    auth_check(mock_auth)
+
+    # Ensure jwt_required was called once
+    mock_auth.jwt_required.assert_called_once()
+
+def test_auth_check_auth_disabled(monkeypatch):
+    # Ensure auth is disabled
+    monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", True)
+
+    mock_auth = MagicMock()
+
+    # auth_check should pass without raising exception
+    auth_check(mock_auth)
+
+    # Ensure jwt_required was NOT called because auth is disabled
+    mock_auth.jwt_required.assert_not_called()

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 
+from api.db.crud.users import verify_password
 from api.utils.auth import get_db
 from api.auth.auth import auth_check, check_permission
 from api.settings import Settings
