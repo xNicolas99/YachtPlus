@@ -58,14 +58,25 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
         print(f"Failed to send security alert: {e}")
 
 def check_ip_restriction(request: Request, db: Session, username: str = None):
-    # Support X-Forwarded-For if running behind proxy
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # X-Forwarded-For: <client>, <proxy1>, <proxy2>
-        # We take the first one as client ip
-        client_ip = forwarded_for.split(",")[0].strip()
-    else:
-        client_ip = request.client.host
+    client_ip = request.client.host
+
+    # If the request comes from a trusted private proxy, we can inspect proxy headers
+    if client_ip and is_private_ip(client_ip):
+        real_ip = request.headers.get("X-Real-IP")
+        forwarded_for = request.headers.get("X-Forwarded-For")
+
+        if real_ip:
+            client_ip = real_ip.strip()
+        elif forwarded_for:
+            # Safely parse X-Forwarded-For: traverse right-to-left
+            # The rightmost IPs are added by the closest trusted proxies.
+            # We want the first IP that is NOT a private IP, or if all are private, the leftmost one.
+            ips = [ip.strip() for ip in forwarded_for.split(",")]
+            client_ip = ips[0] # Fallback to leftmost if all are private (e.g. internal NAT)
+            for ip in reversed(ips):
+                if not is_private_ip(ip):
+                    client_ip = ip
+                    break
 
     # 1. Check IP Restriction (Allow only private IPs by default?)
     # For now, let's hardcode this policy or check a setting if we had one.
