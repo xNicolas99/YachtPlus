@@ -93,49 +93,40 @@ export default {
       searchTimeout = setTimeout(async () => {
         isLoading.value = true
         try {
-          // 1. Search running containers (client-side filter as per prompt instructions)
-          // Removed duplicate /api prefix if present in original (already fixed in axios config, ensuring clean here)
-          try {
-            const containersRes = await axios.get('/containers')
-            const containers = containersRes.data
-            runningContainers.value = containers.filter(c =>
-              (c.Names && c.Names[0].toLowerCase().includes(searchQuery.value.toLowerCase())) ||
-              (c.Image && c.Image.toLowerCase().includes(searchQuery.value.toLowerCase()))
-            ).slice(0, 5).map(c => ({
-                id: c.Id,
-                name: c.Names ? c.Names[0].replace('/', '') : 'Unknown'
-            }))
-          } catch (e) {
+          // Fetch containers and unified search in parallel
+          const containersPromise = axios.get('/containers').catch(e => {
             console.error('Container search failed', e)
+            return { data: [] }
+          })
+
+          const searchPromise = axios.get(`/search?q=${encodeURIComponent(searchQuery.value)}`).catch(e => {
+            console.error('Backend unified search failed', e)
+            return { data: {} }
+          })
+
+          const [containersRes, searchRes] = await Promise.all([containersPromise, searchPromise])
+
+          // 1. Process Containers
+          const containers = containersRes.data
+          runningContainers.value = containers.filter(c =>
+            (c.Names && c.Names[0].toLowerCase().includes(searchQuery.value.toLowerCase())) ||
+            (c.Image && c.Image.toLowerCase().includes(searchQuery.value.toLowerCase()))
+          ).slice(0, 5).map(c => ({
+              id: c.Id,
+              name: c.Names ? c.Names[0].replace('/', '') : 'Unknown'
+          }))
+
+          // 2. Process Templates & DockerHub from unified search
+          if (searchRes.data.templates) {
+              templates.value = searchRes.data.templates.slice(0, 5)
+          } else {
+              templates.value = []
           }
 
-          // 2. Search Templates (via backend match endpoint or fetching all)
-          // The prompt used '/api/templates' and filtered client side.
-          try {
-             const templatesRes = await axios.get('/templates')
-             const templatesData = templatesRes.data
-             templates.value = templatesData.filter(t =>
-               t.title.toLowerCase().includes(searchQuery.value.toLowerCase())
-             ).slice(0, 5)
-          } catch (e) {
-             console.error('Template search failed', e)
-          }
-
-          // 3. Search DockerHub
-          // Use the unified search endpoint to aggregate results.
-          // This avoids CORS issues and double API prefixing.
-          try {
-             const searchRes = await axios.get(`/search?q=${encodeURIComponent(searchQuery.value)}`)
-             // Overwrite templates and dockerhub results with what the backend returns,
-             // as it's likely more robust (and avoids fetching ALL templates every keystroke).
-             if (searchRes.data.templates) {
-                 templates.value = searchRes.data.templates.slice(0, 5)
-             }
-             if (searchRes.data.dockerhub) {
-                 dockerHubResults.value = searchRes.data.dockerhub.slice(0, 5)
-             }
-          } catch (e) {
-             console.error('Backend unified search failed', e)
+          if (searchRes.data.dockerhub) {
+              dockerHubResults.value = searchRes.data.dockerhub.slice(0, 5)
+          } else {
+              dockerHubResults.value = []
           }
 
         } catch (error) {
