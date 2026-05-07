@@ -132,13 +132,60 @@ def test_check_ip_restriction_private_ip():
 
 def test_check_ip_restriction_x_forwarded_for_private():
     mock_request = MagicMock(spec=Request)
-    mock_request.headers = {"X-Forwarded-For": "10.0.0.5, 1.2.3.4"}
+    # Safe fallback parsing of X-Forwarded-For: traversing from right to left
+    # Here all are private, so we'll fallback to the leftmost
+    mock_request.headers = {"X-Forwarded-For": "10.0.0.5, 10.0.0.6"}
+    mock_request.client.host = "127.0.0.1"
 
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.count.return_value = 0
 
     result = check_ip_restriction(mock_request, mock_db)
     assert result == "10.0.0.5"
+
+def test_check_ip_restriction_x_real_ip_private():
+    mock_request = MagicMock(spec=Request)
+    # X-Real-IP should take precedence when client host is private (from nginx)
+    mock_request.headers = {"X-Real-IP": "10.0.0.6", "X-Forwarded-For": "1.2.3.4"}
+    mock_request.client.host = "127.0.0.1"
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.count.return_value = 0
+
+    result = check_ip_restriction(mock_request, mock_db)
+    assert result == "10.0.0.6"
+
+def test_check_ip_restriction_x_real_ip_ignored_if_host_public():
+    mock_request = MagicMock(spec=Request)
+    # X-Real-IP is ignored if the immediate client is not a private IP
+    mock_request.headers = {"X-Real-IP": "10.0.0.6"}
+    mock_request.client.host = "8.8.8.8"
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.count.return_value = 0
+    mock_db.query.return_value.first.return_value = MagicMock(sender_email="test@test.com")
+
+    # Should raise 403 because 8.8.8.8 is used
+    with pytest.raises(HTTPException) as excinfo:
+        check_ip_restriction(mock_request, mock_db)
+
+    assert excinfo.value.status_code == 403
+
+def test_check_ip_restriction_x_forwarded_for_public():
+    mock_request = MagicMock(spec=Request)
+    # Testing that the rightmost public IP is picked if spoofed:
+    # Client sends 'X-Forwarded-For: 127.0.0.1', proxy appends '8.8.8.8' -> '127.0.0.1, 8.8.8.8'
+    mock_request.headers = {"X-Forwarded-For": "127.0.0.1, 8.8.8.8"}
+    mock_request.client.host = "127.0.0.1"
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.count.return_value = 0
+    mock_db.query.return_value.first.return_value = MagicMock(sender_email="test@test.com")
+
+    with pytest.raises(HTTPException) as excinfo:
+        check_ip_restriction(mock_request, mock_db)
+
+    assert excinfo.value.status_code == 403
 
 @patch("api.utils.security.send_security_alert")
 def test_check_ip_restriction_public_ip(mock_alert):
