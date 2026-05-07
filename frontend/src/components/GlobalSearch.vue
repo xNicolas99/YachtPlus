@@ -62,12 +62,14 @@
 
 <script>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useStore } from 'vuex'
 import axios from 'axios'
 import router from '@/router'
 
 export default {
   name: 'GlobalSearch',
   setup() {
+    const store = useStore()
     const searchQuery = ref('')
     const showDropdown = ref(false)
     const isLoading = ref(false)
@@ -93,28 +95,24 @@ export default {
       searchTimeout = setTimeout(async () => {
         isLoading.value = true
         try {
-          // Fetch containers and unified search in parallel
-          const containersPromise = axios.get('/containers').catch(e => {
-            console.error('Container search failed', e)
-            return { data: [] }
-          })
-
+          // Fetch unified search from backend
           const searchPromise = axios.get(`/search?q=${encodeURIComponent(searchQuery.value)}`).catch(e => {
             console.error('Backend unified search failed', e)
             return { data: {} }
           })
 
-          const [containersRes, searchRes] = await Promise.all([containersPromise, searchPromise])
-
-          // 1. Process Containers
-          const containers = containersRes.data
+          // Search local containers from Vuex store
+          const query = searchQuery.value.toLowerCase()
+          const containers = store.state.apps.apps || []
           runningContainers.value = containers.filter(c =>
-            (c.Names && c.Names[0].toLowerCase().includes(searchQuery.value.toLowerCase())) ||
-            (c.Image && c.Image.toLowerCase().includes(searchQuery.value.toLowerCase()))
+            (c.name && c.name.toLowerCase().includes(query)) ||
+            (c.Config && c.Config.Image && c.Config.Image.toLowerCase().includes(query))
           ).slice(0, 5).map(c => ({
-              id: c.Id,
-              name: c.Names ? c.Names[0].replace('/', '') : 'Unknown'
+              id: c.short_id || c.name,
+              name: c.name
           }))
+
+          const searchRes = await searchPromise
 
           // 2. Process Templates & DockerHub from unified search
           if (searchRes.data.templates) {
