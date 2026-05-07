@@ -34,9 +34,15 @@
               >
               </v-text-field>
             </v-form>
-            <v-btn v-if="!newKey" class="primary" @click="generate_api_key()">
-              Generate Key</v-btn
+            <v-btn
+              v-if="!newKey"
+              class="primary"
+              @click="generate_api_key()"
+              :loading="isGenerating"
+              :disabled="isGenerating"
             >
+              Generate Key
+            </v-btn>
             <br v-if="newKey" />
             <span v-if="newKey" class="font-weight-bold">
               Generated API Key:</span
@@ -122,6 +128,7 @@ export default {
         key_name: ""
       },
       saved: false,
+      isGenerating: false,
       apiKeys: [],
       headers: [
         {
@@ -162,11 +169,14 @@ export default {
       document.execCommand("Copy");
     },
     generate_api_key() {
+      this.isGenerating = true;
       const payload = { ...this.keyForm };
       let url = "/auth/api/keys/new";
       axios.post(url, payload).then(resp => {
         this.newKey = resp.data.token;
         this.apiKeys.push(resp.data);
+      }).finally(() => {
+        this.isGenerating = false;
       });
     },
     revoke_api_key(key) {
