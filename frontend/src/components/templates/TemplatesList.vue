@@ -19,7 +19,7 @@
             </v-fade-transition>
             <v-card-title class="primary font-weight-bold">
               Templates
-              <v-btn class="ml-2" color="secondary" to="/templates/new">
+              <v-btn class="ml-2" color="secondary" to="/templates/new" aria-label="Add new template" title="Add new template">
                 <v-icon>mdi-plus</v-icon>
               </v-btn>
               <v-spacer></v-spacer>

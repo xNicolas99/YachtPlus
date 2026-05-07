@@ -41,7 +41,7 @@
     <v-card-actions>
       <v-spacer></v-spacer>
       <v-btn color="secondary" @click="testEmail">Send Test Email</v-btn>
-      <v-btn color="primary" @click="saveSettings">Save</v-btn>
+      <v-btn color="primary" :loading="isSaving" :disabled="isSaving" @click="saveSettings">Save</v-btn>
     </v-card-actions>
 
     <v-dialog v-model="testDialog" max-width="500px">
@@ -57,7 +57,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn text @click="testDialog = false">Cancel</v-btn>
-          <v-btn color="primary" @click="sendTest">Send</v-btn>
+          <v-btn color="primary" :loading="isTesting" :disabled="isTesting" @click="sendTest">Send</v-btn>
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -80,7 +80,9 @@ export default {
         use_tls: true
       },
       testDialog: false,
-      testRecipient: ""
+      testRecipient: "",
+      isSaving: false,
+      isTesting: false
     };
   },
   created() {
@@ -98,6 +100,7 @@ export default {
         });
     },
     saveSettings() {
+      this.isSaving = true;
       axios
         .post("/settings/smtp/", this.settings)
         .then(() => {
@@ -111,12 +114,16 @@ export default {
             message: "Error saving settings: " + err.response.data.detail,
             color: "error"
           });
+        })
+        .finally(() => {
+          this.isSaving = false;
         });
     },
     testEmail() {
       this.testDialog = true;
     },
     sendTest() {
+      this.isTesting = true;
       axios
         .post("/settings/smtp/test", { recipient: this.testRecipient })
         .then(() => {
@@ -131,6 +138,9 @@ export default {
             message: "Error sending email: " + err.response.data.detail,
             color: "error"
           });
+        })
+        .finally(() => {
+          this.isTesting = false;
         });
     }
   }

@@ -31,9 +31,13 @@
               </v-text-field>
             </v-col>
             <v-col class="flex-grow-0 flex-shrink-1">
-              <v-btn @click="submitCompose()" color="primary" class="mr-2 mt-3"
-                >submit</v-btn
-              >
+              <v-btn
+                @click="submitCompose()"
+                color="primary"
+                class="mr-2 mt-3"
+                :loading="isSubmitting"
+                :disabled="isSubmitting"
+              >submit</v-btn>
             </v-col>
           </v-row>
         </div>
@@ -66,6 +70,7 @@ export default {
         name: "",
         content: null
       },
+      isSubmitting: false,
       windowHeight: window.innerHeight - 205,
       windowWidth: window.innerWidth - 80
     };
@@ -91,6 +96,7 @@ export default {
       }
     },
     submitCompose() {
+      this.isSubmitting = true;
       let url = `/compose/${this.form.name}/edit`;
       axios
         .post(url, this.form, {})
@@ -99,6 +105,9 @@ export default {
         })
         .catch(err => {
           this.setErr(err);
+        })
+        .finally(() => {
+          this.isSubmitting = false;
         });
     },
     async populateForm() {
