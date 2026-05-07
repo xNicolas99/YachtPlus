@@ -129,6 +129,10 @@ def login(
         crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
+        if not _user.is_active:
+            record_login_attempt(db, client_ip, user_data.username, False)
+            logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
+            raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
 
         # Check 2FA
         if _user.is_2fa_enabled:
@@ -197,6 +201,11 @@ def login_cookie(
         crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
+        if not _user.is_active:
+            record_login_attempt(db, client_ip, user_data.username, False)
+            logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
+            raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
+
         if _user.is_2fa_enabled:
              if not user_data.otp_token:
                 return {"login": "2fa_required", "username": _user.username}

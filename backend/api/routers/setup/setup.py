@@ -58,6 +58,9 @@ def bypass_setup(db: Session = Depends(get_db)):
     if is_setup_completed(db):
         return {"message": "Setup already completed or bypassed."}
 
+    if db.query(User).count() > 0:
+        raise HTTPException(status_code=400, detail="Cannot bypass setup after a user has been registered.")
+
     status = db.query(SetupStatus).first()
     if not status:
         status = SetupStatus(is_bypassed=True)
@@ -88,7 +91,7 @@ def register_first_user(
             username=user.username,
             password=user.password,
             is_superuser=True,
-            is_active=True
+            is_active=False
         )
         new_user = update_user_by_id(db, existing_user.id, user_update)
         if not new_user:
@@ -96,6 +99,7 @@ def register_first_user(
     else:
         # Create the user as superuser
         user.is_superuser = True
+        user.is_active = False
         try:
             new_user = create_user(db=db, user=user)
         except Exception as e:
@@ -138,6 +142,7 @@ def register_first_user(
     # No, existing user check prevents overwrite unless we handle it.
 
     access_token = create_access_token(data={"sub": new_user.username})
+    Authorize.set_access_cookies(access_token, response)
 
     return {
         "login": "successful",
@@ -161,6 +166,9 @@ def finalize_setup(
 
     if not user.is_2fa_enabled:
         raise HTTPException(status_code=400, detail="2FA must be enabled to finalize setup.")
+
+    user.is_active = True
+    db.commit()
 
     mark_setup_completed(db)
     return {"message": "Setup finalized"}
