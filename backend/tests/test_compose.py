@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from api.actions.compose import check_dockerhost
 
 def test_check_dockerhost_with_env_var():
@@ -8,19 +8,44 @@ def test_check_dockerhost_with_env_var():
     result = check_dockerhost(env)
     assert result == {"DOCKER_HOST": "tcp://192.168.1.100:2375"}
 
-def test_check_dockerhost_without_env_var():
-    # If DOCKER_HOST is not in environment, it should clear it
+@patch('os.path.exists')
+@patch('docker.from_env')
+def test_check_dockerhost_socket_exists_and_ping_succeeds(mock_from_env, mock_path_exists):
+    # Test that if socket exists and ping succeeds, it returns an empty dict
+    mock_path_exists.return_value = True
+    mock_client = MagicMock()
+    mock_client.ping.return_value = True
+    mock_from_env.return_value = mock_client
+
     env = {}
     result = check_dockerhost(env)
-    assert result == {"clear_env": "true"}
+    assert result == {}
+    mock_path_exists.assert_called_once_with('/var/run/docker.sock')
+    mock_from_env.assert_called_once()
+    mock_client.ping.assert_called_once()
 
 @patch('os.path.exists')
 @patch('docker.from_env')
-def test_check_dockerhost_mocked(mock_from_env, mock_path_exists):
-    # This test satisfies the requirement "Test check_dockerhost by mocking os.path.exists and the docker client."
-    # Even though `check_dockerhost` currently doesn't use them directly in the provided implementation,
-    # we include the mock test as explicitly requested by the instructions.
+def test_check_dockerhost_socket_exists_ping_fails(mock_from_env, mock_path_exists):
+    # Test that if socket exists but ping fails, it returns {"clear_env": "true"}
     mock_path_exists.return_value = True
-    env = {"DOCKER_HOST": "tcp://10.0.0.1:2375"}
+    mock_client = MagicMock()
+    mock_client.ping.side_effect = Exception("Docker daemon unreachable")
+    mock_from_env.return_value = mock_client
+
+    env = {}
     result = check_dockerhost(env)
-    assert result == {"DOCKER_HOST": "tcp://10.0.0.1:2375"}
+    assert result == {"clear_env": "true"}
+    mock_path_exists.assert_called_once_with('/var/run/docker.sock')
+    mock_from_env.assert_called_once()
+    mock_client.ping.assert_called_once()
+
+@patch('os.path.exists')
+def test_check_dockerhost_socket_does_not_exist(mock_path_exists):
+    # Test that if socket does not exist, it returns {"clear_env": "true"}
+    mock_path_exists.return_value = False
+
+    env = {}
+    result = check_dockerhost(env)
+    assert result == {"clear_env": "true"}
+    mock_path_exists.assert_called_once_with('/var/run/docker.sock')
