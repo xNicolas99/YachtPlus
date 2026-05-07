@@ -48,6 +48,8 @@
               "
               icon
               v-if="newKey"
+              aria-label="Copy API Key"
+              title="Copy API Key"
               ><v-icon>mdi-clipboard-text-outline</v-icon></v-btn
             >
             <v-textarea
