@@ -133,7 +133,7 @@ def test_check_ip_restriction_private_ip():
 def test_check_ip_restriction_x_forwarded_for_private():
     mock_request = MagicMock(spec=Request)
     # Safe fallback parsing of X-Forwarded-For: traversing from right to left
-    # Here all are private, so we'll fallback to the leftmost
+    # Here all are private, so we'll fallback to the rightmost
     mock_request.headers = {"X-Forwarded-For": "10.0.0.5, 10.0.0.6"}
     mock_request.client.host = "127.0.0.1"
 
@@ -141,7 +141,7 @@ def test_check_ip_restriction_x_forwarded_for_private():
     mock_db.query.return_value.filter.return_value.count.return_value = 0
 
     result = check_ip_restriction(mock_request, mock_db)
-    assert result == "10.0.0.5"
+    assert result == "10.0.0.6"
 
 def test_check_ip_restriction_x_real_ip_private():
     mock_request = MagicMock(spec=Request)

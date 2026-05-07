@@ -70,9 +70,9 @@ def check_ip_restriction(request: Request, db: Session, username: str = None):
         elif forwarded_for:
             # Safely parse X-Forwarded-For: traverse right-to-left
             # The rightmost IPs are added by the closest trusted proxies.
-            # We want the first IP that is NOT a private IP, or if all are private, the leftmost one.
+            # We want the first IP that is NOT a private IP, or if all are private, the rightmost one.
             ips = [ip.strip() for ip in forwarded_for.split(",")]
-            client_ip = ips[0] # Fallback to leftmost if all are private (e.g. internal NAT)
+            client_ip = ips[-1] # Fallback to rightmost if all are private
             for ip in reversed(ips):
                 if not is_private_ip(ip):
                     client_ip = ip

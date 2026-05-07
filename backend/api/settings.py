@@ -1,10 +1,11 @@
 import os
+import secrets
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
 class Settings(BaseSettings):
     # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "insecure_secret_key_change_me")
+    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     ACCESS_TOKEN_EXPIRES: int = 1440 * 60 # Legacy support

@@ -415,8 +415,8 @@ def _check_updates(tag):
 def format_bytes(size):
     power = 2 ** 10
     n = 0
-    power_labels = {0: "B", 1: "KB", 2: "MB", 3: "GB"}
-    while size > power:
+    power_labels = {0: "B", 1: "KB", 2: "MB", 3: "GB", 4: "TB", 5: "PB"}
+    while size >= power and n < len(power_labels) - 1:
         size /= power
         n += 1
     return str(round(size)) + " " + str(power_labels[n])
