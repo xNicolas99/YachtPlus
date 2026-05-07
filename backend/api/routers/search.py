@@ -7,6 +7,7 @@ from api.utils.auth import get_db
 
 import api.utils.registries as registries
 from api.db.crud.templates import match_templates
+from fastapi.concurrency import run_in_threadpool
 
 import asyncio
 
@@ -41,7 +42,7 @@ async def search(
     await asyncio.sleep(0)
 
     # Execute synchronous database query (CPU/Disk blocking)
-    template_results_orm = match_templates(db, q)
+    template_results_orm = await run_in_threadpool(match_templates, db, q)
 
     # Await the completion of the background network task
     dockerhub_results = await task_dockerhub

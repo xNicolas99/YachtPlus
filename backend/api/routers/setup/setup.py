@@ -123,12 +123,10 @@ def register_first_user(
     # No, existing user check prevents overwrite unless we handle it.
 
     access_token = create_access_token(data={"sub": new_user.username})
-    Authorize.set_access_cookies(access_token, response)
 
     return {
         "login": "successful",
         "username": new_user.username
-        # access_token removed from body to improve security slightly
     }
 
 @router.post("/finalize")
