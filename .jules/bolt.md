@@ -1,0 +1,3 @@
+## 2024-05-24 - [Optimize GlobalSearch.vue API fetches]
+**Learning:** Found a significant anti-pattern in `GlobalSearch.vue` where multiple independent network requests (`/containers` and `/search`) were being fetched sequentially inside a debounced method. Additionally, it fetched the entire `/templates` list redundantly because the backend `/search` endpoint already returned templates. This delayed search results unnecessarily.
+**Action:** When implementing global or multi-source searches, avoid redundant fetches if the unified endpoint covers them. Use `Promise.all` to fetch independent data sources concurrently, minimizing the time to interactive.
