@@ -88,6 +88,8 @@
                       v-bind="{ attrs }"
                       v-on="on"
                       color="secondary"
+                      aria-label="Refresh Application Details"
+                      title="Refresh Application Details"
                       ><v-icon>mdi-refresh</v-icon></v-btn
                     >
                   </template>
