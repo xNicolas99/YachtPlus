@@ -63,7 +63,7 @@
               offset-y
             >
               <template v-slot:activator="{ on, attrs }">
-                <v-btn icon size="small" v-bind="attrs" v-on="on" class="">
+                <v-btn icon size="small" v-bind="attrs" v-on="on" class="" aria-label="Project Actions" title="Project Actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
