@@ -46,10 +46,14 @@ def test_get_setup_status(mock_is_setup_completed, mock_exists, override_db, exp
 def test_bypass_setup(mock_is_setup_completed, mock_exists):
     # Using a fake DB with real query/add/commit mock
     db = MagicMock()
-    query_mock = MagicMock()
-    # first call returns None, meaning setup not started
-    query_mock.first.return_value = None
-    db.query.return_value = query_mock
+    def mock_query(model):
+        q = MagicMock()
+        if model.__name__ == "User":
+            q.count.return_value = 0
+        else:
+            q.first.return_value = None
+        return q
+    db.query.side_effect = mock_query
 
     app.dependency_overrides[get_db] = lambda: db
 
