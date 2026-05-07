@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 
-from api.utils.security import verify_password
 from api.utils.auth import get_db
 from api.auth.auth import auth_check, check_permission
 from api.settings import Settings
@@ -126,7 +125,7 @@ def login(
     )
 
     if not _user:
-        verify_password(user_data.password, DUMMY_HASH)
+        crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
 
@@ -194,7 +193,7 @@ def login_cookie(
     )
 
     if not _user:
-        verify_password(user_data.password, DUMMY_HASH)
+        crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
         if _user.is_2fa_enabled:
