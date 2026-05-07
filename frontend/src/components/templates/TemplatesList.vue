@@ -53,7 +53,7 @@
                   <span class="nametext">{{ item.title }}</span>
                   <v-menu close-on-click close-on-content-click offset-y>
                     <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon size="small" v-bind="attrs" v-on="on">
+                      <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Template Actions" title="Template Actions">
                         <v-icon>mdi-dots-horizontal</v-icon>
                       </v-btn>
                     </template>

@@ -12,7 +12,7 @@
       <v-card-title>
         <v-menu close-on-click close-on-content-click offset-y>
           <template v-slot:activator="{ on, attrs }">
-            <v-btn icon size="small" v-bind="attrs" v-on="on">
+            <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Network Actions" title="Network Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
