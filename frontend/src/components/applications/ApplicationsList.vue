@@ -14,11 +14,11 @@
       </v-card-title>
 
       <v-card-title color="secondary">
-        <v-btn class="ml-2" @click="checkUpdate(apps)" color="secondary">
+        <v-btn class="ml-2" @click="checkUpdate(apps)" color="secondary" :loading="isCheckingUpdates" :disabled="isCheckingUpdates">
           <span v-if="$vuetify.breakpoint.mdAndUp">Updates</span>
           <v-icon>mdi-update</v-icon>
         </v-btn>
-        <v-btn class="ml-2" @click="refresh()" color="secondary">
+        <v-btn class="ml-2" @click="refresh()" color="secondary" :loading="isRefreshing" :disabled="isRefreshing">
           <span v-if="$vuetify.breakpoint.mdAndUp">Refresh</span>
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
@@ -367,6 +367,8 @@ export default {
       expanded: [],
       removeDialog: false,
       selectedApp: null,
+      isCheckingUpdates: false,
+      isRefreshing: false,
       host_ip: location.hostname,
       loadTimeout: null,
       loadError: false,
@@ -419,7 +421,7 @@ export default {
       readApps: "apps/readApps",
       AppAction: "apps/AppAction",
       Update: "apps/AppUpdate",
-      checkUpdate: "apps/checkAppUpdate"
+      checkUpdateStore: "apps/checkAppUpdate"
     }),
     handleRowClick(appName) {
       this.$router.push({ path: `/apps${appName.Name}` });
@@ -451,7 +453,20 @@ export default {
       return o;
     },
     async refresh() {
-      await this.loadAppsWithTimeout();
+      this.isRefreshing = true;
+      try {
+        await this.loadAppsWithTimeout();
+      } finally {
+        this.isRefreshing = false;
+      }
+    },
+    async checkUpdate(apps) {
+      this.isCheckingUpdates = true;
+      try {
+        await this.checkUpdateStore(apps);
+      } finally {
+        this.isCheckingUpdates = false;
+      }
     },
     async retryLoad() {
       this.loadError = false;
