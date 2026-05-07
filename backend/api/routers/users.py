@@ -126,7 +126,7 @@ def login(
     )
 
     if not _user:
-        verify_password(user_data.password, DUMMY_HASH)
+        crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
 
@@ -194,7 +194,7 @@ def login_cookie(
     )
 
     if not _user:
-        verify_password(user_data.password, DUMMY_HASH)
+        crud.verify_password(user_data.password, DUMMY_HASH)
 
     if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
         if _user.is_2fa_enabled:
