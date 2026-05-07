@@ -95,7 +95,7 @@
     </h2>
     <v-data-table dense :headers="headers" :items="apiKeys" :items-per-page="5">
       <template v-slot:item.key_name="{ item }">
-        <v-btn @click="revoke_api_key(item)" icon
+        <v-btn @click="revoke_api_key(item)" icon aria-label="Revoke API key" title="Revoke API key"
           ><v-icon>mdi-trash-can-outline</v-icon></v-btn
         >
         <span class="ml-2"> {{ item.key_name }} </span>
