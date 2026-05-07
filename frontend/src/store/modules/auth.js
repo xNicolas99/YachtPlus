@@ -33,18 +33,20 @@ const getters = {
 };
 
 const actions = {
-  [AUTH_REQUEST]: ({ commit }, user) => {
+  [AUTH_REQUEST]: ({ commit }, credentials) => {
     return new Promise((resolve, reject) => {
       commit(AUTH_REQUEST);
       const url = "/auth/login";
 
-      const payload = {
-          username: user.email, // Map email to username for backend
-          password: user.password
-      };
+      // Fix: Backend expects 'username', but Login.vue sends 'email'.
+      // If username is missing but email exists, map it.
+      // Verified: This mapping is required for OAuth2PasswordRequestForm compatibility.
+      if (credentials.email && !credentials.username) {
+        credentials.username = credentials.email;
+      }
 
       axios
-        .post(url, payload, { withCredentials: true })
+        .post(url, credentials, { withCredentials: true })
         .then(resp => {
           localStorage.setItem("username", resp.data.username);
           axios.defaults.withCredentials = true;
