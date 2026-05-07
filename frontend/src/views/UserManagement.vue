@@ -6,7 +6,7 @@
         <v-toolbar color="primary" dark flat>
           <v-toolbar-title>User Management</v-toolbar-title>
           <v-spacer></v-spacer>
-          <v-btn icon @click="loadUsers">
+          <v-btn icon @click="loadUsers" aria-label="Refresh users" title="Refresh users">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
           <v-btn color="secondary" @click="openCreateDialog">

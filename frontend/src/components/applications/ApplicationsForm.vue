@@ -326,7 +326,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addVolume">
+                  <v-btn icon class="align-self-center" @click="addVolume" aria-label="Add volume" title="Add volume">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
@@ -403,7 +403,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addEnv">
+                  <v-btn icon class="align-self-center" @click="addEnv" aria-label="Add environment variable" title="Add environment variable">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
@@ -518,7 +518,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addCommand">
+                  <v-btn icon class="align-self-center" @click="addCommand" aria-label="Add command" title="Add command">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
@@ -586,7 +586,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addDevices">
+                  <v-btn icon class="align-self-center" @click="addDevices" aria-label="Add device" title="Add device">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
@@ -653,7 +653,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addLabels">
+                  <v-btn icon class="align-self-center" @click="addLabels" aria-label="Add label" title="Add label">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
@@ -719,7 +719,7 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addSysctls">
+                  <v-btn icon class="align-self-center" @click="addSysctls" aria-label="Add sysctl" title="Add sysctl">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
