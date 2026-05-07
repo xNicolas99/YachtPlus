@@ -3,7 +3,7 @@
     <v-card color="foreground">
       <v-card-title class="primary font-weight-bold">
         Apps
-        <v-btn class="ml-2" color="secondary" to="/apps/deploy">
+        <v-btn class="ml-2" color="secondary" to="/apps/deploy" aria-label="Deploy new application" title="Deploy new application">
           <v-icon>mdi-plus</v-icon>
         </v-btn>
         <v-spacer />
