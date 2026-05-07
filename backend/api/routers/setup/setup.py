@@ -22,7 +22,7 @@ def is_setup_completed(db: Session = None):
         return False
 
     status = db.query(SetupStatus).first()
-    if status and status.is_complete:
+    if status and (status.is_complete or status.is_bypassed):
         return True
 
     # Fallback to file check (legacy/migration)
@@ -52,6 +52,21 @@ def mark_setup_completed(db: Session):
 @router.get("/status")
 def get_setup_status(db: Session = Depends(get_db)):
     return {"is_setup": is_setup_completed(db)}
+
+@router.post("/bypass")
+def bypass_setup(db: Session = Depends(get_db)):
+    if is_setup_completed(db):
+        return {"message": "Setup already completed or bypassed."}
+
+    status = db.query(SetupStatus).first()
+    if not status:
+        status = SetupStatus(is_bypassed=True)
+        db.add(status)
+    else:
+        status.is_bypassed = True
+    db.commit()
+
+    return {"message": "Setup bypassed"}
 
 @router.post("/register")
 def register_first_user(
