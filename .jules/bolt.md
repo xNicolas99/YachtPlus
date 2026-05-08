@@ -5,3 +5,7 @@
 ## 2025-05-07 - Avoid Redundant Backend Queries for Search
 **Learning:** `GlobalSearch.vue` and `UnifiedSearch.vue` components frequently re-query the backend `/containers` endpoint on keystrokes, which creates performance bottlenecks since the container data is already available locally in the Vuex store (`store.state.apps.apps`).
 **Action:** When implementing search functionalities in the frontend, query running containers locally using the Vuex store instead of calling the `/containers` API endpoint on every keystroke. Concurrency via `Promise.all()` should only be used when strictly necessary for external/unified searches.
+
+## 2026-05-08 - [Optimize Dashboard API fetches]
+**Learning:** Sequential, independent `await` network calls block the UI unnecessarily, especially in high-frequency auto-polling systems like dashboard overviews. Found sequential fetches in `pollAll()` where dashboard KPIs and container stats were fetched consecutively.
+**Action:** When gathering independent data for dashboard views, always use `Promise.all()` to retrieve them concurrently. This minimizes idle wait times and speeds up UI rendering.
