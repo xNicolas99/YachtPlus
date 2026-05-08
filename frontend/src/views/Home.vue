@@ -19,6 +19,7 @@
               prepend-icon="mdi-clock-outline"
               append-icon="mdi-chevron-down"
               size="small"
+              aria-label="Change dashboard polling interval"
             >
               {{ pollingIntervalText }}
             </v-btn>
@@ -43,6 +44,7 @@
           size="small"
           class="mr-2"
           @click="togglePolling"
+          :aria-label="polling ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh'"
         >
            <v-icon>{{ polling ? 'mdi-pause' : 'mdi-play' }}</v-icon>
            <v-tooltip activator="parent" location="bottom">
@@ -57,6 +59,7 @@
           size="small"
           @click="refresh()"
           :loading="loading"
+          aria-label="Refresh Now"
         >
           <v-icon>mdi-refresh</v-icon>
           <v-tooltip activator="parent" location="bottom">Refresh Now</v-tooltip>
