@@ -125,10 +125,10 @@ def login(
         .first()
     )
 
-    if not _user:
-        crud.verify_password(user_data.password, DUMMY_HASH)
+    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
-    if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
+    if _user is not None and is_valid_password:
         if not _user.is_active:
             record_login_attempt(db, client_ip, user_data.username, False)
             logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
@@ -197,10 +197,10 @@ def login_cookie(
         .first()
     )
 
-    if not _user:
-        crud.verify_password(user_data.password, DUMMY_HASH)
+    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
-    if _user is not None and crud.verify_password(user_data.password, _user.hashed_password):
+    if _user is not None and is_valid_password:
         if not _user.is_active:
             record_login_attempt(db, client_ip, user_data.username, False)
             logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
