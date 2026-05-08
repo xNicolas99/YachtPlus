@@ -237,12 +237,15 @@ export default {
       }, this.pollingInterval);
     },
     async pollAll() {
-      await this.fetchOverviewStats();
       try {
-        const response = await axios.get("/containers/stats", {
-          skipAuthRefresh: true
-        });
-        const statsData = response.data;
+        // Fetch dashboard stats and container stats concurrently
+        const [_, statsResponse] = await Promise.all([
+          this.fetchOverviewStats(),
+          axios.get("/containers/stats", {
+            skipAuthRefresh: true
+          })
+        ]);
+        const statsData = statsResponse.data;
 
         if (this.apps) {
           this.apps.forEach(app => {
@@ -336,8 +339,10 @@ export default {
 
     this.loading = true;
     try {
-        await this.readApps();
-        await this.fetchOverviewStats();
+        await Promise.all([
+          this.readApps(),
+          this.fetchOverviewStats()
+        ]);
     } finally {
         this.loading = false;
     }
