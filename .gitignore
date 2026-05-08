@@ -16,3 +16,4 @@ config
 .DS_Store
 .venv/
 *.log
+.secret_key

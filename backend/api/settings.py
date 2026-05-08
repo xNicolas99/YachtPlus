@@ -1,11 +1,42 @@
 import os
 import secrets
+from pydantic import Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
+
+def get_or_create_secret_key() -> str:
+    # First check environment variable
+    env_secret = os.getenv("SECRET_KEY")
+    if env_secret:
+        return env_secret
+
+    # Check persistent file or create it
+    secret_file = os.getenv("SECRET_KEY_FILE", "/config/.secret_key")
+
+    # If the directory doesn't exist (e.g. running outside docker), fall back to current directory
+    config_dir = os.path.dirname(secret_file)
+    if config_dir and not os.path.exists(config_dir):
+        # Graceful fallback for local development
+        secret_file = ".secret_key"
+
+    try:
+        if os.path.exists(secret_file):
+            with open(secret_file, "r") as f:
+                return f.read().strip()
+        else:
+            new_secret = secrets.token_urlsafe(32)
+            with open(secret_file, "w") as f:
+                f.write(new_secret)
+            return new_secret
+    except Exception:
+        # Fallback if file system is completely unwriteable
+        return secrets.token_urlsafe(32)
+
+
 class Settings(BaseSettings):
     # Security
-    SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+    SECRET_KEY: str = Field(default_factory=get_or_create_secret_key)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
     ACCESS_TOKEN_EXPIRES: int = 1440 * 60 # Legacy support
