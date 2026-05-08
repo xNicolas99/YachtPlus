@@ -24,7 +24,14 @@ def auth_check(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
         return
     else:
         # AuthWrapper.jwt_required() raises HTTPException if invalid
-        Authorize.jwt_required()
+        Authorize.jwt_required(allow_setup_pending=False)
+
+def auth_check_setup_pending(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    """Special auth check for setup endpoints that allow tokens with setup_pending=True."""
+    if settings.DISABLE_AUTH is True:
+        return
+    else:
+        Authorize.jwt_required(allow_setup_pending=True)
 
 def check_permission(permission_name: str, Authorize: get_auth_wrapper, db: Session):
     """
