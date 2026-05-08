@@ -8,9 +8,11 @@ from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
 
 def is_private_ip(ip: str) -> bool:
+    if ip == '0.0.0.0':
+        return True
     try:
         ip_obj = ipaddress.ip_address(ip)
-        return ip_obj.is_private
+        return ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast
     except ValueError:
         return False # Invalid IP, treat as public/unsafe
 
