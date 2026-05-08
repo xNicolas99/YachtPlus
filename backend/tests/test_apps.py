@@ -503,7 +503,10 @@ def test_format_bytes_zero():
     assert format_bytes(0) == "0 B"
 
 def test_format_bytes_negative():
-    assert format_bytes(-1024) == "-1024 B"
+    assert format_bytes(-1024) == "-1 KB"
+
+def test_format_bytes_large_negative():
+    assert format_bytes(-1048576) == "-1 MB"
 
 def test_format_bytes_small():
     assert format_bytes(500) == "500 B"
@@ -520,3 +523,16 @@ def test_format_bytes_gb():
 
 def test_format_bytes_very_large():
     assert format_bytes(1024 * 1024 * 1024 * 1024) == "1 TB"
+
+def test_format_bytes_pb():
+    assert format_bytes(1024 ** 5) == "1 PB"
+
+def test_format_bytes_beyond_pb():
+    assert format_bytes(1024 ** 6) == "1024 PB"
+
+def test_format_bytes_float():
+    assert format_bytes(1024.5) == "1 KB"
+
+def test_format_bytes_invalid_type():
+    with pytest.raises(TypeError):
+        format_bytes("1024")
