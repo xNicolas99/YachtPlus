@@ -93,8 +93,16 @@ Used to include the DOCKER_HOST in the shell env
 def check_dockerhost(environment):
     if environment.get("DOCKER_HOST"):
         return {"DOCKER_HOST": environment["DOCKER_HOST"]}
-    else:
-        return {"clear_env": "true"}
+
+    if os.path.exists('/var/run/docker.sock'):
+        try:
+            client = docker.from_env()
+            client.ping()
+            return {}
+        except Exception:
+            pass
+
+    return {"clear_env": "true"}
 
 
 """
