@@ -5,7 +5,7 @@ from typing import Optional
 from api.db.database import SessionLocal
 from api.db.models.users import User
 from api.auth.jwt import get_auth_wrapper
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, auth_check_setup_pending
 from api.utils.crypto import encrypt, decrypt
 import pyotp
 import qrcode
@@ -31,8 +31,8 @@ def generate_2fa(db: Session = Depends(get_db), Authorize: get_auth_wrapper = De
     return generate_2fa_logic(db, Authorize)
 
 def generate_2fa_logic(db: Session, Authorize: get_auth_wrapper):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    auth_check_setup_pending(Authorize)
+    username = Authorize.get_jwt_subject(allow_setup_pending=True)
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -79,8 +79,8 @@ def enable_2fa(
     # However, we store the secret in DB encrypted already in generate step.
     # We should trust DB secret over frontend secret for security, but we can verify.
 
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    auth_check_setup_pending(Authorize)
+    username = Authorize.get_jwt_subject(allow_setup_pending=True)
     user = db.query(User).filter(User.username == username).first()
 
     if not user or not user.otp_secret:

@@ -15,6 +15,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     username: Optional[str] = None
+    setup_pending: bool = False
     # Add other claims if needed
 
 # JWT Configuration
@@ -43,9 +44,10 @@ def verify_token(token: str, credentials_exception):
     try:
         payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
+        setup_pending: bool = payload.get("setup_pending", False)
         if username is None:
             raise credentials_exception
-        token_data = TokenData(username=username)
+        token_data = TokenData(username=username, setup_pending=setup_pending)
         return token_data
     except jwt.PyJWTError:
         raise credentials_exception
@@ -82,16 +84,25 @@ class AuthWrapper:
         self.request = request
         self.user = None
 
-    def jwt_required(self):
+    def jwt_required(self, allow_setup_pending: bool = False):
         token = get_current_user_token(self.request)
-        self.user = get_current_user(token)
+        token_data = get_current_user(token)
+
+        # Enforce setup_pending logic here
+        if isinstance(token_data, TokenData) and token_data.setup_pending and not allow_setup_pending:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Setup is pending, restricted access"
+            )
+
+        self.user = token_data
         return self.user
 
-    def get_jwt_subject(self):
+    def get_jwt_subject(self, allow_setup_pending: bool = False):
         if self.user:
             return self.user.username
         # If jwt_required wasn't called (it should have been), call it
-        return self.jwt_required().username
+        return self.jwt_required(allow_setup_pending=allow_setup_pending).username
 
     def unset_jwt_cookies(self, response):
         response.delete_cookie("access_token_cookie")

@@ -450,6 +450,7 @@ def test_finalize_setup_success(mock_mark_setup_completed, mock_get_user, mock_a
     app.dependency_overrides[get_db] = lambda: db
 
     mock_user = MagicMock()
+    mock_user.username = "admin"
     mock_user.is_superuser = True
     mock_user.is_2fa_enabled = True
     mock_get_user.return_value = mock_user

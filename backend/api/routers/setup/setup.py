@@ -6,7 +6,7 @@ from api.db.schemas.users import UserCreate, UserUpdate
 from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
 from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, auth_check_setup_pending
 from api.db.models.setup import SetupStatus
 import os
 
@@ -141,7 +141,7 @@ def register_first_user(
     # If an attacker stops here, the server is "Not Setup", so anyone can hit `/register` again?
     # No, existing user check prevents overwrite unless we handle it.
 
-    access_token = create_access_token(data={"sub": new_user.username})
+    access_token = create_access_token(data={"sub": new_user.username, "setup_pending": True})
     Authorize.set_access_cookies(access_token, response)
 
     return {
@@ -151,14 +151,15 @@ def register_first_user(
 
 @router.post("/finalize")
 def finalize_setup(
+    response: Response,
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
+    auth_check_setup_pending(Authorize)
     if is_setup_completed(db):
         return {"message": "Setup already completed"}
 
-    username = Authorize.get_jwt_subject()
+    username = Authorize.get_jwt_subject(allow_setup_pending=True)
     user = get_user_by_name(db, username)
 
     if not user or not user.is_superuser:
@@ -171,4 +172,9 @@ def finalize_setup(
     db.commit()
 
     mark_setup_completed(db)
+
+    # Issue a fresh token WITHOUT setup_pending so the user can access the rest of the application
+    access_token = create_access_token(data={"sub": user.username})
+    Authorize.set_access_cookies(access_token, response)
+
     return {"message": "Setup finalized"}
