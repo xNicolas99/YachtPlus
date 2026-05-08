@@ -26,4 +26,35 @@ describe('getImageLogoWithFallbacks', () => {
     expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/nginx.svg');
     expect(result.sources).not.toContain('https://fleet.linuxserver.io/images/nginx-logo.png');
   });
+
+  it('handles undefined image name', () => {
+    const result = getImageLogoWithFallbacks(undefined, 'dockerhub');
+    expect(result.sources.length).toBeGreaterThan(0);
+    expect(result.fallback).toBe("https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/docker.svg");
+  });
+
+  it('handles linuxserver prefix', () => {
+    const result = getImageLogoWithFallbacks('linuxserver/plex', 'dockerhub');
+    expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/plex.svg');
+  });
+
+  it('handles portainer-ce special case', () => {
+    const result = getImageLogoWithFallbacks('portainer/portainer-ce', 'dockerhub');
+    expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/portainer.svg');
+  });
+
+  it('handles home-assistant special case', () => {
+    const result = getImageLogoWithFallbacks('homeassistant/home-assistant', 'dockerhub');
+    expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/home-assistant.svg');
+  });
+
+  it('handles nginx-proxy-manager special case', () => {
+    const result = getImageLogoWithFallbacks('jc21/nginx-proxy-manager', 'dockerhub');
+    expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/nginx-proxy-manager.svg');
+  });
+
+  it('handles vaultwarden special case', () => {
+    const result = getImageLogoWithFallbacks('vaultwarden', 'dockerhub');
+    expect(result.sources).toContain('https://cdn.jsdelivr.net/gh/walkxcode/dashboard-icons/svg/vaultwarden.svg');
+  });
 });
