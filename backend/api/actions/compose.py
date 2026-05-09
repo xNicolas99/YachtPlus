@@ -212,15 +212,16 @@ def _get_compose_sync(name):
                 except yaml.scanner.ScannerError as exc:
                     raise HTTPException(422, f"{exc.problem_mark.line}:{exc.problem_mark.column} - {exc.problem}")
 
-            if loaded_compose.get("volumes"):
-                for volume in loaded_compose.get("volumes"):
-                    volumes.append(volume)
-            if loaded_compose.get("networks"):
-                for network in loaded_compose.get("networks"):
-                    networks.append(network)
-            if loaded_compose.get("services"):
-                for service in loaded_compose.get("services"):
-                    services[service] = loaded_compose["services"][service]
+            if loaded_compose:
+                if loaded_compose.get("volumes"):
+                    for volume in loaded_compose.get("volumes"):
+                        volumes.append(volume)
+                if loaded_compose.get("networks"):
+                    for network in loaded_compose.get("networks"):
+                        networks.append(network)
+                if loaded_compose.get("services"):
+                    for service in loaded_compose.get("services"):
+                        services[service] = loaded_compose["services"][service]
 
             with open(file, 'r') as _content:
                 content = _content.read()
@@ -228,7 +229,7 @@ def _get_compose_sync(name):
             compose_object = {
                 "name": project,
                 "path": file,
-                "version": loaded_compose.get("version", "-"),
+                "version": loaded_compose.get("version", "-") if loaded_compose else "-",
                 "services": services,
                 "volumes": volumes,
                 "networks": networks,

@@ -49,3 +49,19 @@ def test_check_dockerhost_socket_does_not_exist(mock_path_exists):
     result = check_dockerhost(env)
     assert result == {"clear_env": "true"}
     mock_path_exists.assert_called_once_with('/var/run/docker.sock')
+
+from api.actions.compose import _get_compose_sync
+from unittest.mock import mock_open
+
+@patch('api.actions.compose.settings')
+@patch('api.actions.compose.find_yml_files')
+def test_get_compose_sync_no_content(mock_find, mock_settings):
+    mock_settings.COMPOSE_DIR = "/fake/dir/"
+    mock_find.return_value = {"proj1": "proj1.yml"}
+    with patch('builtins.open', mock_open(read_data="")):
+        res = _get_compose_sync("proj1")
+        assert res['version'] == '-'
+        assert res['services'] == {}
+        assert res['volumes'] == []
+        assert res['networks'] == []
+        assert res['content'] == ''

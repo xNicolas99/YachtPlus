@@ -105,8 +105,12 @@ def update_user_by_id(db: Session, user_id: int, user_update: schemas.UserUpdate
     if user_update.perm_delete is not None:
         db_user.perm_delete = user_update.perm_delete
 
-    db.commit()
-    db.refresh(db_user)
+    try:
+        db.commit()
+        db.refresh(db_user)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Username already in use or database error")
     return db_user
 
 def verify_password(plain_password, hashed_password):

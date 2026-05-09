@@ -36,6 +36,8 @@ def get_users(
     # Ensure only superuser can list users (or define a new permission perm_manage_users)
     username = Authorize.get_jwt_subject()
     user = crud.get_user_by_name(db, username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found or deleted")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -50,6 +52,8 @@ def delete_user(
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
     user = crud.get_user_by_name(db, username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found or deleted")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -71,6 +75,8 @@ def update_user_admin(
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
     current_user = crud.get_user_by_name(db, username)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found or deleted")
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -90,7 +96,9 @@ def create_user(
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
     creator = crud.get_user_by_name(db, username)
-    if not creator or not creator.is_superuser:
+    if not creator:
+         raise HTTPException(status_code=401, detail="User not found or deleted")
+    if not creator.is_superuser:
          raise HTTPException(status_code=403, detail="Not authorized to create users")
 
     db_user = crud.get_user_by_name(db, username=user.username)
