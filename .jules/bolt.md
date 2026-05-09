@@ -12,3 +12,6 @@
 ## 2026-05-08 - [Avoid Synchronous Code in Async Routes]
 **Learning:** Calling synchronous blocking code (like SQLAlchemy queries without an async dialect) inside an async route blocks the entire event loop, severely degrading performance.
 **Action:** Always wrap synchronous database queries with `run_in_threadpool` in FastAPI async routes to offload the blocking operations and prevent event-loop starvation. Do not write extensive benchmarking scripts for architecturally established principles.
+## 2026-05-08 - [Optimize ApplicationDetails API fetches]
+**Learning:** `ApplicationDetails.vue` sequentially fetched application data (`readApp`, `readAppProcesses`, `readAppLogs`, `readAppStats`) in its `mounted` hook, blocking UI rendering on independent calls. Duplicate calls were also discovered in the `created` hook.
+**Action:** When initializing a component, remove duplicate API calls from different lifecycle hooks, and always use `Promise.all()` for independent asynchronous data fetches to minimize loading time.
