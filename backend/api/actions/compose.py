@@ -14,7 +14,7 @@ import functools
 import logging
 
 from api.settings import Settings
-from api.utils.compose import find_yml_files, validate_compose_project_name
+from api.utils.compose import find_yml_files, validate_compose_project_name, validate_app_name
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -111,6 +111,7 @@ apps in compose projects.
 """
 def _compose_app_action_sync(name, action, app):
     validate_compose_project_name(name)
+    validate_app_name(app)
     files = find_yml_files(settings.COMPOSE_DIR)
     compose = _get_compose_sync(name)
     env = os.environ.copy()

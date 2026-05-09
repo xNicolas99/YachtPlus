@@ -7,6 +7,23 @@ import re
 settings = Settings()
 
 
+def validate_app_name(name):
+    """
+    Validates that the app name is safe to use in subprocess commands.
+    Only allows alphanumeric characters, underscores, and hyphens.
+    """
+    if not name:
+        raise HTTPException(status_code=400, detail="App name cannot be empty.")
+
+    # Strictly allow only a-z, A-Z, 0-9, _, -
+    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid app name. Only alphanumeric characters, underscores, and hyphens are allowed."
+        )
+
+    return name
+
 def validate_compose_project_name(name):
     """
     Validates that the project name is safe to use in file paths.
