@@ -443,17 +443,14 @@ export default {
       };
     }
   },
-  created() {
-    const appName = this.$route.params.appName;
-    this.readApp(appName);
-    this.readAppProcesses(appName);
-  },
   async mounted() {
     const appName = this.$route.params.appName;
-    await this.readApp(appName);
-    await this.readAppProcesses(appName);
-    await this.readAppLogs(appName);
-    await this.readAppStats(appName);
+    await Promise.all([
+      this.readApp(appName),
+      this.readAppProcesses(appName),
+      this.readAppLogs(appName),
+      this.readAppStats(appName)
+    ]);
   },
   beforeDestroy() {
     this.closeLogs();
