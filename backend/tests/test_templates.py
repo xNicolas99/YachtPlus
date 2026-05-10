@@ -61,8 +61,11 @@ def test_validate_url_valid_multiple(mock_getaddrinfo):
 def test_validate_url_socket_error(mock_getaddrinfo):
     import socket
     mock_getaddrinfo.side_effect = socket.gaierror
-    # socket.gaierror should be caught and passed through
-    assert validate_url("http://unresolvable.example.com") is True
+    # socket.gaierror should raise an HTTPException now
+    with pytest.raises(HTTPException) as exc_info:
+        validate_url("http://unresolvable.example.com")
+    assert exc_info.value.status_code == 400
+    assert "Invalid URL: Hostname resolution failed." in exc_info.value.detail
 
 @patch('socket.getaddrinfo')
 def test_validate_url_zero_ip(mock_getaddrinfo):
