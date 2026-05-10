@@ -50,11 +50,8 @@ def validate_url(url: str):
                  raise HTTPException(status_code=400, detail=f"Access to private IP {ip} is denied.")
 
     except socket.gaierror:
-        # If hostname cannot be resolved, urllib will likely fail too, but we can fail early.
-        # Or we can let it proceed, but typically DNS failure implies we can't reach it.
-        # However, to avoid bypasses, let's treat resolution failure as suspicious if we are strict,
-        # or just pass through.
-        pass
+        # If hostname cannot be resolved, fail early to prevent SSRF bypasses.
+        raise HTTPException(status_code=400, detail="Invalid URL: Hostname resolution failed.")
 
     return True
 
