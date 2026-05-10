@@ -1,0 +1,3 @@
+## 2026-05-10 - [Added Visual Feedback for Async Actions]
+**Learning:** In Vuetify, when dealing with multiple buttons that trigger async operations (like the resource prune buttons), it's crucial to map the loading state to the specific action being executed to provide clear visual feedback to the user, while simultaneously mapping the disabled state to all action buttons to prevent conflicting concurrent operations.
+**Action:** When implementing async groups of actions in the future, track the specific loadingResource to localize the spinner, and utilize a global isLoading flag to disable siblings during the operation.

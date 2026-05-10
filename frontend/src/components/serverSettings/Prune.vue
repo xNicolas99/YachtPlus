@@ -17,27 +17,40 @@
     <v-btn
       class="mx-5 mb-5"
       color="warning"
-      @click="prune((resource = 'images'))"
+      :loading="loadingResource === 'images'"
+      :disabled="isLoading"
+      @click="prune('images')"
     >
       Prune Images
     </v-btn>
     <v-btn
       class="mx-5 mb-5"
       color="warning"
-      @click="prune((resource = 'networks'))"
+      :loading="loadingResource === 'networks'"
+      :disabled="isLoading"
+      @click="prune('networks')"
     >
       Prune Networks
     </v-btn>
     <v-btn
       class="mx-5 mb-5"
       color="warning"
-      @click="prune((resource = 'volumes'))"
+      :loading="loadingResource === 'volumes'"
+      :disabled="isLoading"
+      @click="prune('volumes')"
     >
       Prune Volumes
     </v-btn>
     <v-dialog max-width="290" v-model="containerDialog">
       <template v-slot:activator="{ on, attrs }">
-        <v-btn class="mx-5 mb-5" color="warning" v-bind="attrs" v-on="on">
+        <v-btn
+          class="mx-5 mb-5"
+          color="warning"
+          v-bind="attrs"
+          v-on="on"
+          :loading="loadingResource === 'containers'"
+          :disabled="isLoading"
+        >
           Prune Containers
         </v-btn>
       </template>
@@ -56,7 +69,7 @@
             color="red"
             @click="
               containerDialog = false;
-              prune((resource = 'containers'));
+              prune('containers');
             "
             >Continue</v-btn
           >
@@ -73,7 +86,8 @@ export default {
   data() {
     return {
       containerDialog: false,
-      isLoading: false
+      isLoading: false,
+      loadingResource: null
     };
   },
   methods: {
@@ -94,6 +108,7 @@ export default {
     },
     prune(resource) {
       this.isLoading = true;
+      this.loadingResource = resource;
       axios({
         url: "/settings/prune/" + resource,
         method: "GET",
@@ -114,10 +129,12 @@ export default {
               this.formatBytes(response.data.SpaceReclaimed)
           );
           this.isLoading = false;
+          this.loadingResource = null;
         })
         .catch(err => {
           this.setErr(err);
           this.isLoading = false;
+          this.loadingResource = null;
         });
     }
   }
