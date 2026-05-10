@@ -1154,8 +1154,11 @@ export default {
     }
   },
   async created() {
-    await this.populateForm();
-    await this.populateNetworks();
+    // ⚡ Bolt: Fetch form data and networks concurrently to reduce component mount time.
+    await Promise.all([
+      this.populateForm(),
+      this.populateNetworks()
+    ]);
   }
 };
 </script>

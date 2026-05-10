@@ -15,3 +15,6 @@
 ## 2026-05-08 - [Optimize ApplicationDetails API fetches]
 **Learning:** `ApplicationDetails.vue` sequentially fetched application data (`readApp`, `readAppProcesses`, `readAppLogs`, `readAppStats`) in its `mounted` hook, blocking UI rendering on independent calls. Duplicate calls were also discovered in the `created` hook.
 **Action:** When initializing a component, remove duplicate API calls from different lifecycle hooks, and always use `Promise.all()` for independent asynchronous data fetches to minimize loading time.
+## 2024-05-24 - [Optimize ApplicationsForm API fetches]
+**Learning:** Sequential async calls in lifecycle hooks (e.g., `await populateForm(); await populateNetworks();`) block component mounting unnecessarily when the data fetched is independent.
+**Action:** When initializing Vue components (e.g., in `created()` or `mounted()` hooks), use `Promise.all()` for independent asynchronous method calls to maximize concurrency and minimize mount time.
