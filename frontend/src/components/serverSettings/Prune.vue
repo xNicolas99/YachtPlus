@@ -64,9 +64,10 @@
         </v-card-text>
         <v-card-actions color="background">
           <v-spacer></v-spacer>
-          <v-btn @click="containerDialog = false">Cancel</v-btn>
+          <v-btn text @click="containerDialog = false">Cancel</v-btn>
           <v-btn
-            color="red"
+            text
+            color="error"
             @click="
               containerDialog = false;
               prune('containers');
