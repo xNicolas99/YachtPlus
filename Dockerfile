@@ -1,5 +1,5 @@
 # Build Vue.js frontend
-FROM node:20-alpine as build-stage
+FROM node:20-alpine AS build-stage
 
 ARG VITE_VERSION
 ENV VITE_VERSION=${VITE_VERSION}
@@ -19,7 +19,7 @@ RUN ls -la
 RUN npm run build --verbose
 
 # Setup Container and install FastAPI backend
-FROM python:3.11-slim as deploy-stage
+FROM python:3.11-slim AS deploy-stage
 
 # Set environment variables
 ENV PYTHONIOENCODING=UTF-8
