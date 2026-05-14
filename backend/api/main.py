@@ -12,7 +12,6 @@ from api.routers import (
 )
 from api.db.database import engine, Base, SessionLocal
 from api.db.models.users import User
-from api.settings import get_settings
 
 Base.metadata.create_all(bind=engine)
 
