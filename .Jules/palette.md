@@ -7,3 +7,6 @@
 ## 2024-05-13 - [Vuetify Dialog Action Buttons]
 **Learning:** In Vuetify component `<v-card-actions>`, it is standard pattern to use the `text` attribute for 'Cancel' buttons to differentiate them from primary actions and prevent visual clutter, especially in destructive dialogs. Furthermore, using semantic colors like `error` is much preferred over hardcoding colors like `red` to correctly support dark mode themes and maintain visual consistency across components.
 **Action:** Always ensure that cancellation buttons in `<v-card-actions>` have the `text` attribute and primary/destructive buttons utilize semantic colors like `error` or `primary` rather than hardcoded colors for better accessibility and theme support.
+## 2024-05-13 - [Async Login Loading States]
+**Learning:** Found that the main login form was missing a loading state for both login and 2FA verification. Adding `:loading` and `:disabled` bindings prevents double-submissions and provides immediate visual feedback during network requests, crucial for authentication flows.
+**Action:** Always ensure critical authentication and form submission buttons implement `loading` and `disabled` states bound to a component data variable like `isLoading` set to true at the start of the action and false in the `finally` block.
