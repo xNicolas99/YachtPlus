@@ -49,7 +49,8 @@
                     class="float-right"
                     @click="onSubmit()"
                     color="primary"
-                    :disabled="!meta.valid"
+                    :disabled="!meta.valid || isLoading"
+                    :loading="isLoading"
                     >Login</v-btn
                   >
                 </v-form>
@@ -68,6 +69,8 @@
                     class="float-right"
                     @click="onSubmit2FA()"
                     color="primary"
+                    :disabled="isLoading"
+                    :loading="isLoading"
                     >Verify</v-btn
                   >
                 </v-form>
@@ -108,7 +111,8 @@ export default {
       requires2FA: false,
       otpToken: "",
       errorSnackbar: false,
-      errorMessage: ""
+      errorMessage: "",
+      isLoading: false
     };
   },
   methods: {
@@ -119,6 +123,7 @@ export default {
 
     async onSubmit() {
       // We will handle the login request manually here to intercept 2FA requirement
+      this.isLoading = true;
       try {
         const payload = {
             username: this.username,
@@ -138,10 +143,13 @@ export default {
           : "Login failed";
         this.errorSnackbar = true;
         this.$store.commit("auth/AUTH_ERROR");
+      } finally {
+        this.isLoading = false;
       }
     },
 
     async onSubmit2FA() {
+      this.isLoading = true;
       try {
         const payload = {
             username: this.username,
@@ -159,6 +167,8 @@ export default {
           ? err.response.data.detail
           : "Verification failed";
         this.errorSnackbar = true;
+      } finally {
+        this.isLoading = false;
       }
     },
 

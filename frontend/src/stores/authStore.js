@@ -9,6 +9,9 @@ export const useAuthStore = defineStore('auth', {
   }),
   actions: {
     async login(credentials) {
+      if (credentials.email && !credentials.username) {
+        credentials.username = credentials.email;
+      }
       try {
         const formData = new URLSearchParams();
         formData.append('username', credentials.username);
