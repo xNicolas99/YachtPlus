@@ -11,8 +11,6 @@ from api.routers import (
     containers, smtp, watchtower, search, setup
 )
 from api.db.database import engine, Base, SessionLocal
-from api.db.models.users import User
-from api.settings import get_settings
 
 Base.metadata.create_all(bind=engine)
 
