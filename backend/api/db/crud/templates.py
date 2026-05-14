@@ -8,7 +8,7 @@ from api.db.models import containers as models
 from api.utils.templates import conv_sysctls2dict, conv_ports2dict
 
 from datetime import datetime
-import urllib.request
+from urllib.request import HTTPRedirectHandler, build_opener
 from urllib.parse import urlparse
 import json
 import yaml
@@ -56,7 +56,7 @@ def validate_url(url: str):
     return True
 
 
-class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
+class SafeRedirectHandler(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         validate_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
@@ -111,7 +111,7 @@ def add_template(db: Session, template: models.Template):
         ext = os.path.splitext(_template_path)[1]
         # Opens the JSON and iterate over the content.
         _template = models.Template(title=template.title, url=template.url)
-        opener = urllib.request.build_opener(SafeRedirectHandler())
+        opener = build_opener(SafeRedirectHandler())
         with opener.open(template.url) as file:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(file, Loader=yaml.SafeLoader)
@@ -229,7 +229,7 @@ def refresh_template(db: Session, template_id: id):
 
     items = []
     try:
-        opener = urllib.request.build_opener(SafeRedirectHandler())
+        opener = build_opener(SafeRedirectHandler())
         with opener.open(template.url) as fp:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(fp, Loader=yaml.SafeLoader)
