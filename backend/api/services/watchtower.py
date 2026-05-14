@@ -1,4 +1,3 @@
-import os
 from apscheduler.schedulers.background import BackgroundScheduler
 from api.actions.compose import compose_action
 from api.settings import Settings
