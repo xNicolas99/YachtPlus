@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Optional, Union, Any
+from typing import List, Optional, Any
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
