@@ -1,16 +1,10 @@
-## 2025-03-07 - SSRF Bypass via Missing Loopback IP Checks
-**Vulnerability:** The `is_private_ip` function in `backend/api/utils/security.py` and `backend/api/db/crud/templates.py` relied entirely on the `is_private` attribute of `ipaddress.ip_address`. This bypasses several categories of internal/non-routable IP addresses, like loopback (`is_loopback` for 127.0.0.1, ::1), link-local (`is_link_local` for 169.254.x.x), multicast (`is_multicast`), and explicitly 0.0.0.0 which returns `is_private=True` in some Python versions but not others or behaves oddly depending on the check.
-**Learning:** `ipaddress.ip_address(ip).is_private` is not exhaustive. Loopback addresses like 127.0.0.1 evaluate to `is_loopback=True` but not always `is_private=True` depending on context or IPv6 vs IPv4 representation, and `0.0.0.0` should be explicitly blocked as it acts as a generic binding or invalid destination. Defense-in-depth requires explicitly evaluating all categories of unroutable or internal IPs for SSRF protection and allowlists.
-**Prevention:** When validating IPs for SSRF or security boundaries, check against `is_private`, `is_loopback`, `is_link_local`, `is_multicast`, and block explicitly special addresses like `'0.0.0.0'`.
-## 2025-05-09 - Parameter Injection via Subprocess in Compose Actions
-**Vulnerability:** A parameter injection vulnerability existed where user-supplied `app` names in compose action routes (`/api/compose/{project_name}/actions/{action}/{app}`) were passed directly to a `subprocess.run(["docker-compose"] + command_args, ...)` call without validation.
-**Learning:** Even without `shell=True`, passing unvalidated user input into a subprocess argument list allows attackers to inject arbitrary arguments (e.g., `-f /etc/passwd up`). Validation must be strictly applied to ensure parameters contain only safe characters.
-**Prevention:** Always sanitize or strictly validate user inputs before passing them into subprocess calls, even when using lists. Applied a strict regex (`^[a-zA-Z0-9_-]+$`) check on the `app` parameter.
-## 2025-05-15 - SSRF Bypass via Unresolvable Hostnames
-**Vulnerability:** In , the  function performed SSRF checks by resolving hostnames with . However, if  failed to resolve the hostname (raising ), the function silently caught the exception and ed, effectively bypassing the security check and returning  (allowing the URL to proceed).
-**Learning:** Security validation functions must fail closed. When relying on external lookups (like DNS) for validation, a failure to perform the lookup means the validation cannot be completed. Silently ignoring errors in security checks leads to fail-open behavior, which can be exploited by attackers to bypass defenses by supplying deliberately unresolvable hostnames (e.g., DNS rebinding or triggering timeout/resolution failures on purpose).
-**Prevention:** Always fail securely by raising an exception or returning a validation error when a critical security check (like IP resolution) fails due to an underlying error (like ).
-## 2025-05-15 - SSRF Bypass via Unresolvable Hostnames
-**Vulnerability:** In `backend/api/db/crud/templates.py`, the `validate_url` function performed SSRF checks by resolving hostnames with `socket.getaddrinfo`. However, if `socket.getaddrinfo` failed to resolve the hostname (raising `socket.gaierror`), the function silently caught the exception and `pass`ed, effectively bypassing the security check and returning `True` (allowing the URL to proceed).
-**Learning:** Security validation functions must fail closed. When relying on external lookups (like DNS) for validation, a failure to perform the lookup means the validation cannot be completed. Silently ignoring errors in security checks leads to fail-open behavior, which can be exploited by attackers to bypass defenses by supplying deliberately unresolvable hostnames (e.g., DNS rebinding or triggering timeout/resolution failures on purpose).
-**Prevention:** Always fail securely by raising an exception or returning a validation error when a critical security check (like IP resolution) fails due to an underlying error (like `socket.gaierror`).
+## 2025-05-13 - Overly Permissive CORS Policy
+
+**Vulnerability:** The `CORSMiddleware` in `backend/api/main.py` was configured with `allow_origins=["*"]` while `allow_credentials=True`. This configuration is insecure as it allows any website to make credentialed requests (including cookies/auth headers) to the API, potentially leading to Cross-Site Request Hijacking (CSRF) or unauthorized data access if session cookies are used. Furthermore, most modern browsers block this specific combination for security reasons.
+
+**Learning:** Wildcard origins should never be used in conjunction with `allow_credentials=True`. Configuration for CORS should always be externalized and restricted to a whitelist of trusted domains to maintain a strong security posture.
+
+**Prevention:**
+1. Always use a specific whitelist for `allow_origins` when `allow_credentials` is `True`.
+2. Externalize the origin whitelist via environment variables to allow different configurations for development, staging, and production.
+3. Provide safe, restricted defaults (e.g., localhost only) rather than open wildcards.
