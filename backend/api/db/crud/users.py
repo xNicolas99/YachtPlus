@@ -6,7 +6,6 @@ from api.db.schemas import users as schemas
 from api.settings import Settings
 from fastapi.exceptions import HTTPException
 from datetime import datetime
-import secrets
 from api.auth.jwt import create_access_token
 
 settings = Settings()
