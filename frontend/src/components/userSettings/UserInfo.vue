@@ -12,7 +12,7 @@
       API Keys
       <v-dialog id="keyModal" v-model="keyDialog" max-width="500">
         <template v-slot:activator="{ on, attrs }">
-          <v-btn color="primary" v-bind="attrs" v-on="on">
+          <v-btn color="primary" v-bind="attrs" v-on="on" aria-label="Generate API Key" title="Generate API Key">
             <v-icon>mdi-plus</v-icon>
           </v-btn>
         </template>

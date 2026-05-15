@@ -19,6 +19,8 @@
               to="/projects/_/edit"
               v-bind="attrs"
               v-on="on"
+              aria-label="Add Compose Stack"
+              title="Add Compose Stack"
             >
               <v-icon>mdi-plus</v-icon>
             </v-btn>

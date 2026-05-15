@@ -15,6 +15,8 @@
           class="ml-2"
           color="secondary"
           :to="{ path: `/resources/networks/new` }"
+          aria-label="Create Network"
+          title="Create Network"
         >
           <v-icon>mdi-plus</v-icon>
         </v-btn>

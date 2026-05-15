@@ -10,3 +10,6 @@
 ## 2024-05-13 - [Async Login Loading States]
 **Learning:** Found that the main login form was missing a loading state for both login and 2FA verification. Adding `:loading` and `:disabled` bindings prevents double-submissions and provides immediate visual feedback during network requests, crucial for authentication flows.
 **Action:** Always ensure critical authentication and form submission buttons implement `loading` and `disabled` states bound to a component data variable like `isLoading` set to true at the start of the action and false in the `finally` block.
+## 2026-05-18 - Missing Accessibility Attributes on Floating Action Icons
+**Learning:** Icon-only action buttons containing `mdi-plus` (for adding resources, volumes, images, networks, stacks, API keys) often lacked `aria-label` and `title` attributes. While tooltips might exist, they don't replace standard `aria-label` tags for screen readers or the native `title` behavior for basic hover states, making it difficult for visually impaired users to understand the button's purpose.
+**Action:** Audit and add `aria-label` and `title` to all icon-only buttons across the application, especially those initiating resource creation or addition flows.
