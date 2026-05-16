@@ -10,3 +10,6 @@
 ## 2024-05-13 - [Async Login Loading States]
 **Learning:** Found that the main login form was missing a loading state for both login and 2FA verification. Adding `:loading` and `:disabled` bindings prevents double-submissions and provides immediate visual feedback during network requests, crucial for authentication flows.
 **Action:** Always ensure critical authentication and form submission buttons implement `loading` and `disabled` states bound to a component data variable like `isLoading` set to true at the start of the action and false in the `finally` block.
+## 2026-05-16 - Accessibility of Action Icons
+**Learning:** Found that some action elements were implemented as bare `<v-icon @click="..."></v-icon>` tags (e.g., edit/delete in User Management table). This pattern breaks keyboard accessibility because the elements cannot receive focus, and they lack proper semantic roles and ARIA labels.
+**Action:** Always wrap interactive icon-only actions in `<v-btn icon variant="text" aria-label="...">` to ensure they are fully accessible, keyboard-navigable, and properly identified by screen readers.
