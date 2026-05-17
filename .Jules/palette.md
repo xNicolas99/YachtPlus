@@ -1,12 +1,3 @@
-## 2026-05-07 - Accessibility Attributes on Icon Buttons
-**Learning:** Icon-only buttons (like the `mdi-plus` buttons used to deploy apps or create templates) require `aria-label` and `title` attributes for screen readers and tooltips. Adding these micro-UX enhancements improves overall platform usability significantly without altering logic.
-**Action:** Always verify `v-btn icon` components have proper `aria-label` and `title` properties in future frontend development steps.
-## 2026-05-07 - Small UX improvements for buttons and forms
-**Learning:** Found several components where async buttons were missing `:loading` and `:disabled` states (like `Refresh`, `Updates`, and `Generate API Key` buttons). Also found several icon-only buttons missing `aria-label` and `title` tags for accessibility (like the plus and minus buttons for adding rules in forms).
-**Action:** Next time check out all the form pages to make sure each async action has the `loading` and `disabled` state.
-## 2024-05-13 - [Vuetify Dialog Action Buttons]
-**Learning:** In Vuetify component `<v-card-actions>`, it is standard pattern to use the `text` attribute for 'Cancel' buttons to differentiate them from primary actions and prevent visual clutter, especially in destructive dialogs. Furthermore, using semantic colors like `error` is much preferred over hardcoding colors like `red` to correctly support dark mode themes and maintain visual consistency across components.
-**Action:** Always ensure that cancellation buttons in `<v-card-actions>` have the `text` attribute and primary/destructive buttons utilize semantic colors like `error` or `primary` rather than hardcoded colors for better accessibility and theme support.
-## 2024-05-13 - [Async Login Loading States]
-**Learning:** Found that the main login form was missing a loading state for both login and 2FA verification. Adding `:loading` and `:disabled` bindings prevents double-submissions and provides immediate visual feedback during network requests, crucial for authentication flows.
-**Action:** Always ensure critical authentication and form submission buttons implement `loading` and `disabled` states bound to a component data variable like `isLoading` set to true at the start of the action and false in the `finally` block.
+## 2024-05-17 - Enter to Submit Accessibility Pattern
+**Learning:** Adding `type="submit"` to main action buttons in Vuetify forms (`<v-form>`) restores native "Enter to submit" keyboard accessibility. However, if the button also has an `@click="onSubmit()"` handler, it must be removed. `vee-validate` wrapper `<Form>` tags typically handle the submission (with `@submit.prevent` implicitly or explicitly), so an explicit `@click` on the submit button alongside `type="submit"` can trigger double submissions or full page reloads if the form wrapper logic fails.
+**Action:** When implementing 'Enter to submit', ensure the button only uses `type="submit"` and any redundant `@click` handlers are removed, relying on the parent form's `@submit` event instead.

@@ -58,7 +58,7 @@
           </Field>
           <v-btn
             class="float-right"
-            @click="onSubmit()"
+            type="submit"
             color="primary"
             :disabled="!meta.valid"
             >Change User Info</v-btn

@@ -47,7 +47,7 @@
                   </Field>
                   <v-btn
                     class="float-right"
-                    @click="onSubmit()"
+                    type="submit"
                     color="primary"
                     :disabled="!meta.valid || isLoading"
                     :loading="isLoading"
@@ -67,7 +67,7 @@
                   />
                   <v-btn
                     class="float-right"
-                    @click="onSubmit2FA()"
+                    type="submit"
                     color="primary"
                     :disabled="isLoading"
                     :loading="isLoading"
