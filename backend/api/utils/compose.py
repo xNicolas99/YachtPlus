@@ -15,11 +15,11 @@ def validate_app_name(name):
     if not name:
         raise HTTPException(status_code=400, detail="App name cannot be empty.")
 
-    # Strictly allow only a-z, A-Z, 0-9, _, -
-    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+    # Strictly allow only a-z, A-Z, 0-9, _, - and prevent leading hyphens
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", name):
         raise HTTPException(
             status_code=400,
-            detail="Invalid app name. Only alphanumeric characters, underscores, and hyphens are allowed."
+            detail="Invalid app name. Only alphanumeric characters, underscores, and hyphens are allowed. Cannot start with a hyphen."
         )
 
     return name
@@ -32,11 +32,11 @@ def validate_compose_project_name(name):
     if not name:
         raise HTTPException(status_code=400, detail="Project name cannot be empty.")
 
-    # Strictly allow only a-z, A-Z, 0-9, _, -
-    if not re.match(r"^[a-zA-Z0-9_-]+$", name):
+    # Strictly allow only a-z, A-Z, 0-9, _, - and prevent leading hyphens
+    if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$", name):
         raise HTTPException(
             status_code=400,
-            detail="Invalid project name. Only alphanumeric characters, underscores, and hyphens are allowed."
+            detail="Invalid project name. Only alphanumeric characters, underscores, and hyphens are allowed. Cannot start with a hyphen."
         )
 
     # Check for path traversal attempts explicitly (double check, though regex handles it)

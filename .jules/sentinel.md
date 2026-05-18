@@ -8,3 +8,7 @@
 1. Always use a specific whitelist for `allow_origins` when `allow_credentials` is `True`.
 2. Externalize the origin whitelist via environment variables to allow different configurations for development, staging, and production.
 3. Provide safe, restricted defaults (e.g., localhost only) rather than open wildcards.
+## 2025-02-23 - Prevent Argument Injection via Regex Validation
+**Vulnerability:** User-controlled inputs like app names or project names, even when validated against `^[a-zA-Z0-9_-]+$`, could start with a hyphen. If passed to `subprocess.run`, they might be interpreted as command-line flags rather than positional arguments, leading to argument injection vulnerabilities (even with `shell=False`).
+**Learning:** The previous regex allowed inputs like `-d` or `--rm` which could modify command execution behavior.
+**Prevention:** Use a stricter regex such as `^[a-zA-Z0-9][a-zA-Z0-9_-]*$` that requires the first character to be an alphanumeric character, effectively preventing leading hyphens and argument injection vulnerabilities in subprocess calls.
