@@ -8,3 +8,8 @@
 1. Always use a specific whitelist for `allow_origins` when `allow_credentials` is `True`.
 2. Externalize the origin whitelist via environment variables to allow different configurations for development, staging, and production.
 3. Provide safe, restricted defaults (e.g., localhost only) rather than open wildcards.
+
+## 2025-05-17 - Prevent Argument Injection via Subprocess Validation
+**Vulnerability:** Argument Injection Risk via Subprocess
+**Learning:** `subprocess.run` command line argument values can be interpreted as flags if they begin with a hyphen.
+**Prevention:** Always validate user-provided values used as part of subprocess command arguments with regex that disallows a leading hyphen.
