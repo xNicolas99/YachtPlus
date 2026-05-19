@@ -35,10 +35,12 @@
             <v-icon v-else color="grey">mdi-shield-off</v-icon>
           </template>
           <template v-slot:item.actions="{ item }">
-            <v-icon small class="mr-2" @click="editUser(item)"
-              >mdi-pencil</v-icon
-            >
-            <v-icon small @click="deleteUser(item)">mdi-delete</v-icon>
+            <v-btn icon size="small" variant="text" class="mr-2" aria-label="Edit User" title="Edit User" @click="editUser(item)">
+              <v-icon>mdi-pencil</v-icon>
+            </v-btn>
+            <v-btn icon size="small" variant="text" color="error" aria-label="Delete User" title="Delete User" @click="deleteUser(item)">
+              <v-icon>mdi-delete</v-icon>
+            </v-btn>
           </template>
         </v-data-table>
       </v-card>
