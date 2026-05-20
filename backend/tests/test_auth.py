@@ -137,3 +137,24 @@ def test_check_permission_user_lacks_permission(mock_settings):
 
     assert excinfo.value.status_code == 403
     assert "User lacks permission: some_permission" in excinfo.value.detail
+from unittest.mock import patch, MagicMock
+from api.auth.auth import get_db
+
+def test_get_db():
+    with patch("api.auth.auth.SessionLocal") as mock_session_local:
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+
+        db_generator = get_db()
+        db = next(db_generator)
+
+        assert db == mock_db
+        mock_session_local.assert_called_once()
+        mock_db.close.assert_not_called()
+
+        try:
+            next(db_generator)
+        except StopIteration:
+            pass
+
+        mock_db.close.assert_called_once()
