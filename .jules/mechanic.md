@@ -12,3 +12,7 @@ Prevention: Wrap `db.commit()` in a `try/except` block, and perform a `db.rollba
 Bug/Gap: Fetching an empty `docker-compose.yml` file caused a 500 error.
 Root Cause: `yaml.load()` returns `None` for empty files instead of an empty dictionary. The subsequent code called `.get()` directly on the result, causing an `AttributeError: 'NoneType' object has no attribute 'get'`.
 Prevention: Ensure that the result of `yaml.load()` is truthy before accessing it like a dictionary.
+## 2024-05-20 - Ensure complete JWT testing coverage
+**Bug/Gap:** Untested `get_current_user_token`, `get_current_user`, `verify_token` and `AuthWrapper` methods in `backend/api/auth/jwt.py` leading to potential regressions if the authentication logic is changed.
+**Root Cause:** The logic related to authentication extraction, user extraction, and the setup check was lacking unit testing.
+**Prevention:** Ensured the new tests exercise missing edge cases such as token parsing from cookies vs. headers, and simulated missing/invalid configurations. Tests should always cover 100% of critical logic like authentication wrappers and endpoints.
