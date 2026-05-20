@@ -64,6 +64,79 @@ def test_auth_check_auth_disabled(monkeypatch):
     # Ensure jwt_required was NOT called because auth is disabled
     mock_auth.jwt_required.assert_not_called()
 
+from sqlalchemy.orm import Session
+from api.auth.auth import check_permission
+from api.db.models.users import User
+
+def test_check_permission_auth_disabled(monkeypatch):
+    monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", True)
+
+    mock_auth = MagicMock()
+    mock_db = MagicMock(spec=Session)
+
+    assert check_permission("any_permission", mock_auth, mock_db) is True
+    mock_auth.get_jwt_subject.assert_not_called()
+
+def test_check_permission_user_not_found(mock_settings):
+    mock_auth = MagicMock()
+    mock_auth.get_jwt_subject.return_value = "testuser"
+
+    mock_db = MagicMock(spec=Session)
+    mock_db.query.return_value.filter.return_value.first.return_value = None
+
+    with pytest.raises(HTTPException) as excinfo:
+        check_permission("some_permission", mock_auth, mock_db)
+
+    assert excinfo.value.status_code == 401
+    assert "User not found" in excinfo.value.detail
+
+def test_check_permission_superuser(mock_settings):
+    mock_auth = MagicMock()
+    mock_auth.get_jwt_subject.return_value = "adminuser"
+
+    class DummyUser:
+        is_superuser = True
+
+    mock_user = DummyUser()
+
+    mock_db = MagicMock(spec=Session)
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+    assert check_permission("some_permission", mock_auth, mock_db) is True
+
+def test_check_permission_user_has_permission(mock_settings):
+    mock_auth = MagicMock()
+    mock_auth.get_jwt_subject.return_value = "normaluser"
+
+    class DummyUser:
+        is_superuser = False
+        some_permission = True
+
+    mock_user = DummyUser()
+
+    mock_db = MagicMock(spec=Session)
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+    assert check_permission("some_permission", mock_auth, mock_db) is True
+
+def test_check_permission_user_lacks_permission(mock_settings):
+    mock_auth = MagicMock()
+    mock_auth.get_jwt_subject.return_value = "normaluser"
+
+    class DummyUser:
+        is_superuser = False
+        some_permission = False
+
+    mock_user = DummyUser()
+
+    mock_db = MagicMock(spec=Session)
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_user
+
+    with pytest.raises(HTTPException) as excinfo:
+        check_permission("some_permission", mock_auth, mock_db)
+
+    assert excinfo.value.status_code == 403
+    assert "User lacks permission: some_permission" in excinfo.value.detail
 from unittest.mock import patch, MagicMock
 from api.auth.auth import get_db
 
