@@ -536,3 +536,46 @@ def test_format_bytes_float():
 def test_format_bytes_invalid_type():
     with pytest.raises(TypeError):
         format_bytes("1024")
+
+from api.routers.apps import get_db
+
+def test_get_db():
+    with patch('api.routers.apps.SessionLocal') as mock_session_local:
+        mock_session = MagicMock()
+        mock_session_local.return_value = mock_session
+
+        generator = get_db()
+        db = next(generator)
+
+        assert db == mock_session
+        mock_session_local.assert_called_once()
+        mock_session.close.assert_not_called()
+
+        try:
+            next(generator)
+        except StopIteration:
+            pass
+
+        mock_session.close.assert_called_once()
+
+from api.routers.apps import index
+
+@pytest.mark.asyncio
+async def test_index():
+    mock_authorize = MagicMock()
+    with patch('api.routers.apps.auth_check') as mock_auth_check:
+        with patch('api.routers.apps.actions.get_apps') as mock_get_apps:
+            mock_get_apps.return_value = [{"name": "app1"}]
+            result = await index(Authorize=mock_authorize)
+            mock_auth_check.assert_called_once_with(mock_authorize)
+            mock_get_apps.assert_called_once()
+            assert result == [{"name": "app1"}]
+
+@pytest.mark.asyncio
+async def test_index_raises_http_exception():
+    mock_authorize = MagicMock()
+    with patch('api.routers.apps.auth_check', side_effect=HTTPException(status_code=401, detail="Unauthorized")):
+        with pytest.raises(HTTPException) as excinfo:
+            await index(Authorize=mock_authorize)
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail == "Unauthorized"
