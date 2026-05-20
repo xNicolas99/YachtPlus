@@ -1,3 +1,4 @@
+from api.actions.apps import normalize_ports
 import pytest
 from api.utils.apps import format_bytes, conv_ports2data, conv_portlabels2data, conv_sysctls2data
 import os
@@ -536,3 +537,100 @@ def test_format_bytes_float():
 def test_format_bytes_invalid_type():
     with pytest.raises(TypeError):
         format_bytes("1024")
+
+from api.routers.apps import get_db
+
+def test_get_db():
+    with patch('api.routers.apps.SessionLocal') as mock_session_local:
+        mock_session = MagicMock()
+        mock_session_local.return_value = mock_session
+
+        generator = get_db()
+        db = next(generator)
+
+        assert db == mock_session
+        mock_session_local.assert_called_once()
+        mock_session.close.assert_not_called()
+
+        try:
+            next(generator)
+        except StopIteration:
+            pass
+
+        mock_session.close.assert_called_once()
+
+from api.routers.apps import index
+
+@pytest.mark.asyncio
+async def test_index():
+    mock_authorize = MagicMock()
+    with patch('api.routers.apps.auth_check') as mock_auth_check:
+        with patch('api.routers.apps.actions.get_apps') as mock_get_apps:
+            mock_get_apps.return_value = [{"name": "app1"}]
+            result = await index(Authorize=mock_authorize)
+            mock_auth_check.assert_called_once_with(mock_authorize)
+            mock_get_apps.assert_called_once()
+            assert result == [{"name": "app1"}]
+
+@pytest.mark.asyncio
+async def test_index_raises_http_exception():
+    mock_authorize = MagicMock()
+    with patch('api.routers.apps.auth_check', side_effect=HTTPException(status_code=401, detail="Unauthorized")):
+        with pytest.raises(HTTPException) as excinfo:
+            await index(Authorize=mock_authorize)
+        assert excinfo.value.status_code == 401
+        assert excinfo.value.detail == "Unauthorized"
+
+def test_normalize_ports_empty():
+    assert normalize_ports(None) == {}
+    assert normalize_ports([]) == {}
+
+def test_normalize_ports_already_dict():
+    input_ports = {'80/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '8000'}]}
+    assert normalize_ports(input_ports) == input_ports
+
+def test_normalize_ports_from_summary():
+    summary_ports = [
+        {'IP': '0.0.0.0', 'PrivatePort': 80, 'PublicPort': 8000, 'Type': 'tcp'},
+        {'IP': '127.0.0.1', 'PrivatePort': 443, 'PublicPort': 8443, 'Type': 'tcp'},
+        {'IP': '0.0.0.0', 'PrivatePort': 53, 'PublicPort': 53, 'Type': 'udp'}
+    ]
+    expected = {
+        '80/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '8000'}],
+        '443/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '8443'}],
+        '53/udp': [{'HostIp': '0.0.0.0', 'HostPort': '53'}]
+    }
+    assert normalize_ports(summary_ports) == expected
+
+def test_normalize_ports_multiple_host_ports():
+    summary_ports = [
+        {'IP': '0.0.0.0', 'PrivatePort': 80, 'PublicPort': 8000, 'Type': 'tcp'},
+        {'IP': '0.0.0.0', 'PrivatePort': 80, 'PublicPort': 8001, 'Type': 'tcp'}
+    ]
+    expected = {
+        '80/tcp': [
+            {'HostIp': '0.0.0.0', 'HostPort': '8000'},
+            {'HostIp': '0.0.0.0', 'HostPort': '8001'}
+        ]
+    }
+    assert normalize_ports(summary_ports) == expected
+
+def test_normalize_ports_missing_public_port():
+    summary_ports = [
+        {'PrivatePort': 80, 'Type': 'tcp'}
+    ]
+    expected = {
+        '80/tcp': []
+    }
+    assert normalize_ports(summary_ports) == expected
+
+def test_normalize_ports_invalid_entries():
+    summary_ports = [
+        {'IP': '0.0.0.0', 'PrivatePort': 80, 'PublicPort': 8000, 'Type': 'tcp'},
+        "invalid string entry",
+        None
+    ]
+    expected = {
+        '80/tcp': [{'HostIp': '0.0.0.0', 'HostPort': '8000'}]
+    }
+    assert normalize_ports(summary_ports) == expected
