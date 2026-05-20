@@ -63,3 +63,25 @@ def test_auth_check_auth_disabled(monkeypatch):
 
     # Ensure jwt_required was NOT called because auth is disabled
     mock_auth.jwt_required.assert_not_called()
+
+from unittest.mock import patch, MagicMock
+from api.auth.auth import get_db
+
+def test_get_db():
+    with patch("api.auth.auth.SessionLocal") as mock_session_local:
+        mock_db = MagicMock()
+        mock_session_local.return_value = mock_db
+
+        db_generator = get_db()
+        db = next(db_generator)
+
+        assert db == mock_db
+        mock_session_local.assert_called_once()
+        mock_db.close.assert_not_called()
+
+        try:
+            next(db_generator)
+        except StopIteration:
+            pass
+
+        mock_db.close.assert_called_once()
