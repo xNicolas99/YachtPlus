@@ -10,6 +10,7 @@ import jwt
 import json
 from datetime import datetime, timedelta
 from api.settings import Settings
+import shlex
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
 from api.utils.audit import log_activity
@@ -210,7 +211,7 @@ async def container_exec(
             return
 
         exec_instance = await container.exec(
-            cmd=[shell],
+            cmd=shlex.split(shell),
             stdin=True,
             stdout=True,
             stderr=True,
