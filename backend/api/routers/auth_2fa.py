@@ -41,7 +41,7 @@ def generate_2fa(
 
 
 def generate_2fa_logic(db: Session, Authorize: get_auth_wrapper):
-    auth_check_setup_pending(Authorize)
+    auth_check_setup_pending(Authorize, db)
     username = Authorize.get_jwt_subject(allow_setup_pending=True)
     user = db.query(User).filter(User.username == username).first()
     if not user:
@@ -93,7 +93,7 @@ def enable_2fa(
     # However, we store the secret in DB encrypted already in generate step.
     # We should trust DB secret over frontend secret for security.
 
-    auth_check_setup_pending(Authorize)
+    auth_check_setup_pending(Authorize, db)
     username = Authorize.get_jwt_subject(allow_setup_pending=True)
     user = db.query(User).filter(User.username == username).first()
 

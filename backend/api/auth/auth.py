@@ -26,10 +26,24 @@ def auth_check(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
         # AuthWrapper.jwt_required() raises HTTPException if invalid
         Authorize.jwt_required(allow_setup_pending=False)
 
-def auth_check_setup_pending(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    """Special auth check for setup endpoints that allow tokens with setup_pending=True."""
+def auth_check_setup_pending(
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    """Allow setup_pending=True tokens, but only while setup is genuinely incomplete.
+
+    Once setup has been finalized, any still-valid setup_pending token is
+    treated like a normal token and must satisfy the strict auth_check rules.
+    Without this, a stale setup_pending token (15-min window) could still hit
+    the 2FA endpoints after setup is done.
+    """
     if settings.DISABLE_AUTH is True:
         return
+    # Lazy import to avoid the circular dependency between auth.auth and the
+    # setup router (which itself imports from this module).
+    from api.routers.setup.setup import is_setup_completed
+    if is_setup_completed(db):
+        Authorize.jwt_required(allow_setup_pending=False)
     else:
         Authorize.jwt_required(allow_setup_pending=True)
 

@@ -32,6 +32,7 @@ import docker
 import aiodocker
 import asyncio
 import aiostream
+from functools import lru_cache
 import logging
 import aiofiles
 from api.settings import Settings
@@ -499,14 +500,19 @@ async def app_update(app_name):
     await asyncio.sleep(1)
     return await get_apps()
 
-async def _get_self_id():
+@lru_cache(maxsize=1)
+def _read_self_id():
+    # Container ID is immutable for the process lifetime; cache the
+    # /proc/self/cgroup read so we don't hit disk on every self-update call.
     try:
-        async with aiofiles.open("/proc/self/cgroup", "r") as f:
-            content = await f.readline()
-            return content.strip().split("/")[-1]
+        with open("/proc/self/cgroup", "r") as f:
+            return f.readline().strip().split("/")[-1]
     except Exception as e:
         logger.warning(f"Failed to determine self container ID: {e}")
         return None
+
+async def _get_self_id():
+    return _read_self_id()
 
 async def _update_self(background_tasks):
     yacht_id = await _get_self_id()
@@ -593,53 +599,56 @@ async def log_generator(request, app_name):
         except aiodocker.exceptions.DockerError:
             pass
 
-async def stat_generator(request, app_name):
+async def _stat_generator(docker, request, app_name):
+    """Yield stat events for one container using an existing aiodocker client."""
     prev_stats = None
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as adocker:
-        try:
-            container = await adocker.containers.get(app_name)
-            info = await container.show()
-            if info["State"]["Status"] == "running":
-                async for line in container.stats(stream=True):
-                    current_stats = await process_app_stats(line, app_name)
-                    if prev_stats != current_stats:
-                        yield {
-                            "event": "update",
-                            "retry": 30000,
-                            "data": json.dumps(current_stats),
-                        }
-                        prev_stats = current_stats
+    try:
+        container = await docker.containers.get(app_name)
+        info = await container.show()
+        if info["State"]["Status"] == "running":
+            async for line in container.stats(stream=True):
+                current_stats = await process_app_stats(line, app_name)
+                if prev_stats != current_stats:
+                    yield {
+                        "event": "update",
+                        "retry": 30000,
+                        "data": json.dumps(current_stats),
+                    }
+                    prev_stats = current_stats
 
-                    if await request.is_disconnected():
-                        break
-        except Exception as e:
-            logger.debug(f"Stat generator stopped for {app_name}: {e}")
-            pass
+                if await request.is_disconnected():
+                    break
+    except Exception as e:
+        logger.debug(f"Stat generator stopped for {app_name}: {e}")
+
+async def stat_generator(request, app_name):
+    async with aiodocker.Docker(url=settings.DOCKER_HOST) as adocker:
+        async for event in _stat_generator(adocker, request, app_name):
+            yield event
 
 async def all_stat_generator(request):
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers = await docker.containers.list()
 
-    running_names = []
-    for c in containers:
-         # Safely access _container or use object itself
-         c_dict = c._container if hasattr(c, '_container') else c
+        running_names = []
+        for c in containers:
+            # Safely access _container or use object itself
+            c_dict = c._container if hasattr(c, '_container') else c
 
-         # Check if it's a dict and has State
-         if isinstance(c_dict, dict) and c_dict.get("State") == "running":
-             # Use Names[0] but strip leading slash
-             names = c_dict.get("Names")
-             if names:
-                 running_names.append(names[0][1:])
+            # Check if it's a dict and has State
+            if isinstance(c_dict, dict) and c_dict.get("State") == "running":
+                # Use Names[0] but strip leading slash
+                names = c_dict.get("Names")
+                if names:
+                    running_names.append(names[0][1:])
 
-    loops = [stat_generator(request, name) for name in running_names]
+        if not running_names:
+            return
 
-    if not loops:
-        return
-
-    async with aiostream.stream.merge(*loops).stream() as merged:
-        async for event in merged:
-            yield event
+        loops = [_stat_generator(docker, request, name) for name in running_names]
+        async with aiostream.stream.merge(*loops).stream() as merged:
+            async for event in merged:
+                yield event
 
 async def process_app_stats(line, app_name):
     cpu_total = 0.0

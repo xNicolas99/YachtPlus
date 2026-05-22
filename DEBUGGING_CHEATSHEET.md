@@ -52,7 +52,7 @@ Open Chrome/Firefox DevTools (F12):
 
 ### A. Console Tab
 *   **Red Errors:**
-    *   `Refused to evaluate a string as JavaScript`: CSP violation (check if `unsafe-eval` is properly allowed in headers).
+    *   `Refused to evaluate a string as JavaScript`: CSP violation. `unsafe-eval` is intentionally NOT in our CSP (`backend/api/main.py`). If a dependency you added really needs it, the dependency itself is the problem — don't loosen the policy.
     *   `404 Not Found` for `.js` or `.css` files: The frontend build failed or path is wrong.
     *   `Uncaught SyntaxError`: Broken JS bundle.
 

@@ -502,13 +502,15 @@ def test_verify_token_missing_sub(credentials_exception):
         verify_token(token, credentials_exception)
 
     assert excinfo.value.status_code == 401
-    assert excinfo.value.detail == "Invalid"
+    assert excinfo.value.detail == "Could not validate credentials"
 
 def test_verify_token_invalid_signature():
     token = jwt.encode({"sub": "testuser"}, "wrong_secret_thats_long_enough", algorithm=ALGORITHM)
     credentials_exception = HTTPException(status_code=401, detail="Invalid")
+    with pytest.raises(HTTPException) as excinfo:
+        verify_token(token, credentials_exception)
     assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert excinfo.value.detail == "Could not validate credentials"
+    assert excinfo.value.detail == "Invalid"
 
 
 def test_verify_token_invalid_token(credentials_exception):
@@ -527,7 +529,7 @@ def test_verify_token_expired(credentials_exception):
         verify_token(token, credentials_exception)
 
     assert excinfo.value.status_code == 401
-    assert excinfo.value.detail == "Invalid"
+    assert excinfo.value.detail == "Could not validate credentials"
 
 class MockRequest:
     def __init__(self, headers=None, cookies=None):
@@ -594,8 +596,13 @@ def test_auth_wrapper_jwt_required_setup_pending(monkeypatch):
     monkeypatch.setattr(jwt_module.settings, "DISABLE_AUTH", "false")
     token = create_access_token({"sub": "testuser", "setup_pending": True})
     request = MockRequest(headers={"Authorization": f"Bearer {token}"})
-    assert excinfo.value.status_code == status.HTTP_401_UNAUTHORIZED
-    assert excinfo.value.detail == "Could not validate credentials"
+
+    wrapper = AuthWrapper(request)
+    with pytest.raises(HTTPException) as excinfo:
+        wrapper.jwt_required()
+
+    assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
+    assert excinfo.value.detail == "Setup is pending, restricted access"
 
 
 def test_get_current_user_token_header():

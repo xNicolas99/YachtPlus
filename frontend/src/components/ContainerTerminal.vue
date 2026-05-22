@@ -215,28 +215,13 @@ export default {
         this.terminal.clear();
       }
 
-      // Get auth token from store or localStorage
-      const token =
-        localStorage.getItem("token") ||
-        sessionStorage.getItem("token") ||
-        this.$store.state.auth.token ||
-        localStorage.getItem("authToken") ||
-        localStorage.getItem("access_token_cookie");
-
-      // If token is missing, we proceed anyway (cookie-based auth fallback)
-      if (!token) {
-        console.warn("No token found in storage, attempting cookie-based auth.");
-      }
-
+      // Auth runs via the HttpOnly access_token_cookie, which the browser
+      // sends automatically with the WebSocket handshake on same-origin.
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const host = window.location.hostname;
       const port = window.location.port ? `:${window.location.port}` : "";
 
-      let wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
-
-      if (token) {
-        wsUrl += `&token=${encodeURIComponent(token)}`;
-      }
+      const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
 
       this.websocket = new WebSocket(wsUrl);
 

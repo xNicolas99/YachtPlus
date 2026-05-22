@@ -258,8 +258,8 @@ def test_register_first_user_success_new_user(mock_get_auth_wrapper, mock_create
         assert user_arg.is_superuser == True
         assert user_arg.is_active == False
 
-        # Check cookie
-        auth_wrapper_mock.set_access_cookies.assert_called_once_with("fake_token", ANY)
+        # Check cookie (now includes a 15-minute max_age for the setup-pending token)
+        auth_wrapper_mock.set_access_cookies.assert_called_once_with("fake_token", ANY, max_age=900)
 
     app.dependency_overrides.clear()
 

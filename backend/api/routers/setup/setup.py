@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
@@ -9,6 +10,11 @@ from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
 from api.db.models.setup import SetupStatus
 import os
+
+# Short-lived window in which the user must complete 2FA setup and call
+# /finalize. Long enough for a normal scan-the-QR-and-enter-code flow,
+# short enough that an abandoned registration can't sit around for hours.
+SETUP_PENDING_TOKEN_LIFETIME = timedelta(minutes=15)
 
 router = APIRouter()
 
@@ -141,8 +147,15 @@ def register_first_user(
     # If an attacker stops here, the server is "Not Setup", so anyone can hit `/register` again?
     # No, existing user check prevents overwrite unless we handle it.
 
-    access_token = create_access_token(data={"sub": new_user.username, "setup_pending": True})
-    Authorize.set_access_cookies(access_token, response)
+    access_token = create_access_token(
+        data={"sub": new_user.username, "setup_pending": True},
+        expires_delta=SETUP_PENDING_TOKEN_LIFETIME,
+    )
+    Authorize.set_access_cookies(
+        access_token,
+        response,
+        max_age=int(SETUP_PENDING_TOKEN_LIFETIME.total_seconds()),
+    )
 
     return {
         "login": "successful",
@@ -155,7 +168,7 @@ def finalize_setup(
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check_setup_pending(Authorize)
+    auth_check_setup_pending(Authorize, db)
     if is_setup_completed(db):
         return {"message": "Setup already completed"}
 

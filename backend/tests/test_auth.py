@@ -1,6 +1,6 @@
 import pytest
 from fastapi import HTTPException
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from api.auth.auth import auth_check, auth_check_setup_pending
 
 
@@ -75,14 +75,25 @@ def test_auth_check_auth_disabled(monkeypatch):
 
 def test_auth_check_setup_pending_success(mock_settings):
     mock_auth = MagicMock()
-    auth_check_setup_pending(mock_auth)
+    mock_db = MagicMock()
+    with patch("api.routers.setup.setup.is_setup_completed", return_value=False):
+        auth_check_setup_pending(mock_auth, mock_db)
     mock_auth.jwt_required.assert_called_once_with(allow_setup_pending=True)
+
+
+def test_auth_check_setup_pending_blocked_after_setup_complete(mock_settings):
+    mock_auth = MagicMock()
+    mock_db = MagicMock()
+    with patch("api.routers.setup.setup.is_setup_completed", return_value=True):
+        auth_check_setup_pending(mock_auth, mock_db)
+    mock_auth.jwt_required.assert_called_once_with(allow_setup_pending=False)
 
 
 def test_auth_check_setup_pending_auth_disabled(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", True)
     mock_auth = MagicMock()
-    auth_check_setup_pending(mock_auth)
+    mock_db = MagicMock()
+    auth_check_setup_pending(mock_auth, mock_db)
     mock_auth.jwt_required.assert_not_called()
 
 

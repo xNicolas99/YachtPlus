@@ -29,9 +29,14 @@ def get_or_create_secret_key() -> str:
             with open(secret_file, "w") as f:
                 f.write(new_secret)
             return new_secret
-    except Exception:
-        # Fallback if file system is completely unwriteable
-        return secrets.token_urlsafe(32)
+    except Exception as e:
+        # Refuse to start with an ephemeral per-process key. A random fallback
+        # would invalidate all JWTs on every restart and diverge across workers.
+        raise RuntimeError(
+            f"SECRET_KEY could not be loaded or created at {secret_file!r}. "
+            "Set the SECRET_KEY environment variable, or ensure SECRET_KEY_FILE "
+            "points to a writable path."
+        ) from e
 
 
 class Settings(BaseSettings):

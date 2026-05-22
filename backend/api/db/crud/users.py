@@ -149,12 +149,6 @@ def blacklist_api_key(key_id, db: Session):
     return {"error": "Key not found"}
 
 
-def blacklist_login_token(Authorize, db: Session):
-    # This feature is temporarily disabled as we moved away from fastapi-jwt-auth
-    # and haven't fully implemented blacklist logic in new system yet.
-    return
-
-
 def get_keys(user, db: Session):
     keys = db.query(models.APIKEY).filter(models.APIKEY.user == user.id).all()
     return keys

@@ -27,8 +27,16 @@ loadFonts()
 const app = createApp(App)
 
 // Global Properties (replacing Vue.prototype)
+// Restrict allowed tags/attrs explicitly so v-html cannot reintroduce
+// scripts, event handlers, or inline styles via template data.
+const SANITIZE_CONFIG = {
+  ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'code', 'pre'],
+  ALLOWED_ATTR: ['href', 'title', 'target', 'rel'],
+  ALLOWED_URI_REGEXP: /^(?:https?|mailto):/i,
+  FORBID_ATTR: ['style', 'srcset'],
+};
 app.config.globalProperties.$sanitize = function(dirty) {
-  return DOMPurify.sanitize(dirty);
+  return DOMPurify.sanitize(dirty, SANITIZE_CONFIG);
 }
 
 // Stub legacy notifications for now

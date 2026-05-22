@@ -147,7 +147,7 @@ def test_enable_2fa_user_not_found():
 
         assert exc.value.status_code == 400
         assert exc.value.detail == "2FA setup not initiated"
-        mock_auth_check.assert_called_once_with(mock_auth)
+        mock_auth_check.assert_called_once_with(mock_auth, mock_db)
         mock_auth.get_jwt_subject.assert_called_once_with(allow_setup_pending=True)
 
 def test_enable_2fa_success():
@@ -290,13 +290,13 @@ class MockAuth:
         return self.username
 
 
-def test_generate_2fa_logic_success(db):
-    # Setup user
-    u1 = User(username="testuser", hashed_password="pw", is_superuser=False)
+def test_generate_2fa_logic_success():
+    # Setup user (unique username to avoid clashing with module-level shared db)
+    u1 = User(username="logic_2fa_user", hashed_password="pw", is_superuser=False)
     db.add(u1)
     db.commit()
 
-    auth = MockAuth("testuser")
+    auth = MockAuth("logic_2fa_user")
     result = generate_2fa_logic(db, auth)
 
     # Validate the response dictionary
@@ -314,8 +314,8 @@ def test_generate_2fa_logic_success(db):
     assert decrypted_secret == result["secret"]
 
 
-def test_generate_2fa_logic_user_not_found(db):
-    auth = MockAuth("nonexistent_user")
+def test_generate_2fa_logic_user_not_found():
+    auth = MockAuth("nonexistent_2fa_user")
 
     with pytest.raises(HTTPException) as excinfo:
         generate_2fa_logic(db, auth)

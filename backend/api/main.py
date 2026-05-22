@@ -2,6 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 import os
 
 # Import ALL routers (Fixed 'settings' -> 'app_settings')
@@ -52,6 +53,14 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Reject requests with Host headers that aren't in ALLOWED_HOSTS so the API
+# can't be tricked into emitting absolute URLs (password resets etc.) under
+# an attacker-controlled host.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=get_settings().ALLOWED_HOSTS,
 )
 
 @app.middleware("http")
