@@ -8,6 +8,15 @@ Always verify a claim here against the current code (`rg`/`grep`) before relying
 on it. If you find a mismatch, fix the code OR fix this file — don't perpetuate
 the lie.
 
+> **Hard rule — keep this file in sync with the repo.**
+> Any change that touches the *structure* of the project — new directory,
+> renamed module, new router/middleware, new env var, new external integration,
+> changed convention, new high-risk surface, modified auth flow, dropped or
+> added dependency — **must** be reflected in AGENTS.md in the same commit /
+> PR that introduces it. If you don't, the next agent reads stale guidance
+> and breaks things. Updating AGENTS.md is part of the change, not an
+> afterthought.
+
 ---
 
 ## 1. What this repo is
@@ -348,11 +357,19 @@ The longer triage checklist lives in [DEBUGGING_CHEATSHEET.md](DEBUGGING_CHEATSH
 ## 15. When you finish a change
 
 1. Run both test suites — they must stay green.
-2. If you changed runtime behaviour, update [README.md](README.md) (user-
-   facing) and this file (agent-facing).
-3. If you added a new high-risk surface, add a row to section 12.
-4. If you removed a feature, also remove the docs / settings / tests that
-   referenced it — search globally first.
+2. **Update AGENTS.md in the same commit if any of the following changed:**
+   - directory layout, new/renamed module, new router or middleware
+   - auth flow, cookie shape, token claims, middleware order
+   - env var added / renamed / default changed (section 11)
+   - external integration added or swapped (section 7)
+   - dependency added/removed/upgraded that affects how to run things
+   - new high-risk surface → add a row to section 12
+   - new common gotcha discovered → add to section 13
+   - test baseline numbers (sections 2, 9) changed
+3. If you changed user-facing behaviour, also update [README.md](README.md).
+4. If you removed a feature, search globally and delete every reference
+   (code, tests, docs, settings) — don't leave dangling mentions in this
+   file either.
 
 ---
 
