@@ -1,51 +1,51 @@
 [
   {
     "variable": "!config",
-    "replacement": "/yacht/AppData/Config"
+    "replacement": "/yachtplus/AppData/Config"
   },
   {
     "variable": "!data",
-    "replacement": "/yacht/AppData/Data"
+    "replacement": "/yachtplus/AppData/Data"
   },
   {
     "variable": "!media",
-    "replacement": "/yacht/Media/"
+    "replacement": "/yachtplus/Media/"
   },
   {
     "variable": "!downloads",
-    "replacement": "/yacht/Downloads/"
+    "replacement": "/yachtplus/Downloads/"
   },
   {
     "variable": "!music",
-    "replacement": "/yacht/Media/Music"
+    "replacement": "/yachtplus/Media/Music"
   },
   {
     "variable": "!playlists",
-    "replacement": "/yacht/Media/Playlists"
+    "replacement": "/yachtplus/Media/Playlists"
   },
   {
     "variable": "!podcasts",
-    "replacement": "/yacht/Media/Podcasts"
+    "replacement": "/yachtplus/Media/Podcasts"
   },
   {
     "variable": "!books",
-    "replacement": "/yacht/Media/Books"
+    "replacement": "/yachtplus/Media/Books"
   },
   {
     "variable": "!comics",
-    "replacement": "/yacht/Media/Comics"
+    "replacement": "/yachtplus/Media/Comics"
   },
   {
     "variable": "!tv",
-    "replacement": "/yacht/Media/TV"
+    "replacement": "/yachtplus/Media/TV"
   },
   {
     "variable": "!movies",
-    "replacement": "/yacht/Media/Movies"
+    "replacement": "/yachtplus/Media/Movies"
   },
   {
     "variable": "!pictures",
-    "replacement": "/yacht/Media/Photos"
+    "replacement": "/yachtplus/Media/Photos"
   },
   {
     "variable": "!localtime",
@@ -53,7 +53,7 @@
   },
   {
     "variable": "!logs",
-    "replacement": "/yacht/AppData/Logs"
+    "replacement": "/yachtplus/AppData/Logs"
   },
   {
     "variable": "!PUID",

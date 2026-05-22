@@ -29,7 +29,7 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
 
     subject = f"Security Alert: {reason}"
     body = f"""
-    Security Alert for Yacht Server.
+    Security Alert for YachtPlus Server.
 
     Reason: {reason}
     IP Address: {ip_address}

@@ -515,27 +515,27 @@ async def _get_self_id():
     return _read_self_id()
 
 async def _update_self(background_tasks):
-    yacht_id = await _get_self_id()
-    if not yacht_id:
-         raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
+    self_id = await _get_self_id()
+    if not self_id:
+         raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
-            yacht = await docker.containers.get(yacht_id)
-            yacht_info = await yacht.show()
-            yacht_name = yacht_info["Name"][1:]
+            self_container = await docker.containers.get(self_id)
+            self_info = await self_container.show()
+            self_name = self_info["Name"][1:]
         except aiodocker.exceptions.DockerError:
-             raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
+             raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
-    background_tasks.add_task(update_self_in_background, yacht_name)
+    background_tasks.add_task(update_self_in_background, self_name)
     return {"result": "successful"}
 
-async def update_self_in_background(yacht_name):
+async def update_self_in_background(container_name):
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
-        print("**** Updating " + yacht_name + "****")
+        print("**** Updating " + container_name + "****")
         config = {
             "Image": "containrrr/watchtower:latest",
-            "Cmd": ["--cleanup", "--run-once", yacht_name],
+            "Cmd": ["--cleanup", "--run-once", container_name],
             "HostConfig": {
                 "Binds": ["/var/run/docker.sock:/var/run/docker.sock"],
                 "AutoRemove": True
@@ -548,14 +548,14 @@ async def update_self_in_background(yacht_name):
             logger.error(f"Error updating self: {e}")
 
 async def check_self_update():
-    yacht_id = await _get_self_id()
-    if not yacht_id:
-         raise HTTPException(status_code=404, detail="Unable to get Yacht container ID")
+    self_id = await _get_self_id()
+    if not self_id:
+         raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         try:
-            yacht = await docker.containers.get(yacht_id)
-            info = await yacht.show()
+            self_container = await docker.containers.get(self_id)
+            info = await self_container.show()
             tag = info["Config"]["Image"]
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, _check_updates, tag)

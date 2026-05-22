@@ -2,8 +2,6 @@
 
 YachtPlus is a self-hosted container management UI for Docker and Docker Compose. It focuses on 1‑click template deployments while keeping the security defaults sane for self-hosting scenarios.
 
-The project is an independent rewrite based on the original `yacht-sh`.
-
 ---
 
 ## Tech stack
@@ -90,8 +88,8 @@ services:
       # once and persisted to /config/.secret_key.
       # SECRET_KEY: change-me-to-a-long-random-string
       ENVIRONMENT: production
-      YACHT_ALLOWED_HOSTS: yacht.example.com,localhost
-      YACHT_CORS_ORIGINS: https://yacht.example.com
+      YACHT_ALLOWED_HOSTS: yachtplus.example.com,localhost
+      YACHT_CORS_ORIGINS: https://yachtplus.example.com
 ```
 
 ```bash

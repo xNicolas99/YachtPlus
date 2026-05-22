@@ -59,8 +59,8 @@ def send_test_email(email_data: TestEmailSchema, db: Session = Depends(get_db), 
     if not settings:
         raise HTTPException(status_code=400, detail="SMTP settings not configured")
 
-    msg = MIMEText("This is a test email from Yacht.")
-    msg['Subject'] = 'Yacht Test Email'
+    msg = MIMEText("This is a test email from YachtPlus.")
+    msg['Subject'] = 'YachtPlus Test Email'
     msg['From'] = settings.sender_email
     msg['To'] = email_data.recipient
 

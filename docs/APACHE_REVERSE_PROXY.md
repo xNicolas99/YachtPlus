@@ -1,7 +1,6 @@
-# Apache Reverse Proxy Configuration for Yacht
-# Save this as docs/APACHE_REVERSE_PROXY.md
+# Apache Reverse Proxy Configuration for YachtPlus
 
-If you are running Yacht behind an Apache Reverse Proxy, you must enable `mod_proxy_wstunnel` and configure the VirtualHost to correctly handle WebSocket upgrades and Server-Sent Events (SSE).
+If you are running YachtPlus behind an Apache Reverse Proxy, you must enable `mod_proxy_wstunnel` and configure the VirtualHost to correctly handle WebSocket upgrades and Server-Sent Events (SSE).
 
 ## Prerequisites
 
@@ -17,11 +16,11 @@ systemctl restart apache2
 
 ## VirtualHost Configuration
 
-Add the following configuration to your Apache VirtualHost definition. Replace `yacht.example.com` and `http://localhost:8000` with your actual domain and Yacht internal address/port.
+Add the following configuration to your Apache VirtualHost definition. Replace `yachtplus.example.com` and `http://localhost:8000` with your actual domain and the YachtPlus internal address/port.
 
 ```apache
 <VirtualHost *:80>
-    ServerName yacht.example.com
+    ServerName yachtplus.example.com
 
     ProxyPreserveHost On
     ProxyRequests Off

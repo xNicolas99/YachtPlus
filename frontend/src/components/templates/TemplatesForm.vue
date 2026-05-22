@@ -13,9 +13,7 @@
         New Template
       </v-card-title>
       <v-card-text v-if="templates.length < 1">
-        Consider adding templates crafted for Yacht below or creating your own
-        with <a href="https://shipwright.yacht.sh">Shipwright</a> <br />
-        https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/yacht.json
+        Add a template registry by providing its JSON URL below.
       </v-card-text>
       <v-card-text>
         <v-form ref="form" @submit.prevent="submit">

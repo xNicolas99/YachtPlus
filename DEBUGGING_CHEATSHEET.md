@@ -1,4 +1,4 @@
-# Yacht Debugging Cheatsheet
+# YachtPlus Debugging Cheatsheet
 
 Since you've already applied the recent patches (PRs #111, #107, #104, #102) but the interface is still failing, follow this checklist to isolate the root cause.
 
@@ -67,7 +67,7 @@ Filter by `XHR` or `Fetch`. reload the page.
 
 If weird caching or corrupt volumes are suspected, wipe everything and start fresh.
 
-**WARNING: This deletes your Yacht configuration and database!**
+**WARNING: This deletes your YachtPlus configuration and database!**
 
 ```bash
 # 1. Stop containers

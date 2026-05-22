@@ -2,8 +2,8 @@
 enabled = true
 port = 8000,8080
 filter = yachtplus
-logpath = /path/to/yacht/logs/nginx/error.log
-          /path/to/yacht/logs/backend/app.log
+logpath = /path/to/yachtplus/logs/nginx/error.log
+          /path/to/yachtplus/logs/backend/app.log
 maxretry = 5
 findtime = 600
 bantime = 3600

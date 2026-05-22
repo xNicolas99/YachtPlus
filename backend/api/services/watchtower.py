@@ -5,7 +5,7 @@ from api.settings import Settings
 from api.utils.compose import find_yml_files
 import logging
 
-logger = logging.getLogger("yacht.watchtower")
+logger = logging.getLogger("yachtplus.watchtower")
 
 settings = Settings()
 scheduler = BackgroundScheduler()

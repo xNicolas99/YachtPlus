@@ -46,6 +46,7 @@ monorepo tooling — they are independent Node and Python projects.
 
 ```
 backend/
+  start.sh                 # Entrypoint inside the Docker image (sets perms, exec gunicorn+nginx)
   api/
     main.py                # FastAPI app, middleware stack, router includes
     settings.py            # Pydantic settings + SECRET_KEY bootstrap (fail-fast)
@@ -83,8 +84,11 @@ frontend/
   vite.config.js
   package.json
 Dockerfile
-docker-compose.yml
+docker-compose.yml         # Minimal production example
+docker-compose.example.yml # Hardened example using a docker-socket-proxy
 nginx.conf
+fail2ban/                  # jail.local + filter for fail2ban-style brute-force protection
+docs/                      # User-facing how-tos (reverse proxy, …)
 DEBUGGING_CHEATSHEET.md
 README.md                  # End-user facing; keep in sync with reality
 ```
@@ -373,7 +377,23 @@ The longer triage checklist lives in [DEBUGGING_CHEATSHEET.md](DEBUGGING_CHEATSH
 
 ---
 
-## 16. Notes & journals
+## 16. Backwards-compatibility carve-outs
+
+These names still contain the historical `yacht` token. **Don't rename them**
+without a coordinated migration — they're persisted on user systems.
+
+- `/config/yacht.db` — default SQLite path. Renaming would orphan every
+  existing deployment's database.
+- Docker container labels `local.yacht.port.<port>` — written into managed
+  containers' label set so the UI can surface port descriptions. Renaming
+  loses labels on all already-deployed apps.
+- Env-var namespace `YACHT_ALLOWED_HOSTS`, `YACHT_CORS_ORIGINS` — public
+  settings users put in their `docker-compose.yml`. Treat as stable API.
+
+If you ever need to migrate any of these, do it gracefully: read both the
+old and new name, log a deprecation warning, document the change in README.
+
+## 17. Notes & journals
 
 `.Jules/` holds free-form journal files from past agent runs
 (`palette.md`, `sentinel.md`, `mechanic.md`, `bolt.md`). They are reference

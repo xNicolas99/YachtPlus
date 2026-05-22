@@ -2,7 +2,7 @@ version: "3"
 services:
   dockerproxy:
     image: tecnativa/docker-socket-proxy
-    container_name: yacht-socket-proxy
+    container_name: yachtplus-socket-proxy
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -13,7 +13,7 @@ services:
       - VOLUMES=1
       - POST=1 # Erlaubt Steuerung (Start/Stop), blockiert aber gefährliche Host-Befehle
     networks:
-      - yacht-net
+      - yachtplus-net
 
   yachtplus:
     image: ghcr.io/yachtplus/yachtplus:devel
@@ -31,8 +31,8 @@ services:
       # - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/config
     networks:
-      - yacht-net
+      - yachtplus-net
 
 networks:
-  yacht-net:
+  yachtplus-net:
     driver: bridge

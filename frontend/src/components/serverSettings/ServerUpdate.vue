@@ -12,9 +12,9 @@
       >Update</v-card-title
     >
     <v-card-text class="mt-2"
-      >Update Yacht to the latest version. <br />
-      Note: This will spin up a run-once watchtower instance and update Yacht.
-      In the process Yacht will be restarted and you will be logged
+      >Update YachtPlus to the latest version. <br />
+      Note: This will spin up a run-once watchtower instance and update YachtPlus.
+      In the process YachtPlus will be restarted and you will be logged
       out.</v-card-text
     >
     <v-btn
@@ -23,7 +23,7 @@
       @click="update()"
       :disabled="!updatable"
     >
-      Update Yacht
+      Update YachtPlus
     </v-btn>
   </v-card>
 </template>
@@ -79,7 +79,7 @@ export default {
         .then(() => {
           this.isLoading = false;
           this.setMessage(
-            "Yacht is updating now. You will be logged out to complete the update."
+            "YachtPlus is updating now. You will be logged out to complete the update."
           );
         })
         .finally(() => {

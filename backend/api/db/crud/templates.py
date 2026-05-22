@@ -384,11 +384,7 @@ def init_templates(db: Session):
         print("No templates found. Adding default templates.")
         defaults = [
             {
-                "title": "Yacht Default",
-                "url": "https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/yacht.json"
-            },
-            {
-                "title": "LSIO Portainer",
+                "title": "LSIO Portainer Templates",
                 "url": "https://raw.githubusercontent.com/technorabilia/portainer-templates/main/lsio/templates/templates.json"
             }
         ]

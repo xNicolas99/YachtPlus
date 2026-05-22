@@ -1,5 +1,0 @@
-🧪 Add comprehensive unit tests for auth_2fa.py functions
-
-🎯 What: Missing tests for 2FA functions `generate_2fa_get`, `generate_2fa`, `enable_2fa`, and `disable_2fa` in `backend/api/routers/auth_2fa.py`.
-📊 Coverage: Added full test coverage including happy paths (generation, enabling with correct code, disabling) and edge cases (generating for unknown user, enabling with wrong code, enabling without setup initiated).
-✨ Result: `auth_2fa.py` endpoints are now fully covered, preventing regressions in future refactoring.
