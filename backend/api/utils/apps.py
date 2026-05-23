@@ -372,7 +372,8 @@ def get_update_ports(ports):
 
 def _check_updates(tag):
     if tag:
-        dclient = docker.from_env()
+        from api.utils.docker_client import get_sync_docker_client
+        dclient = get_sync_docker_client()
         try:
             current = dclient.images.get(tag)
         except APIError as err:

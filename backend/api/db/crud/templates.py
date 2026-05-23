@@ -18,6 +18,12 @@ import ipaddress
 
 # Templates
 
+# Maximum wall-clock time the template feed download is allowed to take.
+# Without this, urllib falls back to socket.getdefaulttimeout() — which is
+# unbounded by default — so a malicious or slow-responding template URL
+# could hang the request worker indefinitely.
+TEMPLATE_FETCH_TIMEOUT_S = 15
+
 def is_private_ip(ip: str) -> bool:
     if ip == '0.0.0.0':
         return True
@@ -136,7 +142,7 @@ def _fetch_template_payload(url: str):
     """Open the template feed and decode it as JSON or YAML."""
     ext = os.path.splitext(urlparse(url).path)[1].rstrip()
     opener = urllib.request.build_opener(SafeRedirectHandler())
-    with opener.open(url) as file:
+    with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as file:
         if ext in (".yml", ".yaml"):
             return yaml.load(file, Loader=yaml.SafeLoader)
         if ext in (".json", "json"):
@@ -199,7 +205,7 @@ def refresh_template(db: Session, template_id: id):
     items = []
     try:
         opener = urllib.request.build_opener(SafeRedirectHandler())
-        with opener.open(template.url) as fp:
+        with opener.open(template.url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as fp:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(fp, Loader=yaml.SafeLoader)
             elif ext.rstrip() in (".json"):

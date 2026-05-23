@@ -1,5 +1,6 @@
 import os
 import secrets
+from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
@@ -59,6 +60,13 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")
+
+    # Docker daemon endpoint. None -> let the docker SDK / aiodocker pick up
+    # the standard discovery (DOCKER_HOST env var, then /var/run/docker.sock).
+    # Set this when fronting the daemon via a TCP proxy so that *all* code
+    # paths — including the few sync helpers that previously called
+    # docker.from_env() — go through the configured endpoint.
+    DOCKER_HOST: Optional[str] = os.getenv("DOCKER_HOST")
 
     class Config:
         env_file = ".env"
