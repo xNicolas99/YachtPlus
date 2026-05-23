@@ -144,15 +144,31 @@ def prune_blacklist(db: Session):
     return
 
 
-def blacklist_api_key(key_id, db: Session):
+def blacklist_api_key(key_id, db: Session, requesting_user=None):
+    """Revoke and delete an API key.
+
+    If ``requesting_user`` is given, the key is only removed when it belongs
+    to that user or the requester is a superuser. This prevents an IDOR
+    where any authenticated user could pass an arbitrary key_id and delete
+    another account's API token.
+    """
     key = db.query(models.APIKEY).filter(models.APIKEY.id == key_id).first()
-    if key:
-        access = TokenBlacklist(jti=key.jti, expires=None, revoked=True)
-        db.add(access)
-        db.delete(key)
-        db.commit()
-        return {"success": "api key " + str(key_id) + " deleted."}
-    return {"error": "Key not found"}
+    if not key:
+        return {"error": "Key not found"}
+
+    if requesting_user is not None:
+        is_owner = key.user == requesting_user.id
+        is_admin = bool(getattr(requesting_user, "is_superuser", False))
+        if not (is_owner or is_admin):
+            # Surface as 404 rather than 403 so we don't leak the fact that
+            # the key id exists for some other account.
+            return {"error": "Key not found"}
+
+    access = TokenBlacklist(jti=key.jti, expires=None, revoked=True)
+    db.add(access)
+    db.delete(key)
+    db.commit()
+    return {"success": "api key " + str(key_id) + " deleted."}
 
 
 def get_keys(user, db: Session):

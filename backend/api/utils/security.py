@@ -96,6 +96,29 @@ def _count_recent_failed_attempts(db: Session, client_ip: str, minutes: int = 15
     )
 
 
+# Username-scoped counters: needed because the per-IP fail2ban above only
+# stops a single attacker. A distributed attempt across many IPs targeting
+# one username (credential stuffing, botnet brute force) would otherwise
+# get unlimited tries per IP. We cap per-username attempts independently.
+_USERNAME_LOCKOUT_WINDOW_MIN = 30
+_USERNAME_LOCKOUT_THRESHOLD = 20
+
+
+def _count_recent_failed_attempts_for_username(
+    db: Session, username: str, minutes: int = _USERNAME_LOCKOUT_WINDOW_MIN,
+) -> int:
+    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    return (
+        db.query(LoginAttempt)
+        .filter(
+            LoginAttempt.username == username,
+            LoginAttempt.success == False,
+            LoginAttempt.timestamp >= time_threshold,
+        )
+        .count()
+    )
+
+
 def check_ip_restriction(request: Request, db: Session, username: str = None):
     client_ip = _resolve_client_ip(request)
 
@@ -111,6 +134,22 @@ def check_ip_restriction(request: Request, db: Session, username: str = None):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="IP blocked due to too many failed login attempts.",
+        )
+
+    if username and _count_recent_failed_attempts_for_username(db, username) >= _USERNAME_LOCKOUT_THRESHOLD:
+        send_security_alert(
+            db,
+            client_ip,
+            f"Account locked: {_USERNAME_LOCKOUT_THRESHOLD} failed logins for username in "
+            f"{_USERNAME_LOCKOUT_WINDOW_MIN} min (possible distributed brute force)",
+            username,
+        )
+        # Same response wording as the IP block path so a probing attacker
+        # can't differentiate "this username is being attacked" from
+        # "my IP got banned" through error inspection.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account temporarily locked due to too many failed login attempts.",
         )
 
     return client_ip
