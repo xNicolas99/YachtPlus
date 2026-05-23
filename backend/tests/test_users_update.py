@@ -33,5 +33,8 @@ def test_update_duplicate_username():
     with pytest.raises(HTTPException) as exc:
         update_user_admin(user_id=2, user_update=UserUpdate(username="user2"), db=db, Authorize=MockAuth("admin"))
 
-    assert exc.value.status_code == 400
+    # Collision now returns 409 (Conflict), which is the semantically correct
+    # HTTP status for a uniqueness violation; previously the IntegrityError
+    # path collapsed everything into 400.
+    assert exc.value.status_code == 409
     assert "Username already in use" in exc.value.detail

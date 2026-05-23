@@ -1,4 +1,5 @@
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import bcrypt
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
@@ -27,10 +28,47 @@ def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(models.User).offset(skip).limit(limit).all()
 
 
+def _normalize_username(username: str) -> str:
+    """Canonical, case-folded username used at every write site.
+
+    Login + permission lookups query via ``username.casefold()`` already, so
+    a stored mixed-case username is unreachable through normal auth. That
+    asymmetry was the lock-out vector for the case-squat attack — fix it by
+    storing the same canonical form everywhere.
+    """
+    if username is None:
+        return username
+    return username.strip().casefold()
+
+
+def _username_is_taken(db: Session, username: str, *, excluding_id: int = None) -> bool:
+    """Case-insensitive existence check that ignores ``excluding_id`` so an
+    admin updating an existing user doesn't collide with that user's own row.
+
+    Compares ``LOWER(stored_username) == canonical(input)`` so legacy rows
+    that were persisted before this normalization existed (mixed-case
+    usernames left over from the early setup wizard) still match — that's
+    exactly the lock-out vector this guard exists to close.
+    """
+    canonical = _normalize_username(username)
+    q = db.query(models.User).filter(func.lower(models.User.username) == canonical)
+    if excluding_id is not None:
+        q = q.filter(models.User.id != excluding_id)
+    return q.first() is not None
+
+
 def create_user(db: Session, user: schemas.UserCreate):
     _hashed_password = get_password_hash(user.password)
+    canonical_username = _normalize_username(user.username)
+
+    # Defence-in-depth case-insensitive collision check. The DB still has the
+    # UNIQUE constraint, but checking here gives us a clean 400 instead of
+    # leaking IntegrityError-shaped detail strings.
+    if _username_is_taken(db, canonical_username):
+        raise HTTPException(status_code=409, detail="Username already in use.")
+
     db_user = models.User(
-        username=user.username,
+        username=canonical_username,
         hashed_password=_hashed_password,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
@@ -70,10 +108,17 @@ def update_user(db: Session, user: schemas.UserUpdate, current_user):
     _user = get_user_by_name(db=db, username=current_user)
 
     if _user and _user.is_active:
-        if user.username and _user.username.casefold() != user.username.casefold():
-            print("Old Username: {name}".format(name=_user.username))
-            print("New Username: {name}".format(name=user.username))
-            _user.username = user.username.casefold()
+        if user.username:
+            new_canonical = _normalize_username(user.username)
+            if new_canonical != _user.username.casefold():
+                # Reject if another row already owns the canonical name —
+                # otherwise an attacker could squat a case-variant of
+                # someone else's username and starve their login lookup.
+                if _username_is_taken(db, new_canonical, excluding_id=_user.id):
+                    raise HTTPException(
+                        status_code=409, detail="Username already in use."
+                    )
+                _user.username = new_canonical
 
         if user.password:
             _user.hashed_password = _hashed_password
@@ -83,7 +128,8 @@ def update_user(db: Session, user: schemas.UserUpdate, current_user):
             db.commit()
             db.refresh(_user)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=exc)
+            db.rollback()
+            raise HTTPException(status_code=400, detail=str(exc))
         return _user
 
 def update_user_by_id(db: Session, user_id: int, user_update: schemas.UserUpdate):
@@ -92,7 +138,10 @@ def update_user_by_id(db: Session, user_id: int, user_update: schemas.UserUpdate
         return None
 
     if user_update.username:
-        db_user.username = user_update.username
+        new_canonical = _normalize_username(user_update.username)
+        if _username_is_taken(db, new_canonical, excluding_id=db_user.id):
+            raise HTTPException(status_code=409, detail="Username already in use.")
+        db_user.username = new_canonical
     if user_update.password:
         db_user.hashed_password = get_password_hash(user_update.password)
 

@@ -1,3 +1,5 @@
+import logging
+
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
@@ -15,6 +17,8 @@ import yaml
 import os
 import socket
 import ipaddress
+
+logger = logging.getLogger(__name__)
 
 # Templates
 
@@ -178,7 +182,7 @@ def add_template(db: Session, template: models.Template):
     except HTTPException:
         raise
     except (OSError, TypeError, ValueError, KeyError) as err:
-        print("data request failed", err)
+        logger.warning("Template fetch failed for %s: %s", template.url, err)
         status_code = getattr(err, "status_code", 400)
         raise HTTPException(status_code=status_code, detail=str(err))
 
@@ -220,7 +224,7 @@ def refresh_template(db: Session, template_id: id):
             elif ext.rstrip() in (".json"):
                 loaded_file = json.load(fp)
             else:
-                print("Invalid filetype")
+                logger.warning("Refresh: invalid template filetype %r for url %s", ext, template.url)
                 raise HTTPException(status_code=422, detail="Invalid filetype")
             if isinstance(loaded_file, list):
                 for entry in loaded_file:
@@ -288,22 +292,20 @@ def refresh_template(db: Session, template_id: id):
     except Exception as exc:
         if hasattr(exc, "code") and exc.code == 404:
             raise HTTPException(status_code=exc.code, detail=exc.url)
-        else:
-            print("Template update failed. ERR_001", exc)
-            if hasattr(exc, "status_code"):
-                 raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
-            else:
-                 raise HTTPException(status_code=400, detail=str(exc))
+        logger.error("Template refresh failed (ERR_001) for %s: %s", template.url, exc)
+        if hasattr(exc, "status_code"):
+            raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
+        raise HTTPException(status_code=400, detail=str(exc))
     else:
         template.updated_at = datetime.utcnow()
         template.items = items
 
         try:
             db.commit()
-            print(f'Template "{template.title}" updated successfully.')
+            logger.info('Template "%s" updated successfully.', template.title)
         except Exception as exc:
             db.rollback()
-            print("Template update failed. ERR_002", exc)
+            logger.error("Template commit failed (ERR_002) for %s: %s", template.title, exc)
             raise HTTPException(
                 status_code=exc.response.status_code, detail=exc.explanation
             )
@@ -347,7 +349,7 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
         return new_template_variables
 
     except IntegrityError as exc:
-        print(exc)
+        logger.error("set_template_variables failed: %s", exc)
         raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
 
 
@@ -360,7 +362,7 @@ def init_templates(db: Session):
     """
     templates_exist = get_templates(db)
     if not templates_exist:
-        print("No templates found. Adding default templates.")
+        logger.info("No templates found. Adding default templates.")
         defaults = [
             {
                 "title": "LSIO Portainer Templates",
@@ -373,6 +375,13 @@ def init_templates(db: Session):
                 template = models.Template(title=default["title"], url=default["url"])
                 # add_template handles validation and fetching
                 add_template(db, template)
-                print(f"Added default template: {default['title']}")
+                logger.info("Added default template: %s", default["title"])
             except Exception as e:
-                print(f"Failed to add default template {default['title']}: {e}")
+                # We deliberately do NOT re-raise: a transient network failure
+                # while fetching the default templates feed must not crash app
+                # startup. But silent print() previously made these failures
+                # invisible in container log aggregators — use the real logger
+                # with traceback so operators actually see them.
+                logger.exception(
+                    "Failed to add default template %s: %s", default["title"], e,
+                )
