@@ -96,7 +96,8 @@ def check_dockerhost(environment):
 
     if os.path.exists('/var/run/docker.sock'):
         try:
-            client = docker.from_env()
+            from api.utils.docker_client import get_sync_docker_client
+            client = get_sync_docker_client()
             client.ping()
             return {}
         except Exception:
@@ -296,11 +297,14 @@ def _generate_support_bundle_sync(project_name):
     validate_compose_project_name(project_name)
     files = find_yml_files(settings.COMPOSE_DIR + project_name)
     if project_name in files:
-        dclient = docker.from_env()
+        from api.utils.docker_client import get_sync_docker_client
+        dclient = get_sync_docker_client()
         stream = io.BytesIO()
         try:
             with zipfile.ZipFile(stream, "w") as zf, open(files[project_name], "r") as fp:
-                compose = yaml.load(fp, Loader=yaml.SafeLoader)
+                # yaml.load returns None for an empty or whitespace-only file;
+                # coerce to {} so the .get below doesn't blow up the bundle.
+                compose = yaml.load(fp, Loader=yaml.SafeLoader) or {}
 
                 services_list = compose.get("services", {})
                 for _service in services_list:

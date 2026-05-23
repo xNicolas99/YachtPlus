@@ -368,7 +368,8 @@ def _launch_app_sync(
     network_mode, network, volumes, env, devices, labels,
     sysctls, caps, cpus, mem_limit, edit, _id
 ):
-    dclient = docker.from_env()
+    from api.utils.docker_client import get_sync_docker_client
+    dclient = get_sync_docker_client()
     if edit == True:
         try:
             dclient.containers.get(_id)
