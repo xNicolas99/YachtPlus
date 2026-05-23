@@ -10,6 +10,7 @@ from api.db.models import containers as models
 from api.utils.templates import conv_sysctls2dict, conv_ports2dict
 
 from datetime import datetime
+import http.client
 import urllib.request
 from urllib.parse import urlparse
 import json
@@ -79,6 +80,70 @@ class SafeRedirectHandler(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         validate_url(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+# --- DNS-rebinding defence -------------------------------------------------
+#
+# validate_url() resolves the hostname once and rejects private addresses.
+# urllib then resolves the hostname a SECOND time inside HTTPConnection.connect,
+# leaving a TOCTOU window an attacker who controls DNS can drive at: the first
+# answer is a public IP (passes validation), the second is 127.0.0.1 / the
+# host's metadata service IP / a sibling container.
+#
+# The connection classes below re-resolve at connect-time and re-run the
+# private-IP check before opening the socket. Failure surfaces as a normal
+# OSError so urllib treats it as a transport failure, which the caller's
+# except clause maps to a 400.
+
+class _SSRFBlocked(OSError):
+    pass
+
+
+def _check_address_safe(host: str, port: int) -> None:
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except (socket.gaierror, socket.herror, socket.timeout, OSError) as exc:
+        raise _SSRFBlocked(f"DNS resolution failed for {host!r}: {exc}") from exc
+    if not infos:
+        raise _SSRFBlocked(f"DNS returned no address for {host!r}")
+    for info in infos:
+        ip = info[4][0]
+        if is_private_ip(ip):
+            raise _SSRFBlocked(
+                f"Refusing to connect to {host!r}: resolved to private IP {ip}"
+            )
+
+
+class _SSRFGuardedHTTPConnection(http.client.HTTPConnection):
+    def connect(self):  # noqa: D401 — overrides stdlib
+        _check_address_safe(self.host, self.port or 80)
+        super().connect()
+
+
+class _SSRFGuardedHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):  # noqa: D401
+        _check_address_safe(self.host, self.port or 443)
+        super().connect()
+
+
+class _SSRFGuardedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_SSRFGuardedHTTPConnection, req)
+
+
+class _SSRFGuardedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_SSRFGuardedHTTPSConnection, req)
+
+
+def _build_safe_opener():
+    """Construct a urllib opener that re-validates DNS at connect time and
+    rejects redirects to private addresses."""
+    return urllib.request.build_opener(
+        SafeRedirectHandler(),
+        _SSRFGuardedHTTPHandler(),
+        _SSRFGuardedHTTPSHandler(),
+    )
 
 
 def get_templates(db: Session):
@@ -154,7 +219,7 @@ def _build_template_item(entry: dict) -> models.TemplateItem:
 def _fetch_template_payload(url: str):
     """Open the template feed and decode it as JSON or YAML."""
     ext = os.path.splitext(urlparse(url).path)[1].rstrip()
-    opener = urllib.request.build_opener(SafeRedirectHandler())
+    opener = _build_safe_opener()
     with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as file:
         if ext in (".yml", ".yaml"):
             return yaml.load(file, Loader=yaml.SafeLoader)
@@ -217,7 +282,7 @@ def refresh_template(db: Session, template_id: id):
 
     items = []
     try:
-        opener = urllib.request.build_opener(SafeRedirectHandler())
+        opener = _build_safe_opener()
         with opener.open(template.url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as fp:
             if ext.rstrip() in (".yml", ".yaml"):
                 loaded_file = yaml.load(fp, Loader=yaml.SafeLoader)

@@ -8,6 +8,7 @@ import { loadFonts } from './plugins/webfontloader'
 import VueUtils from './plugins/vueutils'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
+import { enforceLinkRelNoopener } from './utils/linkRel'
 import './assets/styles/main.css'
 
 // Vee Validate Rules
@@ -35,6 +36,16 @@ const SANITIZE_CONFIG = {
   ALLOWED_URI_REGEXP: /^(?:https?|mailto):/i,
   FORBID_ATTR: ['style', 'srcset'],
 };
+
+// Force rel="noopener noreferrer" on any <a> with a target attribute. A
+// template author who writes <a href="..." target="_blank"> would otherwise
+// expose the parent window to reverse-tabnabbing — the popup can flip
+// window.opener.location and redirect the user away from YachtPlus to a
+// phishing page. DOMPurify allows `rel` but does NOT auto-inject it.
+// The helper lives in utils/linkRel.js so a unit test can exercise the
+// contract without bringing up the full app.
+DOMPurify.addHook('afterSanitizeAttributes', enforceLinkRelNoopener);
+
 app.config.globalProperties.$sanitize = function(dirty) {
   return DOMPurify.sanitize(dirty, SANITIZE_CONFIG);
 }

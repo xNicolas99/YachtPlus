@@ -61,6 +61,27 @@ def get_setup_status(db: Session = Depends(get_db)):
 
 @router.post("/bypass")
 def bypass_setup(db: Session = Depends(get_db)):
+    # The old behaviour of this endpoint was a one-shot brick: any
+    # unauthenticated caller on a fresh instance could flip
+    # SetupStatus.is_bypassed = True, which makes is_setup_completed()
+    # return True. The setup middleware then stops short-circuiting /api/*
+    # to 428, every data router falls through to auth_check, and no admin
+    # user exists -> nobody can ever log in. The deployment is permanently
+    # locked until someone edits the DB by hand.
+    #
+    # The endpoint also has no legitimate caller in the frontend (grep
+    # confirms it's only referenced by tests). We keep the route shape for
+    # backwards compatibility but require an explicit dev-mode opt-in via
+    # DISABLE_AUTH=True. That env flag is already documented as dev-only
+    # and gated everywhere else; reusing it here means an attacker can't
+    # trigger this on a hardened production deploy.
+    from api.settings import Settings
+    if not Settings().DISABLE_AUTH:
+        raise HTTPException(
+            status_code=404,
+            detail="Setup bypass is only available in dev mode (DISABLE_AUTH=True).",
+        )
+
     if is_setup_completed(db):
         return {"message": "Setup already completed or bypassed."}
 

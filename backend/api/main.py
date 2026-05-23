@@ -81,8 +81,23 @@ app.add_middleware(
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
-    # CSP: Allow self, unsafe-inline, NO unsafe-eval
-    response.headers["Content-Security-Policy"] = "script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self';"
+    # CSP: keep `script-src 'self' 'unsafe-inline'` (no unsafe-eval — Vue 3
+    # runtime doesn't need it). Tighten the rest now that the duplicate
+    # CDN <link> for @mdi/font was removed: only Google Fonts is loaded
+    # cross-origin, and only for CSS + font files. Without these
+    # directives the default falls through to `default-src 'self'` for
+    # newer browsers (good) but old configs were silently permissive.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com data:; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'; "
+        "object-src 'none'; "
+        "base-uri 'self';"
+    )
     return response
 
 # --- REGISTER ALL ROUTERS ---

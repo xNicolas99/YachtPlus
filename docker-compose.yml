@@ -11,6 +11,17 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
+    # Standard container hardening — applies to both services. The socket
+    # proxy never needs to escalate privileges or write to its own FS, and
+    # capping memory keeps a compromised proxy from being weaponised as a
+    # DoS lever against the host.
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    pids_limit: 100
 
   yachtplus:
     build: .
@@ -21,3 +32,19 @@ services:
     depends_on:
       - dockerproxy
     restart: unless-stopped
+    # YachtPlus itself does not need any host capability beyond the ones
+    # the runtime asks for explicitly. start.sh chmods /config + bind-mounts
+    # so the FS isn't read-only, but no-new-privileges + dropping the full
+    # cap set still blocks the common privilege-escalation paths.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN          # start.sh chowns /config to appuser
+      - SETUID         # gosu drops to appuser
+      - SETGID
+      - DAC_OVERRIDE   # nginx writes pid + cache to mounted volumes
+      - NET_BIND_SERVICE  # nginx listens on 8080
+    mem_limit: 1g
+    pids_limit: 200
