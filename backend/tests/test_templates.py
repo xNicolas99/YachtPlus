@@ -65,7 +65,10 @@ def test_validate_url_socket_error(mock_getaddrinfo):
     with pytest.raises(HTTPException) as exc_info:
         validate_url("http://unresolvable.example.com")
     assert exc_info.value.status_code == 400
-    assert "Invalid URL: Hostname resolution failed." in exc_info.value.detail
+    # The detail format was tightened to include the exception class name so
+    # operators can tell gaierror apart from herror/timeout when reading logs.
+    assert "hostname resolution failed" in exc_info.value.detail
+    assert "gaierror" in exc_info.value.detail
 
 @patch('socket.getaddrinfo')
 def test_validate_url_zero_ip(mock_getaddrinfo):

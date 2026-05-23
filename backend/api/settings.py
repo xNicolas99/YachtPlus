@@ -68,6 +68,17 @@ class Settings(BaseSettings):
     # docker.from_env() — go through the configured endpoint.
     DOCKER_HOST: Optional[str] = os.getenv("DOCKER_HOST")
 
+    # Comma-separated list of reverse-proxy IPs (or CIDRs) whose
+    # X-Real-IP / X-Forwarded-For headers we trust for client-IP attribution.
+    # Empty list -> never trust those headers, always use the direct peer.
+    # This stops a local-network attacker from spoofing X-Real-IP to dodge
+    # IP-based rate limits or impersonate a legitimate user.
+    TRUSTED_PROXIES: list = (
+        [p.strip() for p in os.getenv("YACHT_TRUSTED_PROXIES", "").split(",") if p.strip()]
+        if os.getenv("YACHT_TRUSTED_PROXIES") is not None
+        else []
+    )
+
     class Config:
         env_file = ".env"
 

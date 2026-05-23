@@ -44,20 +44,29 @@ def validate_url(url: str):
     if not hostname:
         raise HTTPException(status_code=400, detail="Invalid URL: Hostname missing.")
 
+    # Resolve hostname to IPs. Every failure mode must fail CLOSED — a
+    # silently-skipped validation here turns the template fetcher into an
+    # SSRF gadget against the host network. We previously only caught
+    # socket.gaierror, which left socket.timeout / socket.herror / generic
+    # OSError as silent fall-throughs to "return True".
     try:
-        # Resolve hostname to IP
-        # Note: This might pick one IP if multiple are returned.
-        # For stricter security, we might need to check all IPs.
         ip_list = socket.getaddrinfo(hostname, None)
-        for ip_info in ip_list:
-             # ip_info[4][0] is the IP address string
-             ip = ip_info[4][0]
-             if is_private_ip(ip):
-                 raise HTTPException(status_code=400, detail=f"Access to private IP {ip} is denied.")
+    except (socket.gaierror, socket.herror, socket.timeout, OSError) as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid URL: hostname resolution failed ({exc.__class__.__name__}).",
+        )
 
-    except socket.gaierror:
-        # If hostname cannot be resolved, fail early to prevent SSRF bypasses.
-        raise HTTPException(status_code=400, detail="Invalid URL: Hostname resolution failed.")
+    if not ip_list:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid URL: hostname did not resolve to any address.",
+        )
+
+    for ip_info in ip_list:
+        ip = ip_info[4][0]
+        if is_private_ip(ip):
+            raise HTTPException(status_code=400, detail=f"Access to private IP {ip} is denied.")
 
     return True
 
