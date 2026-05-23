@@ -5,6 +5,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 import api.db.crud.templates as crud
+import api.db.crud.users as users_crud
 import api.db.schemas.templates as schemas
 from api.db.models.containers import Base
 from api.db.database import engine
@@ -15,6 +16,22 @@ from api.auth.jwt import get_auth_wrapper
 
 
 router = APIRouter()
+
+
+def _require_superuser(Authorize, db: Session) -> None:
+    """Template add/delete/refresh fetches arbitrary URLs and mutates the
+    template library, which is shared across all users — gate behind
+    superuser like the user-management endpoints do.
+    """
+    auth_check(Authorize)
+    username = Authorize.get_jwt_subject()
+    if not username:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+    user = users_crud.get_user_by_name(db=db, username=username)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser required.")
 
 
 @router.get(
@@ -55,7 +72,7 @@ def show(id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = D
     response_model=schemas.TemplateRead,
 )
 def delete(id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    _require_superuser(Authorize, db)
     return crud.delete_template(db=db, template_id=id)
 
 
@@ -65,7 +82,7 @@ def add_template(
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    auth_check(Authorize)
+    _require_superuser(Authorize, db)
     existing_template = crud.get_template(db=db, url=template.url)
     if existing_template:
         raise HTTPException(status_code=400, detail="Template already in Database.")
@@ -79,7 +96,7 @@ def add_template(
 def refresh_template(
     id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
+    _require_superuser(Authorize, db)
     return crud.refresh_template(db=db, template_id=id)
 
 

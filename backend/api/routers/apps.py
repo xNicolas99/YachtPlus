@@ -10,9 +10,20 @@ import api.actions.apps as actions
 from api.settings import Settings
 from api.auth.auth import auth_check, check_permission
 from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
+import api.db.crud.users as users_crud
 
 from api.auth.jwt import get_auth_wrapper
 from api.utils.audit import log_activity
+
+
+def _require_superuser(Authorize, db: Session) -> None:
+    auth_check(Authorize)
+    username = Authorize.get_jwt_subject()
+    if not username:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+    user = users_crud.get_user_by_name(db=db, username=username)
+    if not user or not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser required.")
 import aiodocker
 import json
 import asyncio
@@ -60,14 +71,28 @@ async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(
 
 
 @router.get("/{app_name}/processes", response_model=schemas.Processes)
-async def get_container_processes(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_container_processes(
+    app_name,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # /proc-derived process listings expose command lines (often containing
+    # secrets passed via flags). Gate behind perm_start so only operators
+    # who can already control the container can read them.
     auth_check(Authorize)
+    check_permission("perm_start", Authorize, db)
     return await actions.get_app_processes(app_name=app_name)
 
 
 @router.get("/{app_name}/support")
-async def get_support_bundle(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def get_support_bundle(
+    app_name,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # Support bundles bundle env vars, config files and full container
+    # inspect output — restrict to superusers.
+    _require_superuser(Authorize, db)
     return await actions.generate_support_bundle(app_name)
 
 
@@ -130,8 +155,16 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
     return result
 
 @router.get("/{app_name}/logs")
-async def logs(app_name: str, request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def logs(
+    app_name: str,
+    request: Request,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # Container stdout/stderr regularly contains secrets, tokens and
+    # credentials printed during boot. Gate behind perm_start.
     auth_check(Authorize)
+    check_permission("perm_start", Authorize, db)
     log_generator = actions.log_generator(request, app_name)
     return EventSourceResponse(log_generator)
 

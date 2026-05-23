@@ -14,6 +14,17 @@ from api.actions.compose import (
 from api.auth.auth import auth_check, check_permission
 from api.utils.auth import get_db
 from api.db.schemas import compose as schemas
+import api.db.crud.users as users_crud
+
+
+def _require_superuser(Authorize, db: Session) -> None:
+    auth_check(Authorize)
+    username = Authorize.get_jwt_subject()
+    if not username:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+    user = users_crud.get_user_by_name(db=db, username=username)
+    if not user or not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser required.")
 
 router = APIRouter()
 
@@ -98,6 +109,12 @@ async def get_compose_app_action(
 
 
 @router.get("/{project_name}/support")
-async def get_support_bundle(project_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def get_support_bundle(
+    project_name,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # Support bundles include compose files, env values, and stack-wide
+    # config that often contains secrets. Restrict to superusers.
+    _require_superuser(Authorize, db)
     return await generate_support_bundle(project_name)

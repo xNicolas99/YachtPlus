@@ -310,7 +310,11 @@ def delete_api_key(
     key_id, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
-    return crud.blacklist_api_key(key_id, db)
+    username = Authorize.get_jwt_subject()
+    requester = crud.get_user_by_name(db=db, username=username) if username else None
+    if not requester:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+    return crud.blacklist_api_key(key_id, db, requesting_user=requester)
 
 
 @router.get("/me", response_model=schemas.User)
