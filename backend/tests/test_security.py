@@ -130,10 +130,12 @@ def test_check_ip_restriction_private_ip():
     result = check_ip_restriction(mock_request, mock_db)
     assert result == "192.168.1.5"
 
-def test_check_ip_restriction_x_forwarded_for_private():
+def test_check_ip_restriction_x_forwarded_for_ignored_without_trusted_proxy():
+    """Default config has no trusted proxies, so X-Forwarded-For must be
+    ignored even when the peer is on a private network. Previously the code
+    trusted *any* private peer, which let a same-LAN attacker spoof their IP.
+    """
     mock_request = MagicMock(spec=Request)
-    # Safe fallback parsing of X-Forwarded-For: traversing from right to left
-    # Here all are private, so we'll fallback to the rightmost
     mock_request.headers = {"X-Forwarded-For": "10.0.0.5, 10.0.0.6"}
     mock_request.client.host = "127.0.0.1"
 
@@ -141,12 +143,28 @@ def test_check_ip_restriction_x_forwarded_for_private():
     mock_db.query.return_value.filter.return_value.count.return_value = 0
 
     result = check_ip_restriction(mock_request, mock_db)
-    assert result == "10.0.0.6"
+    assert result == "127.0.0.1"
 
-def test_check_ip_restriction_x_real_ip_private():
+def test_check_ip_restriction_x_real_ip_ignored_without_trusted_proxy():
     mock_request = MagicMock(spec=Request)
-    # X-Real-IP should take precedence when client host is private (from nginx)
     mock_request.headers = {"X-Real-IP": "10.0.0.6", "X-Forwarded-For": "1.2.3.4"}
+    mock_request.client.host = "127.0.0.1"
+
+    mock_db = MagicMock()
+    mock_db.query.return_value.filter.return_value.count.return_value = 0
+
+    # Peer 127.0.0.1 is not in TRUSTED_PROXIES (default empty), so headers
+    # are ignored and we use the direct peer.
+    result = check_ip_restriction(mock_request, mock_db)
+    assert result == "127.0.0.1"
+
+def test_check_ip_restriction_x_real_ip_honoured_when_proxy_trusted(monkeypatch):
+    monkeypatch.setattr(
+        "api.utils.security._settings",
+        type("S", (), {"TRUSTED_PROXIES": ["127.0.0.1"]})(),
+    )
+    mock_request = MagicMock(spec=Request)
+    mock_request.headers = {"X-Real-IP": "10.0.0.6"}
     mock_request.client.host = "127.0.0.1"
 
     mock_db = MagicMock()
@@ -157,7 +175,7 @@ def test_check_ip_restriction_x_real_ip_private():
 
 def test_check_ip_restriction_x_real_ip_ignored_if_host_public():
     mock_request = MagicMock(spec=Request)
-    # X-Real-IP is ignored if the immediate client is not a private IP
+    # X-Real-IP is ignored if the immediate client is not a trusted proxy
     mock_request.headers = {"X-Real-IP": "10.0.0.6"}
     mock_request.client.host = "8.8.8.8"
 
@@ -171,21 +189,19 @@ def test_check_ip_restriction_x_real_ip_ignored_if_host_public():
 
     assert excinfo.value.status_code == 403
 
-def test_check_ip_restriction_x_forwarded_for_public():
+def test_check_ip_restriction_x_forwarded_for_spoof_ignored_without_proxy():
+    """Untrusted peer sending an XFF chain — must be ignored entirely."""
     mock_request = MagicMock(spec=Request)
-    # Testing that the rightmost public IP is picked if spoofed:
-    # Client sends 'X-Forwarded-For: 127.0.0.1', proxy appends '8.8.8.8' -> '127.0.0.1, 8.8.8.8'
     mock_request.headers = {"X-Forwarded-For": "127.0.0.1, 8.8.8.8"}
     mock_request.client.host = "127.0.0.1"
 
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.count.return_value = 0
-    mock_db.query.return_value.first.return_value = MagicMock(sender_email="test@test.com")
 
-    with pytest.raises(HTTPException) as excinfo:
-        check_ip_restriction(mock_request, mock_db)
-
-    assert excinfo.value.status_code == 403
+    # With no trusted proxies, XFF is ignored and the private peer is used.
+    # That peer (127.0.0.1) is private -> no 403.
+    result = check_ip_restriction(mock_request, mock_db)
+    assert result == "127.0.0.1"
 
 @patch("api.utils.security.send_security_alert")
 def test_check_ip_restriction_public_ip(mock_alert):

@@ -27,7 +27,10 @@ limiter = Limiter(key_func=get_remote_address)
 # Used to keep login response time roughly constant when the supplied username
 # is unknown. bcrypt.checkpw still runs against this fixed digest, so an
 # attacker can't distinguish "no such user" from "wrong password" via timing.
-# This is NOT a real credential and decrypts to nothing.
+# This is NOT a real credential, decrypts to nothing, and is the only
+# "hardcoded password" in the codebase. Tell static analysers explicitly.
+# nosem: generic.secrets.security.detected-generic-secret.detected-generic-secret
+# nosec: B105
 _TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
 
 # Add list users endpoint for admin
@@ -270,9 +273,26 @@ def login_cookie(
 def refresh(
     request: Request,
     response: Response,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
+    # The previous implementation just round-tripped the JWT subject into a
+    # new token without validating the underlying account. A user that had
+    # been deactivated or deleted could keep refreshing until the original
+    # token's `exp` ran out — defeating the point of /refresh as a way to
+    # extend a session under continued admin control.
+    auth_check(Authorize)
     current_user = Authorize.get_jwt_subject()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+
+    user = crud.get_user_by_name(db=db, username=current_user)
+    if not user or not user.is_active:
+        # Clear the cookie so the client stops sending a token we just
+        # rejected; this also lets the frontend redirect to /login.
+        Authorize.unset_jwt_cookies(response)
+        raise HTTPException(status_code=401, detail="Account is inactive or removed.")
+
     new_access_token = create_access_token(data={"sub": current_user})
     Authorize.set_access_cookies(new_access_token, response)
     return {"refresh": "successful", "access_token": new_access_token}
@@ -290,11 +310,15 @@ def get_api_keys(db: Session = Depends(get_db), Authorize: get_auth_wrapper = De
 
 
 @router.post("/api/keys/new", response_model=schemas.DisplayAPIKEY)
+@limiter.limit("5/minute")
 def create_api_key(
+    request: Request,
     key: schemas.GenerateAPIKEY,
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
+    # Rate-limited so a compromised session can't spam-mint API keys
+    # (each one is a long-lived credential — 10 year exp via create_key).
     name = key.key_name
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
@@ -305,7 +329,12 @@ def create_api_key(
     return crud.create_key(name, user, Authorize, db)
 
 
-@router.get("/api/keys/{key_id}")
+# DELETE is the correct verb for revoking an API key; the previous GET
+# route was CSRF-triggerable via <img src=...> and could be cached by
+# intermediaries. The GET alias is retained for one release so existing
+# frontend builds keep working — remove once clients are migrated.
+@router.delete("/api/keys/{key_id}")
+@router.get("/api/keys/{key_id}", deprecated=True)
 def delete_api_key(
     key_id, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):

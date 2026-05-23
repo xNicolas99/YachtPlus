@@ -1,4 +1,5 @@
 import ipaddress
+import logging
 from fastapi import Request, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -6,6 +7,10 @@ import smtplib
 from email.mime.text import MIMEText
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
+from api.settings import Settings
+
+logger = logging.getLogger(__name__)
+_settings = Settings()
 
 def is_private_ip(ip: str) -> bool:
     if ip == '0.0.0.0':
@@ -59,11 +64,43 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
     except Exception as e:
         print(f"Failed to send security alert: {e}")
 
+def _is_trusted_proxy(client_ip: str) -> bool:
+    """Return True when client_ip matches a configured TRUSTED_PROXIES entry.
+
+    Trusting "any private IP" (the previous behaviour) is unsafe in a Docker
+    network: a sibling container is on a private subnet and would be able to
+    spoof X-Real-IP / X-Forwarded-For. Require an explicit allowlist instead.
+    """
+    if not client_ip:
+        return False
+    try:
+        peer = ipaddress.ip_address(client_ip)
+    except ValueError:
+        return False
+
+    for entry in getattr(_settings, "TRUSTED_PROXIES", []) or []:
+        try:
+            if "/" in entry:
+                if peer in ipaddress.ip_network(entry, strict=False):
+                    return True
+            else:
+                if peer == ipaddress.ip_address(entry):
+                    return True
+        except ValueError:
+            logger.warning("Skipping invalid TRUSTED_PROXIES entry: %r", entry)
+    return False
+
+
 def _resolve_client_ip(request: Request) -> str:
-    """Return the originating client IP, trusting proxy headers only when the
-    direct peer is on a private network."""
+    """Return the originating client IP.
+
+    Only honour proxy headers when the direct peer is on the configured
+    TRUSTED_PROXIES list. Otherwise use the direct peer — anyone can set
+    X-Real-IP, so trusting it without an allowlist defeats the purpose of
+    IP-based limits.
+    """
     client_ip = request.client.host
-    if not client_ip or not is_private_ip(client_ip):
+    if not _is_trusted_proxy(client_ip):
         return client_ip
 
     real_ip = request.headers.get("X-Real-IP")

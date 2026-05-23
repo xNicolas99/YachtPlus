@@ -61,12 +61,29 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")
 
+    # Directory where docker-compose project subdirectories live. Trailing
+    # slash matters — every call site does `settings.COMPOSE_DIR + name`
+    # and relies on it. Previously read but never declared, which crashed
+    # with AttributeError under pydantic v2's extra='forbid'.
+    COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
+
     # Docker daemon endpoint. None -> let the docker SDK / aiodocker pick up
     # the standard discovery (DOCKER_HOST env var, then /var/run/docker.sock).
     # Set this when fronting the daemon via a TCP proxy so that *all* code
     # paths — including the few sync helpers that previously called
     # docker.from_env() — go through the configured endpoint.
     DOCKER_HOST: Optional[str] = os.getenv("DOCKER_HOST")
+
+    # Comma-separated list of reverse-proxy IPs (or CIDRs) whose
+    # X-Real-IP / X-Forwarded-For headers we trust for client-IP attribution.
+    # Empty list -> never trust those headers, always use the direct peer.
+    # This stops a local-network attacker from spoofing X-Real-IP to dodge
+    # IP-based rate limits or impersonate a legitimate user.
+    TRUSTED_PROXIES: list = (
+        [p.strip() for p in os.getenv("YACHT_TRUSTED_PROXIES", "").split(",") if p.strip()]
+        if os.getenv("YACHT_TRUSTED_PROXIES") is not None
+        else []
+    )
 
     class Config:
         env_file = ".env"
