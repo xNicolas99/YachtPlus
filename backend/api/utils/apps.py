@@ -70,9 +70,17 @@ def conv_portlabels2data(data):
 # }
 
 
-def conv_volumes2data(data):
+def _load_template_variables():
     db = SessionLocal()
-    t_variables = db.query(models.TemplateVariables).all()
+    try:
+        return db.query(models.TemplateVariables).all()
+    finally:
+        db.close()
+
+
+def conv_volumes2data(data, t_variables=None):
+    if t_variables is None:
+        t_variables = _load_template_variables()
 
     # Determine whitelist
     # Default to /config only
@@ -129,11 +137,11 @@ def conv_volumes2data(data):
 # [
 #     "SOMEVARIABLE=xxx", "OTHERVARIABLE=yyy"
 # ]
-def conv_env2data(data):
+def conv_env2data(data, t_variables=None):
     # Set is depracated. Name is the actual value. Label is the name of the field.
     # Label is the label of the label field.
-    db = SessionLocal()
-    t_variables = db.query(models.TemplateVariables).all()
+    if t_variables is None:
+        t_variables = _load_template_variables()
 
     for i, variable in enumerate(data):
         for t_var in t_variables:
@@ -170,14 +178,14 @@ def conv_devices2data(data):
         return devices
 
 
-def conv_labels2data(data):
-    # grab template variables
-    db = SessionLocal()
-    t_variables = db.query(models.TemplateVariables).all()
-
+def conv_labels2data(data, t_variables=None):
     # if we have nothing return an empty dictionary
     if not data:
         return {}
+
+    # grab template variables (load once if caller didn't provide)
+    if t_variables is None:
+        t_variables = _load_template_variables()
 
     # iterate over template variables and labels and replace templated fields
     for label in data:
@@ -463,9 +471,11 @@ def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployFor
         # Docker API expects NanoCPUs, so if the template stores "0.5" (cores),
         # we pass it as float to form, and then `conv_cpus2data` converts it to NanoCPUs later.
         try:
-             form.cpus = float(template_item.cpus)
-        except:
-             pass
+            form.cpus = float(template_item.cpus)
+        except (TypeError, ValueError):
+            # Template stored cpus as a non-numeric string -> leave form.cpus
+            # untouched so the deploy flow falls back to its own default.
+            pass
 
     if not form.mem_limit and template_item.mem_limit:
         form.mem_limit = str(template_item.mem_limit)
@@ -539,16 +549,19 @@ def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployFor
 
     # Labels, Sysctls, CapAdd, Devices, Command -> similar logic
     if not form.labels and template_item.labels:
-         l_list = []
-         # Check if dict or list
-         if isinstance(template_item.labels, dict):
-             for k, v in template_item.labels.items():
-                 l_list.append(schemas.LabelSchema(label=k, value=v))
-         elif isinstance(template_item.labels, list):
-             for l in template_item.labels:
-                 if isinstance(l, dict):
-                     l_list.append(schemas.LabelSchema(label=l.get('label',''), value=l.get('value','')))
-         form.labels = l_list
+        if isinstance(template_item.labels, dict):
+            form.labels = [
+                schemas.LabelSchema(label=k, value=v)
+                for k, v in template_item.labels.items()
+            ]
+        elif isinstance(template_item.labels, list):
+            form.labels = [
+                schemas.LabelSchema(label=item.get('label', ''), value=item.get('value', ''))
+                for item in template_item.labels
+                if isinstance(item, dict)
+            ]
+        else:
+            form.labels = []
 
     # Sysctls
     if not form.sysctls and template_item.sysctls:

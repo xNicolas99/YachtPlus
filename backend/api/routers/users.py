@@ -6,7 +6,7 @@ import logging
 
 from api.db.crud.users import verify_password
 from api.utils.auth import get_db
-from api.auth.auth import auth_check, check_permission
+from api.auth.auth import auth_check
 from api.settings import Settings
 from api.db.crud import users as crud
 from api.db.models import users as models
@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 # Initialize limiter (ensure it matches the one in main.py)
 limiter = Limiter(key_func=get_remote_address)
+
+# Used to keep login response time roughly constant when the supplied username
+# is unknown. bcrypt.checkpw still runs against this fixed digest, so an
+# attacker can't distinguish "no such user" from "wrong password" via timing.
+# This is NOT a real credential and decrypts to nothing.
+_TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
 
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
@@ -60,6 +66,24 @@ def delete_user(
     user_to_delete = crud.get_user(db, user_id)
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user_to_delete.id == user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own account.",
+        )
+
+    if user_to_delete.is_superuser:
+        remaining_admins = (
+            db.query(models.User)
+            .filter(models.User.is_superuser == True, models.User.id != user_to_delete.id)
+            .count()
+        )
+        if remaining_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the last administrator.",
+            )
 
     db.delete(user_to_delete)
     db.commit()
@@ -125,15 +149,13 @@ def login(
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    DUMMY_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
-
     _user = (
         db.query(models.User)
         .filter(models.User.username == username_query)
         .first()
     )
 
-    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
     is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:
@@ -197,15 +219,13 @@ def login_cookie(
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    DUMMY_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
-
     _user = (
         db.query(models.User)
         .filter(models.User.username == username_query)
         .first()
     )
 
-    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
     is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:

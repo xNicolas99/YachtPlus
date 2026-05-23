@@ -17,5 +17,6 @@ config
 .venv/
 *.log
 .secret_key
+.fernet_salt
 .claude/
 .pytest_cache/

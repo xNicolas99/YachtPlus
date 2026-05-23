@@ -12,7 +12,6 @@ from api.routers import (
     containers, smtp, watchtower, search, setup
 )
 from api.db.database import engine, Base, SessionLocal
-from api.db.models.users import User
 from api.settings import get_settings
 
 Base.metadata.create_all(bind=engine)
@@ -47,9 +46,25 @@ async def check_setup_status(request: Request, call_next):
 
     return await call_next(request)
 
+_cors_origins = [o.strip() for o in get_settings().CORS_ORIGINS if o and o.strip()]
+# Fail fast on a misconfiguration that would silently disable credentialed
+# CORS requests at runtime: per the CORS spec, "*" is incompatible with
+# allow_credentials=True, and any unspecified scheme/host is unusable as
+# an origin.
+if "*" in _cors_origins:
+    raise RuntimeError(
+        "CORS_ORIGINS contains '*', which is incompatible with allow_credentials=True. "
+        "Set YACHT_CORS_ORIGINS to an explicit list of trusted origins."
+    )
+for _origin in _cors_origins:
+    if not (_origin.startswith("http://") or _origin.startswith("https://")):
+        raise RuntimeError(
+            f"Invalid CORS origin {_origin!r}: must include scheme (http:// or https://)."
+        )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().CORS_ORIGINS,
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

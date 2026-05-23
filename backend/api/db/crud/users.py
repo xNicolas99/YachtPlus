@@ -40,8 +40,14 @@ def create_user(db: Session, user: schemas.UserCreate):
         perm_delete=user.perm_delete
     )
     db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
+    try:
+        db.commit()
+        db.refresh(db_user)
+    except Exception as exc:
+        # Without a rollback the session stays in a failed-transaction state
+        # and every subsequent query in this request raises InvalidRequestError.
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Could not create user: {exc}")
     return db_user
 
 

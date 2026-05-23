@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from api.auth.jwt import get_auth_wrapper, get_secret_key
 from api.auth.auth import auth_check
@@ -8,11 +8,11 @@ import aiodocker
 import logging
 import jwt
 import json
-from datetime import datetime, timedelta
 from api.settings import Settings
 import shlex
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
+from api.db.models.users import User
 from api.utils.audit import log_activity
 
 logger = logging.getLogger(__name__)
@@ -183,18 +183,60 @@ async def container_exec(
     """
     await websocket.accept()
 
-    # Check Auth
-    try:
-        token = websocket.cookies.get("access_token_cookie")
+    # Check Auth + AuthZ
+    # The previous implementation only verified the JWT signature; any valid
+    # token — including a short-lived setup_pending token — granted shell access
+    # to any container. Validate the claim set and the user's runtime
+    # permissions before opening a stream.
+    if settings.DISABLE_AUTH:
+        pass  # local/dev mode: skip all auth checks
+    else:
+        try:
+            token = websocket.cookies.get("access_token_cookie")
+            if not token:
+                raise Exception("No token")
+            claims = jwt.decode(token, get_secret_key(), algorithms=["HS256"])
+        except Exception as e:
+            logger.error(f"WebSocket Auth Error: {e}")
+            await websocket.send_json({"error": "Unauthorized"})
+            await websocket.close(code=1008)
+            return
 
-        if not token:
-             raise Exception("No token")
-        jwt.decode(token, get_secret_key(), algorithms=["HS256"])
-    except Exception as e:
-        logger.error(f"WebSocket Auth Error: {e}")
-        await websocket.send_json({"error": "Unauthorized"})
-        await websocket.close(code=1008)
-        return
+        if claims.get("setup_pending"):
+            logger.warning(
+                "WebSocket exec rejected: setup_pending token for user %s",
+                claims.get("sub"),
+            )
+            await websocket.send_json({"error": "Forbidden: setup not completed"})
+            await websocket.close(code=1008)
+            return
+
+        username = claims.get("sub")
+        if not username:
+            await websocket.send_json({"error": "Unauthorized"})
+            await websocket.close(code=1008)
+            return
+
+        auth_db = SessionLocal()
+        try:
+            user = auth_db.query(User).filter_by(username=username).first()
+        finally:
+            auth_db.close()
+
+        if not user or not user.is_active:
+            logger.warning("WebSocket exec rejected: inactive or unknown user %s", username)
+            await websocket.send_json({"error": "Forbidden"})
+            await websocket.close(code=1008)
+            return
+
+        # Shell access to a running container is equivalent to start/stop
+        # capability for the container's payload. Gate it behind perm_start
+        # (admins implicitly pass).
+        if not user.is_superuser and not getattr(user, "perm_start", False):
+            logger.warning("WebSocket exec rejected: user %s lacks perm_start", username)
+            await websocket.send_json({"error": "Forbidden: missing permission"})
+            await websocket.close(code=1008)
+            return
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     exec_id = None
@@ -270,8 +312,10 @@ async def container_exec(
                             if cmd and cmd.get("type") == "resize":
                                 await exec_instance.resize(w=cmd["cols"], h=cmd["rows"])
                                 continue
-                        except:
-                            pass
+                        except (json.JSONDecodeError, KeyError, TypeError) as parse_err:
+                            # Not a JSON control frame -> fall through and forward
+                            # the raw bytes to the container's stdin.
+                            logger.debug(f"WS input not a control frame: {parse_err}")
 
                         # Send to docker
                         logger.debug(f"IN: {input_data.encode()}")
@@ -303,9 +347,10 @@ async def container_exec(
     except Exception as e:
         logger.error(f"Unexpected error in shell: {e}")
         try:
-             await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
-        except:
-             pass
+            await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
+        except Exception as close_err:
+            # Socket may already be closed; nothing we can do but log it.
+            logger.debug(f"WS close after error failed: {close_err}")
     finally:
         if docker:
             await docker.close()

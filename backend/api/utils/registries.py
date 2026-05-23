@@ -148,8 +148,10 @@ async def fetch_ghcr_popular() -> List[Dict]:
                     resp = await client.get(url, timeout=5.0)
                     if resp.status_code == 200:
                         data = resp.json()
-                except:
-                    pass
+                except (httpx.HTTPError, ValueError) as exc:
+                    # Network failure or non-JSON body -> continue with empty `data`
+                    # and fall back to package-name defaults below.
+                    logger.warning(f"GHCR fetch failed for {image}: {exc}")
 
                 result.append({
                     "name": data.get("name", pkg),
