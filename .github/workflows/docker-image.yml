@@ -20,6 +20,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Required by docker/build-push-action@v6 when provenance generation
+      # is enabled; without it the secondary attestation push fails with
+      # "unauthenticated" even when the image push itself succeeded.
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout repository
@@ -77,3 +82,9 @@ jobs:
           push: ${{ steps.push.outputs.enabled == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # buildx@v6 generates SLSA provenance + SBOM by default and pushes
+          # them as separate manifests. Those secondary pushes use OIDC and
+          # have been the source of the "unauthenticated" failures here.
+          # Disable until we explicitly want supply-chain attestation.
+          provenance: false
+          sbom: false
