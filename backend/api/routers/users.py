@@ -6,7 +6,7 @@ import logging
 
 from api.db.crud.users import verify_password
 from api.utils.auth import get_db
-from api.auth.auth import auth_check, check_permission
+from api.auth.auth import auth_check
 from api.settings import Settings
 from api.db.crud import users as crud
 from api.db.models import users as models
@@ -60,6 +60,24 @@ def delete_user(
     user_to_delete = crud.get_user(db, user_id)
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user_to_delete.id == user.id:
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot delete your own account.",
+        )
+
+    if user_to_delete.is_superuser:
+        remaining_admins = (
+            db.query(models.User)
+            .filter(models.User.is_superuser == True, models.User.id != user_to_delete.id)
+            .count()
+        )
+        if remaining_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the last administrator.",
+            )
 
     db.delete(user_to_delete)
     db.commit()

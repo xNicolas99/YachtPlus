@@ -104,104 +104,74 @@ def delete_template(db: Session, template_id: int):
     return _template
 
 
+def _build_template_item(entry: dict) -> models.TemplateItem:
+    """Map one entry from a template feed to a TemplateItem row."""
+    return models.TemplateItem(
+        type=int(entry.get("type", 1)),
+        title=entry["title"],
+        platform=entry["platform"],
+        description=entry.get("description", ""),
+        name=entry.get("name", entry["title"].lower()),
+        command=entry.get("command"),
+        logo=entry.get("logo", ""),
+        image=entry.get("image", ""),
+        notes=entry.get("note", ""),
+        categories=entry.get("categories", ""),
+        restart_policy=entry.get("restart_policy"),
+        ports=conv_ports2dict(entry.get("ports", [])),
+        network_mode=entry.get("network_mode", ""),
+        network=entry.get("network", ""),
+        volumes=entry.get("volumes", []),
+        env=entry.get("env", []),
+        devices=entry.get("devices", []),
+        labels=entry.get("labels", []),
+        sysctls=conv_sysctls2dict(entry.get("sysctls", [])),
+        cap_add=entry.get("cap_add", []),
+        cpus=entry.get("cpus"),
+        mem_limit=entry.get("mem_limit"),
+    )
+
+
+def _fetch_template_payload(url: str):
+    """Open the template feed and decode it as JSON or YAML."""
+    ext = os.path.splitext(urlparse(url).path)[1].rstrip()
+    opener = urllib.request.build_opener(SafeRedirectHandler())
+    with opener.open(url) as file:
+        if ext in (".yml", ".yaml"):
+            return yaml.load(file, Loader=yaml.SafeLoader)
+        if ext in (".json", "json"):
+            return json.load(file)
+    raise HTTPException(status_code=422, detail=f"Invalid filetype: {ext!r}")
+
+
+def _items_from_payload(payload) -> list[models.TemplateItem]:
+    """Turn the loaded feed (list or dict) into TemplateItem rows."""
+    if isinstance(payload, list):
+        return [_build_template_item(entry) for entry in payload]
+    if isinstance(payload, dict):
+        return [_build_template_item(payload)]
+    raise HTTPException(status_code=422, detail="Unexpected template payload shape")
+
+
 def add_template(db: Session, template: models.Template):
     validate_url(template.url)
+    _template = models.Template(title=template.title, url=template.url)
+
     try:
-        _template_path = urlparse(template.url).path
-        ext = os.path.splitext(_template_path)[1]
-        # Opens the JSON and iterate over the content.
-        _template = models.Template(title=template.title, url=template.url)
-        opener = urllib.request.build_opener(SafeRedirectHandler())
-        with opener.open(template.url) as file:
-            if ext.rstrip() in (".yml", ".yaml"):
-                loaded_file = yaml.load(file, Loader=yaml.SafeLoader)
-            elif ext.rstrip() in (".json", "json"):
-                loaded_file = json.load(file)
-            else:
-                print("Invalid filetype")
-                raise
-            if type(loaded_file) == list:
-                for entry in loaded_file:
-                    ports = conv_ports2dict(entry.get("ports", []))
-                    sysctls = conv_sysctls2dict(entry.get("sysctls", []))
-
-                    # Optional use classmethod from_dict
-                    try:
-                        template_content = models.TemplateItem(
-                            type=int(entry.get("type", 1)),
-                            title=entry["title"],
-                            platform=entry["platform"],
-                            description=entry.get("description", ""),
-                            name=entry.get("name", entry["title"].lower()),
-                            command=entry.get("command"),
-                            logo=entry.get("logo", ""),  # default logo here!
-                            image=entry.get("image", ""),
-                            notes=entry.get("note", ""),
-                            categories=entry.get("categories", ""),
-                            restart_policy=entry.get("restart_policy"),
-                            ports=ports,
-                            network_mode=entry.get("network_mode", ""),
-                            network=entry.get("network", ""),
-                            volumes=entry.get("volumes", []),
-                            env=entry.get("env", []),
-                            devices=entry.get("devices", []),
-                            labels=entry.get("labels", []),
-                            sysctls=sysctls,
-                            cap_add=entry.get("cap_add", []),
-                            cpus=entry.get("cpus"),
-                            mem_limit=entry.get("mem_limit"),
-                        )
-                    except Exception as exc:
-                        raise HTTPException(
-                            status_code=exc.response.status_code,
-                            detail=entry.get("name") + " " + exc.explanation,
-                        )
-                    _template.items.append(template_content)
-            elif type(loaded_file) == dict:
-                entry = loaded_file
-                ports = conv_ports2dict(entry.get("ports", []))
-                sysctls = conv_sysctls2dict(entry.get("sysctls", []))
-
-                # Optional use classmethod from_dict
-                template_content = models.TemplateItem(
-                    type=int(entry.get("type", 1)),
-                    title=entry["title"],
-                    platform=entry["platform"],
-                    description=entry.get("description", ""),
-                    name=entry.get("name", entry["title"].lower()),
-                    command=entry.get("command"),
-                    logo=entry.get("logo", ""),  # default logo here!
-                    image=entry.get("image", ""),
-                    notes=entry.get("note", ""),
-                    categories=entry.get("categories", ""),
-                    restart_policy=entry.get("restart_policy"),
-                    ports=ports,
-                    network_mode=entry.get("network_mode", ""),
-                    network=entry.get("network", ""),
-                    volumes=entry.get("volumes", []),
-                    env=entry.get("env", []),
-                    devices=entry.get("devices", []),
-                    labels=entry.get("labels", []),
-                    sysctls=sysctls,
-                    cap_add=entry.get("cap_add", []),
-                    cpus=entry.get("cpus"),
-                    mem_limit=entry.get("mem_limit"),
-                )
-                _template.items.append(template_content)
-    except (OSError, TypeError, ValueError) as err:
-        # Optional handle KeyError here too.
+        payload = _fetch_template_payload(template.url)
+        _template.items = _items_from_payload(payload)
+    except HTTPException:
+        raise
+    except (OSError, TypeError, ValueError, KeyError) as err:
         print("data request failed", err)
-        if hasattr(err, "status_code"):
-             raise HTTPException(status_code=err.status_code, detail=err.explanation)
-        else:
-             raise HTTPException(status_code=400, detail=str(err))
+        status_code = getattr(err, "status_code", 400)
+        raise HTTPException(status_code=status_code, detail=str(err))
 
     try:
         db.add(_template)
         db.commit()
-    except IntegrityError as err:
+    except IntegrityError:
         db.rollback()
-        # Check if the conflict is due to the Title
         existing_title = (
             db.query(models.Template).filter(models.Template.title == template.title).first()
         )
@@ -209,9 +179,8 @@ def add_template(db: Session, template: models.Template):
             raise HTTPException(
                 status_code=409, detail="Template with this title already exists."
             )
-
-        # If the template URL already exists, we return the existing one.
-        # This makes the "Add Template" operation idempotent for URLs.
+        # Title collision didn't fire -> URL collision; return the existing
+        # row so the "Add Template" call is idempotent per URL.
         return get_template(db=db, url=template.url)
 
     return get_template(db=db, url=template.url)
@@ -311,15 +280,10 @@ def refresh_template(db: Session, template_id: id):
             else:
                  raise HTTPException(status_code=400, detail=str(exc))
     else:
-        # db.delete(template)
-        # make_transient(template)
-        # db.commit()
-
         template.updated_at = datetime.utcnow()
         template.items = items
 
         try:
-            # db.add(template)
             db.commit()
             print(f'Template "{template.title}" updated successfully.')
         except Exception as exc:

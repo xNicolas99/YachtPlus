@@ -215,14 +215,11 @@ def _get_compose_sync(name):
 
             if loaded_compose:
                 if loaded_compose.get("volumes"):
-                    for volume in loaded_compose.get("volumes"):
-                        volumes.append(volume)
+                    volumes.extend(loaded_compose["volumes"])
                 if loaded_compose.get("networks"):
-                    for network in loaded_compose.get("networks"):
-                        networks.append(network)
+                    networks.extend(loaded_compose["networks"])
                 if loaded_compose.get("services"):
-                    for service in loaded_compose.get("services"):
-                        services[service] = loaded_compose["services"][service]
+                    services.update(loaded_compose["services"])
 
             with open(file, 'r') as _content:
                 content = _content.read()

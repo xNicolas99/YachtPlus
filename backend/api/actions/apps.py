@@ -1,4 +1,3 @@
-from os import stat
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -286,6 +285,12 @@ async def deploy_app(template: DeployForm):
         return {"success": False, "conflicts": conflicts}
 
     try:
+        # Load TemplateVariables once and share across the three conv_* helpers
+        # that need them. Previously each opened its own SessionLocal -> 3 DB
+        # roundtrips per deploy.
+        from api.utils.apps import _load_template_variables
+        t_variables = _load_template_variables()
+
         launch = await launch_app(
             template.name,
             conv_image2data(template.image),
@@ -295,10 +300,10 @@ async def deploy_app(template: DeployForm):
             conv_portlabels2data(template.ports),
             template.network_mode,
             template.network,
-            conv_volumes2data(template.volumes),
-            conv_env2data(template.env),
+            conv_volumes2data(template.volumes, t_variables=t_variables),
+            conv_env2data(template.env, t_variables=t_variables),
             conv_devices2data(template.devices),
-            conv_labels2data(template.labels),
+            conv_labels2data(template.labels, t_variables=t_variables),
             conv_sysctls2data(template.sysctls),
             conv_caps2data(template.cap_add),
             conv_cpus2data(template.cpus),

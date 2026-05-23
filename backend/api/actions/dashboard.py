@@ -1,4 +1,3 @@
-from fastapi import HTTPException
 import aiodocker
 import asyncio
 import logging

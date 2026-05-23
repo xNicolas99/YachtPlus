@@ -59,46 +59,59 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
     except Exception as e:
         print(f"Failed to send security alert: {e}")
 
-def check_ip_restriction(request: Request, db: Session, username: str = None):
+def _resolve_client_ip(request: Request) -> str:
+    """Return the originating client IP, trusting proxy headers only when the
+    direct peer is on a private network."""
     client_ip = request.client.host
+    if not client_ip or not is_private_ip(client_ip):
+        return client_ip
 
-    # If the request comes from a trusted private proxy, we can inspect proxy headers
-    if client_ip and is_private_ip(client_ip):
-        real_ip = request.headers.get("X-Real-IP")
-        forwarded_for = request.headers.get("X-Forwarded-For")
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
 
-        if real_ip:
-            client_ip = real_ip.strip()
-        elif forwarded_for:
-            # Safely parse X-Forwarded-For: traverse right-to-left
-            # The rightmost IPs are added by the closest trusted proxies.
-            # We want the first IP that is NOT a private IP, or if all are private, the rightmost one.
-            ips = [ip.strip() for ip in forwarded_for.split(",")]
-            client_ip = ips[-1] # Fallback to rightmost if all are private
-            for ip in reversed(ips):
-                if not is_private_ip(ip):
-                    client_ip = ip
-                    break
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if not forwarded_for:
+        return client_ip
 
-    # 1. Check IP Restriction (Allow only private IPs by default?)
-    # For now, let's hardcode this policy or check a setting if we had one.
-    # The requirement: "blocks by default all non private ip adresses"
+    # Walk X-Forwarded-For right-to-left, picking the first non-private hop.
+    # Falls back to the rightmost entry when every hop is private.
+    ips = [ip.strip() for ip in forwarded_for.split(",")]
+    for ip in reversed(ips):
+        if not is_private_ip(ip):
+            return ip
+    return ips[-1]
+
+
+def _count_recent_failed_attempts(db: Session, client_ip: str, minutes: int = 15) -> int:
+    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    return (
+        db.query(LoginAttempt)
+        .filter(
+            LoginAttempt.ip_address == client_ip,
+            LoginAttempt.success == False,
+            LoginAttempt.timestamp >= time_threshold,
+        )
+        .count()
+    )
+
+
+def check_ip_restriction(request: Request, db: Session, username: str = None):
+    client_ip = _resolve_client_ip(request)
+
     if not is_private_ip(client_ip):
-         send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
-         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied from public IP.")
+        send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied from public IP.",
+        )
 
-    # 2. Check Failed Attempts (Fail2Ban logic)
-    # limit: 5 failed attempts in last 15 minutes
-    time_threshold = datetime.utcnow() - timedelta(minutes=15)
-    failed_attempts = db.query(LoginAttempt).filter(
-        LoginAttempt.ip_address == client_ip,
-        LoginAttempt.success == False,
-        LoginAttempt.timestamp >= time_threshold
-    ).count()
-
-    if failed_attempts >= 5:
+    if _count_recent_failed_attempts(db, client_ip) >= 5:
         send_security_alert(db, client_ip, "Too many failed login attempts (Fail2Ban)", username)
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="IP blocked due to too many failed login attempts.")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="IP blocked due to too many failed login attempts.",
+        )
 
     return client_ip
 
