@@ -312,8 +312,10 @@ async def container_exec(
                             if cmd and cmd.get("type") == "resize":
                                 await exec_instance.resize(w=cmd["cols"], h=cmd["rows"])
                                 continue
-                        except:
-                            pass
+                        except (json.JSONDecodeError, KeyError, TypeError) as parse_err:
+                            # Not a JSON control frame -> fall through and forward
+                            # the raw bytes to the container's stdin.
+                            logger.debug(f"WS input not a control frame: {parse_err}")
 
                         # Send to docker
                         logger.debug(f"IN: {input_data.encode()}")
@@ -345,9 +347,10 @@ async def container_exec(
     except Exception as e:
         logger.error(f"Unexpected error in shell: {e}")
         try:
-             await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
-        except:
-             pass
+            await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
+        except Exception as close_err:
+            # Socket may already be closed; nothing we can do but log it.
+            logger.debug(f"WS close after error failed: {close_err}")
     finally:
         if docker:
             await docker.close()

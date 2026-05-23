@@ -471,9 +471,11 @@ def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployFor
         # Docker API expects NanoCPUs, so if the template stores "0.5" (cores),
         # we pass it as float to form, and then `conv_cpus2data` converts it to NanoCPUs later.
         try:
-             form.cpus = float(template_item.cpus)
-        except:
-             pass
+            form.cpus = float(template_item.cpus)
+        except (TypeError, ValueError):
+            # Template stored cpus as a non-numeric string -> leave form.cpus
+            # untouched so the deploy flow falls back to its own default.
+            pass
 
     if not form.mem_limit and template_item.mem_limit:
         form.mem_limit = str(template_item.mem_limit)
@@ -554,9 +556,9 @@ def merge_template(form: schemas.DeployForm, template_item) -> schemas.DeployFor
             ]
         elif isinstance(template_item.labels, list):
             form.labels = [
-                schemas.LabelSchema(label=l.get('label', ''), value=l.get('value', ''))
-                for l in template_item.labels
-                if isinstance(l, dict)
+                schemas.LabelSchema(label=item.get('label', ''), value=item.get('value', ''))
+                for item in template_item.labels
+                if isinstance(item, dict)
             ]
         else:
             form.labels = []

@@ -23,7 +23,7 @@ REGEXP_PORT_ASSIGN = r"^(?:(?:\d{1,5}:)?\d{1,5}|:\d{1,5})/(?:tcp|udp)$"
 
 
 def conv_ports2dict(data: List[str]) -> List[Dict[str, str]]:
-    if len(data) > 0 and type(data[0]) == dict:
+    if len(data) > 0 and isinstance(data[0], dict):
         delim = ":"
         portlst = []
         for port_data in data:
@@ -45,7 +45,7 @@ def conv_ports2dict(data: List[str]) -> List[Dict[str, str]]:
                 )
             return portlst
 
-    elif type(data) == list:
+    elif isinstance(data, list):
         delim = ":"
         portlst = []
         for port_data in data:

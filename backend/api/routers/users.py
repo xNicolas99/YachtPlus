@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 # Initialize limiter (ensure it matches the one in main.py)
 limiter = Limiter(key_func=get_remote_address)
 
+# Used to keep login response time roughly constant when the supplied username
+# is unknown. bcrypt.checkpw still runs against this fixed digest, so an
+# attacker can't distinguish "no such user" from "wrong password" via timing.
+# This is NOT a real credential and decrypts to nothing.
+_TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
+
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
 def get_users(
@@ -143,15 +149,13 @@ def login(
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    DUMMY_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
-
     _user = (
         db.query(models.User)
         .filter(models.User.username == username_query)
         .first()
     )
 
-    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
     is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:
@@ -215,15 +219,13 @@ def login_cookie(
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    DUMMY_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
-
     _user = (
         db.query(models.User)
         .filter(models.User.username == username_query)
         .first()
     )
 
-    hash_to_verify = _user.hashed_password if _user else DUMMY_HASH
+    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
     is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:

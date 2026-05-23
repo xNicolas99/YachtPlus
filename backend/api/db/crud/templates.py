@@ -207,7 +207,7 @@ def refresh_template(db: Session, template_id: id):
             else:
                 print("Invalid filetype")
                 raise HTTPException(status_code=422, detail="Invalid filetype")
-            if type(loaded_file) == list:
+            if isinstance(loaded_file, list):
                 for entry in loaded_file:
 
                     if entry.get("ports"):
@@ -239,7 +239,7 @@ def refresh_template(db: Session, template_id: id):
                         mem_limit=entry.get("mem_limit"),
                     )
                     items.append(item)
-            elif type(loaded_file) == dict:
+            elif isinstance(loaded_file, dict):
                 entry = loaded_file
                 ports = conv_ports2dict(entry.get("ports", []))
                 sysctls = conv_sysctls2dict(entry.get("sysctls", []))
