@@ -38,7 +38,7 @@ monorepo tooling — they are independent Node and Python projects.
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2.x, aiodocker, APScheduler, slowapi (rate limit), bcrypt, PyJWT, pyotp |
 | DB | SQLite default (`sqlite:////config/yacht.db`); Postgres / MySQL via `DATABASE_URL` |
 | Build/Deploy | Multi-stage `Dockerfile` (Node build → Python runtime + nginx); `docker-compose.yml`; GitHub Actions in `.github/workflows/` (`docker-image.yml`, `ghcr.yml`) |
-| Test | pytest (backend, 213 tests), vitest (frontend, 9 tests), Playwright dev-dep present but no active suite |
+| Test | pytest (backend, 338 tests), vitest (frontend, 16 tests), Playwright dev-dep present but no active suite |
 
 ---
 
@@ -154,6 +154,15 @@ flows automatically. The frontend never sees the raw JWT.
    **`auth_check_setup_pending`** allows them — but *only while setup is
    not yet finalized* (stale-token block).
 
+### /refresh validates the underlying account
+
+`POST /api/auth/refresh` is not just a token-restamper: it calls
+`auth_check`, looks the user up in the DB, and rejects when the user is
+missing or `is_active == False`. A deactivated account therefore cannot
+keep extending its session until the original token's `exp`. On rejection
+the cookie is cleared so the SPA's interceptor falls through to the
+`/login` redirect.
+
 ### When you add a new endpoint
 
 - **Public** (login, status, healthcheck): no auth dep. Add to the middleware
@@ -170,6 +179,36 @@ Flat boolean flags on `User`: `is_superuser`, `is_active`, `is_2fa_enabled`,
 and granular `perm_start`, `perm_stop`, `perm_restart`, `perm_delete`.
 Superusers bypass `check_permission`.
 
+### Where each permission is enforced
+
+| Endpoint family | Gate |
+|---|---|
+| `/api/apps/actions/{name}/{action}` | `auth_check` + `check_permission("perm_{start,stop,restart,delete}")` based on the action |
+| `/api/apps/{name}/logs`, `/processes` | `auth_check` + `perm_start` — log lines often contain secrets, processes leak cmdlines |
+| `/api/apps/{name}/support` | superuser only — bundles env + inspect output |
+| `/api/compose/{project}/actions/{action}` | `auth_check` + permission mapped via `_ACTION_PERMISSIONS` (same gates as apps router) |
+| `/api/compose/{project}/edit` | `auth_check` + `perm_restart` — editing a compose file changes how the stack restarts |
+| `/api/compose/{project}/support` | superuser only |
+| `/api/templates` POST / DELETE / `/refresh` | superuser only via local `_require_superuser` helper (mutates the shared library + outbound URL fetch) |
+| `/api/containers/{id}/exec` (WS) | shell-name whitelist → JWT decode → reject `setup_pending` → DB lookup (`is_active`) → `perm_start`. See section 5 below for the WS-specific contract. |
+| `/api/auth/users/{user_id}` DELETE | superuser only; refuses self-delete and refuses to zero out the superuser table |
+| `/api/auth/api/keys/{id}` DELETE | owner OR superuser; non-owner gets the same "Key not found" payload as a missing id (no IDOR id-existence leak) |
+
+### `/api/containers/{id}/exec` WebSocket contract
+
+1. `await websocket.accept()` — required to receive a `send_json`/`close` frame.
+2. **Shell-name whitelist** (`containers.py::ALLOWED_EXEC_SHELLS`). Anything
+   else gets a `{"error": "Forbidden: shell not allowed"}` and a 1008 close
+   *before* any auth check, so token-probing attempts get no signal.
+3. Cookie-only JWT (`access_token_cookie`); URL/query tokens never accepted.
+4. Reject `setup_pending` tokens, reject unknown / inactive users, reject
+   anything without `perm_start` (superusers bypass).
+5. Only then open the `aiodocker.Docker(...)` and stream.
+
+Terminal IN/OUT bytes are deliberately not logged — they include passwords
+typed at sudo prompts, tokens echoed by tools, file contents dumped by
+`cat`. The debug log captures frame length only.
+
 ---
 
 ## 6. Security defaults (don't loosen without thinking)
@@ -179,13 +218,20 @@ Superusers bypass `check_permission`.
 | HttpOnly auth cookie | `api/auth/jwt.py: set_access_cookies` | JS cannot read the token. |
 | CSP | `api/main.py` `add_security_headers` | `script-src 'self' 'unsafe-inline'`. **No `unsafe-eval`** — keep it that way. |
 | Trusted-host | `api/main.py` `TrustedHostMiddleware` | Reads `settings.ALLOWED_HOSTS`. Override with `YACHT_ALLOWED_HOSTS=…`. |
-| CORS allowlist | `api/main.py` `CORSMiddleware` | Reads `settings.CORS_ORIGINS`. Override with `YACHT_CORS_ORIGINS=…`. |
+| CORS allowlist | `api/main.py` `CORSMiddleware` | Reads `settings.CORS_ORIGINS`. Override with `YACHT_CORS_ORIGINS=…`. Startup fails fast if list contains `*` (incompatible with `allow_credentials=True`) or an entry without a scheme. |
 | HTML sanitisation | `frontend/src/main.js` `$sanitize` | DOMPurify with explicit allowlist; covers all `v-html` sites. |
-| Rate limit on login | `api/routers/users.py` `@limiter.limit("5/minute")` | slowapi; also tracks per-IP login attempts in DB for fail2ban-style block. |
+| Per-IP login limit | `api/routers/users.py` `@limiter.limit("5/minute")` | slowapi on login + refresh + key-creation. |
+| Per-IP fail2ban | `api/utils/security.py: check_ip_restriction` | 5 failed logins / 15 min from the same IP → 403. |
+| Per-username lockout | same | 20 failed logins / 30 min for the same username (across IPs) → 403. Error wording is identical to the IP block so an attacker can't tell which guard fired. |
+| Trusted-proxy allowlist | `api/utils/security.py: _is_trusted_proxy` | X-Real-IP / X-Forwarded-For are **only** honoured when the direct peer is in `settings.TRUSTED_PROXIES` (`YACHT_TRUSTED_PROXIES=ip[,cidr,...]`). Default empty → never trust them. Stops same-LAN attackers from spoofing client-IP attribution. |
+| API-key delete | `api/routers/users.py: delete_api_key` | DELETE verb (GET kept as deprecated alias). Ownership-or-superuser check in `crud.blacklist_api_key`; non-owner gets the same "not found" payload as a missing id (no IDOR leak). |
+| API-key creation rate limit | `api/routers/users.py: create_api_key` | `@limiter.limit("5/minute")` — keys are long-lived (10y exp). |
 | SECRET_KEY | `api/settings.py` `get_or_create_secret_key` | Reads env, otherwise persists to `SECRET_KEY_FILE`. **Fail-fast** if neither possible — no ephemeral fallback. |
+| At-rest crypto | `api/utils/crypto.py` | PBKDF2-HMAC-SHA256 (600k iterations, 16-byte salt persisted at `FERNET_SALT_FILE`, default `/config/.fernet_salt`). v2 tokens are prefixed `v2:`; legacy v1 (single-SHA256, no salt) tokens stay decryptable so existing 2FA seeds aren't invalidated. New writes always emit v2 → lazy migration. |
 | 2FA enforcement | `api/routers/setup/setup.py: finalize_setup` | Setup cannot complete without 2FA enabled. |
-| WS auth | `api/routers/containers.py` | Reads cookie directly off WS handshake; never accepts token via URL/query. |
-| Template SSRF mitigation | `api/db/crud/templates.py` `SafeRedirectHandler` | Reuse this pattern for any user-supplied URL fetch. |
+| WS auth (exec) | `api/routers/containers.py` | Cookie-only handshake, never URL/query token. Shell-name whitelist → reject setup_pending → DB lookup → `perm_start` gate. See section 5 for the full chain. |
+| Template SSRF mitigation | `api/db/crud/templates.py` `validate_url` + `SafeRedirectHandler` | Catches `gaierror`/`herror`/`timeout`/generic `OSError`, rejects empty resolutions, blocks all private-range IPs **including on every redirect**. Fetch timeout `TEMPLATE_FETCH_TIMEOUT_S = 15`. Reuse this pattern for any user-supplied URL fetch. |
+| Last-admin guard | `api/routers/users.py: delete_user` | Refuses self-deletion and refuses to leave zero superusers in the table. |
 
 ---
 
@@ -193,11 +239,12 @@ Superusers bypass `check_permission`.
 
 | Integration | How | Env |
 |---|---|---|
-| Docker daemon | `aiodocker` (async) and `docker` SDK (sync, wrapped in `loop.run_in_executor`) | `DOCKER_HOST`, `DOCKER_GID` |
-| docker-compose CLI | `subprocess.run` inside `_run_compose_command` (sync, run in thread pool via `run_in_thread`) | — |
+| Docker daemon (async) | `aiodocker.Docker(url=settings.DOCKER_HOST)` | `DOCKER_HOST`, `DOCKER_GID` |
+| Docker daemon (sync) | `api.utils.docker_client.get_sync_docker_client()` — wraps `docker.DockerClient(base_url=...)` when `settings.DOCKER_HOST` is set, else `docker.from_env()`. **Never call `docker.from_env()` directly** — it bypasses an operator-configured TCP proxy. | `DOCKER_HOST` |
+| docker-compose CLI | `subprocess.run` inside `_run_compose_command` (array form, no `shell=True`). Subcommand is whitelisted twice: at the router and again at `_compose_action_sync` / `_compose_app_action_sync` via `_ALLOWED_PROJECT_ACTIONS` / `_ALLOWED_APP_ACTIONS`. Sync, run in thread pool via `run_in_thread`. | `COMPOSE_DIR` |
 | Docker Hub / GHCR | Plain HTTP for image metadata + image listing | — |
-| Template registries | URL fetch via `urllib` + `SafeRedirectHandler` | — |
-| Email (SMTP) | Stored credentials in DB, encrypted via `utils/crypto` | — |
+| Template registries | URL fetch via `urllib` + `SafeRedirectHandler`, hard timeout `TEMPLATE_FETCH_TIMEOUT_S`. SSRF-validated on every redirect. | — |
+| Email (SMTP) | Stored credentials in DB, encrypted via `utils/crypto` (PBKDF2 v2 with legacy v1 fallback) | — |
 
 **Pattern for sync I/O in async routes:** never call sync code from an `async
 def` handler directly. Put the sync work in a `_xxx_sync` helper and call it
@@ -269,10 +316,15 @@ cd frontend
 npx vitest run
 ```
 
-Current baseline: **213 backend + 9 frontend tests, all green.**
+Current baseline: **338 backend + 16 frontend tests, all green.**
 `backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
 *before* `Settings` is evaluated — needed because `TrustedHostMiddleware`
 would otherwise reject TestClient's default `Host: testserver`.
+
+`tests/test_cors.py` and `tests/test_setup.py` are excluded from the
+default run via `--ignore=` because they try to open `/config/yacht.db`
+at collection time, which doesn't exist outside the Docker image. Fix
+them or set `DATABASE_URL` if you need them.
 
 ---
 
@@ -294,12 +346,15 @@ would otherwise reject TestClient's default `Host: testserver`.
 |---|---|---|
 | `SECRET_KEY` | — | JWT signing key. If unset, derived from `SECRET_KEY_FILE`. |
 | `SECRET_KEY_FILE` | `/config/.secret_key` | Where the key is persisted if `SECRET_KEY` is unset. Must be writable. |
+| `FERNET_SALT_FILE` | `/config/.fernet_salt` | Where the at-rest crypto salt is persisted. 16 bytes, generated once on first start. Falls back to `.fernet_salt` in cwd if `/config` doesn't exist. |
 | `ENVIRONMENT` | `development` | When `production`, cookies get `Secure` flag. |
 | `SECURE_COOKIES` | derived | Force-override cookie Secure flag. |
 | `DATABASE_URL` | `sqlite:////config/yacht.db` | SQLAlchemy URL. |
 | `YACHT_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | TrustedHostMiddleware list. |
-| `YACHT_CORS_ORIGINS` | localhost variants | CORS origin list. |
-| `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker connection. |
+| `YACHT_CORS_ORIGINS` | localhost variants | CORS origin list. Startup fails fast if it contains `*` or an entry without scheme. |
+| `YACHT_TRUSTED_PROXIES` | (empty) | Comma-separated IPs / CIDRs whose `X-Real-IP` / `X-Forwarded-For` headers we honour. Default empty → never trust them; client IP attribution uses the direct peer. Set to your reverse proxy's IP when running behind nginx / Traefik. |
+| `COMPOSE_DIR` | `/compose/` | Where compose project subdirectories live. Trailing slash is part of the contract — every call site does `settings.COMPOSE_DIR + name`. |
+| `DOCKER_HOST` | (unset → SDK default = `/var/run/docker.sock`) | Docker connection. Declared as `Optional[str]` on Settings; when set, **both** the async (`aiodocker`) and sync (`utils/docker_client`) paths honour it. |
 | `DOCKER_GID` | autodetect | Set if you hit socket permission errors. |
 | `DISABLE_AUTH` | `False` | **Dev only.** Bypasses every auth check. Never set in prod. |
 
@@ -311,10 +366,15 @@ would otherwise reject TestClient's default `Host: testserver`.
 |---|---|---|
 | Anything in `api/auth/` or `api/routers/setup/` | One broken assertion = auth bypass | Add or extend a pytest case in `tests/test_auth*.py` or `test_setup.py`. Run the full setup flow manually if behaviour changes. |
 | Adding a new `/api/*` route | Default is "blocked by middleware" | Decide consciously: data route (`auth_check`) vs setup route (`auth_check_setup_pending`) vs public (whitelist in middleware). |
-| User-supplied URL fetched server-side | SSRF risk | Use `SafeRedirectHandler` (`api/db/crud/templates.py`) or equivalent. Reject private-range IPs. |
-| Subprocess / shell invocation | Command injection | No `shell=True`. Pass args as a list. Validate every component if it came from request data. |
+| User-supplied URL fetched server-side | SSRF risk | Use `validate_url` + `SafeRedirectHandler` (`api/db/crud/templates.py`). It rejects private-range IPs on every redirect and on every socket-error mode (gaierror, herror, timeout, OSError, empty resolution). Always pass `timeout=` to the opener. |
+| Subprocess / shell invocation | Command injection | No `shell=True`. Pass args as a list. Validate every component if it came from request data. Subcommand whitelist at the action layer too, not just the router (see `_ALLOWED_PROJECT_ACTIONS`). |
+| Adding a query/path arg that becomes a subprocess token, exec command, or shell binary | Same | Whitelist at both router and action layer. Reject before any auth check if the value is suspicious — keeps token-probing attempts from getting any signal. The container-exec WS `shell` param is the canonical example. |
 | Touching the cookie name, `setup_pending`, or `is_active` semantics | Frontend depends on the exact strings/shape | grep both backend and frontend for the symbol before changing. |
 | Removing `unsafe-eval` from CSP is a non-goal — it's already removed. Adding it back is a no. | XSS surface | If a dep needs `unsafe-eval`, the dep is the problem. |
+| Adding `settings.X` reference for a new env var | Pydantic uses `extra='forbid'` | Declare `X` as a field on the `Settings` class in `api/settings.py`. Otherwise the read crashes with `AttributeError` at request time. `tests/test_settings_fields.py` pins the must-exist contract for the currently-declared fields. |
+| Calling `docker.from_env()` | Bypasses `settings.DOCKER_HOST` | Always go through `api.utils.docker_client.get_sync_docker_client()` for the sync SDK. |
+| Trusting `X-Real-IP` / `X-Forwarded-For` outside `_resolve_client_ip` | IP-spoofing for rate-limit evasion | Don't. There's one entry point and it requires the peer to be in `settings.TRUSTED_PROXIES`. |
+| Logging shell input/output, terminal frames, JWTs, or DB rows containing secrets | Sensitive data in logs | Log lengths, ids, or sanitised summaries — never the raw bytes. Semgrep's log-leak rule is configured to flag this. |
 
 ---
 
@@ -338,6 +398,14 @@ would otherwise reject TestClient's default `Host: testserver`.
 - **TestClient sends `Host: testserver`.** Already handled by
   `tests/conftest.py`, but if you spin up a separate test harness, add
   `testserver` to allowed hosts.
+- **`settings.X` for an unknown field crashes.** Pydantic v2 + `extra='forbid'`
+  means *only declared fields* exist. If a previous patch added a code
+  reference but forgot the field declaration, the line bombs at runtime
+  with `AttributeError` instead of e.g. returning `None`. Add the field.
+- **Push policy.** This repo pushes directly to `master`; PRs are only used
+  when the harness blocks the direct push (typically: destructive ops,
+  unfamiliar branches). Don't open PRs by default — see the memory file
+  `feedback_push_direct_to_master.md`.
 
 ---
 
