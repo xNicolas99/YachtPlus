@@ -1,5 +1,8 @@
 name: Docker Image CI
 
+# Build on every branch and PR (sanity check), but only push to GHCR when
+# we have credentials that actually work: pushes from the same repo (not
+# fork PRs) and not when the actor is a bot without packages:write.
 on:
   push:
     branches: [ "**" ]
@@ -10,7 +13,6 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/yachtplus
 
 jobs:
   build-and-push:
@@ -23,7 +25,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # GHCR requires lowercase owner/image. github.repository_owner keeps
+      # the original casing (e.g. "xNicolas99"), which makes the push
+      # surface as `unauthorized` because the path can't be resolved.
+      - name: Compute lowercase image name
+        id: img
+        shell: bash
+        run: |
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=${owner_lc}/yachtplus" >> "$GITHUB_OUTPUT"
+
+      # We can only push when GITHUB_TOKEN has packages:write. That is NOT
+      # the case for PRs from forks, and may not be the case for some bot
+      # actors. Build always; push only when conditions are right.
+      - name: Decide whether to push
+        id: push
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" && \
+                "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Fork PR detected — skipping push."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to the Container registry
+        if: steps.push.outputs.enabled == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -34,7 +62,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.img.outputs.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=pr
@@ -42,10 +70,10 @@ jobs:
             type=raw,value=devel
             type=sha
 
-      - name: Build and push Docker image
+      - name: Build (and optionally push) Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
+          push: ${{ steps.push.outputs.enabled == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
