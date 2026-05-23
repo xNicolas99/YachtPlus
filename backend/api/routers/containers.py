@@ -319,7 +319,12 @@ async def container_exec(
                     # msg is bytes?
                     # xterm expects string or bytes.
                     if msg.data:
-                         logger.debug(f"OUT: {msg.data}")
+                         # Deliberately NOT logging msg.data — raw terminal
+                         # output can include passwords typed at sudo prompts,
+                         # tokens emitted by tools, etc. Semgrep flagged this
+                         # (log-leak rule) and the flag was correct; only the
+                         # frame length is safe to record.
+                         logger.debug("OUT: %d bytes", len(msg.data))
                          await websocket.send_bytes(msg.data)
             except Exception as e:
                 logger.error(f"Read from docker error: {e}")
@@ -347,8 +352,10 @@ async def container_exec(
                             # the raw bytes to the container's stdin.
                             logger.debug(f"WS input not a control frame: {parse_err}")
 
-                        # Send to docker
-                        logger.debug(f"IN: {input_data.encode()}")
+                        # Send to docker. Same reasoning as the OUT path:
+                        # never log the raw user input — it's a live shell,
+                        # so the bytes include passwords / API tokens / etc.
+                        logger.debug("IN: %d bytes", len(input_data))
                         await stream.write_in(input_data.encode())
 
                     elif "bytes" in data:

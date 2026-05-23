@@ -61,6 +61,12 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")
 
+    # Directory where docker-compose project subdirectories live. Trailing
+    # slash matters — every call site does `settings.COMPOSE_DIR + name`
+    # and relies on it. Previously read but never declared, which crashed
+    # with AttributeError under pydantic v2's extra='forbid'.
+    COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
+
     # Docker daemon endpoint. None -> let the docker SDK / aiodocker pick up
     # the standard discovery (DOCKER_HOST env var, then /var/run/docker.sock).
     # Set this when fronting the daemon via a TCP proxy so that *all* code

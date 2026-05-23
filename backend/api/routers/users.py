@@ -27,7 +27,10 @@ limiter = Limiter(key_func=get_remote_address)
 # Used to keep login response time roughly constant when the supplied username
 # is unknown. bcrypt.checkpw still runs against this fixed digest, so an
 # attacker can't distinguish "no such user" from "wrong password" via timing.
-# This is NOT a real credential and decrypts to nothing.
+# This is NOT a real credential, decrypts to nothing, and is the only
+# "hardcoded password" in the codebase. Tell static analysers explicitly.
+# nosem: generic.secrets.security.detected-generic-secret.detected-generic-secret
+# nosec: B105
 _TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
 
 # Add list users endpoint for admin

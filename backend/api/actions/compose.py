@@ -55,8 +55,24 @@ def _run_compose_command(command_args, cwd, env_vars):
         logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(500, str(e))
 
+# Whitelist of docker-compose subcommands we ever pass through. The router
+# already validates the same set, but enforcing it again here gives us
+# defense in depth for any future internal caller and makes it explicit
+# that arbitrary strings must never reach subprocess.run as the first arg
+# (even though we use the array form, a typo could turn into a no-op or a
+# silently-different docker-compose subcommand).
+_ALLOWED_PROJECT_ACTIONS = frozenset({
+    "up", "down", "start", "stop", "restart", "create", "delete", "pull",
+})
+_ALLOWED_APP_ACTIONS = frozenset({
+    "up", "down", "start", "stop", "restart", "create", "rm", "pull",
+})
+
+
 def _compose_action_sync(name, action):
     validate_compose_project_name(name)
+    if action not in _ALLOWED_PROJECT_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
     files = find_yml_files(settings.COMPOSE_DIR)
     # We call the sync version of get_compose here
     compose = _get_compose_sync(name)
@@ -113,6 +129,8 @@ apps in compose projects.
 def _compose_app_action_sync(name, action, app):
     validate_compose_project_name(name)
     validate_app_name(app)
+    if action not in _ALLOWED_APP_ACTIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
     files = find_yml_files(settings.COMPOSE_DIR)
     compose = _get_compose_sync(name)
     env = os.environ.copy()

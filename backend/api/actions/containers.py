@@ -245,8 +245,11 @@ async def get_all_stats():
 
                         if system_delta > 0.0 and cpu_delta > 0.0:
                             cpu_percent = (cpu_delta / system_delta) * float(online_cpus) * 100.0
-                except:
-                    pass
+                except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
+                    # Stats payload from Docker is best-effort and can be
+                    # missing fields on cold-started containers. Log so a
+                    # repeatedly-broken container surfaces in the logs.
+                    logger.debug("CPU stats parse skipped: %s", exc)
 
                 try:
                     mem_stats = stats.get("memory_stats", {})
@@ -254,8 +257,8 @@ async def get_all_stats():
                     mem_limit = mem_stats.get("limit", 0)
                     if mem_limit > 0:
                         mem_percent = (mem_current / mem_limit) * 100.0
-                except:
-                    pass
+                except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
+                    logger.debug("Memory stats parse skipped: %s", exc)
 
                 # Get name (strip /)
                 name = container._container.get("Names", ["/Unknown"])[0][1:]
