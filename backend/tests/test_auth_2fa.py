@@ -130,7 +130,7 @@ def test_generate_2fa_post():
         assert result == {"status": "ok"}
         mock_logic.assert_called_once_with(mock_db, mock_auth)
 
-from api.routers.auth_2fa import enable_2fa, disable_2fa, TwoFactorRequest
+from api.routers.auth_2fa import enable_2fa, disable_2fa, TwoFactorRequest, Disable2FARequest
 
 def test_enable_2fa_user_not_found():
     mock_db = MagicMock()
@@ -239,6 +239,7 @@ def test_disable_2fa_success():
     mock_user.username = "testuser"
     mock_user.otp_secret = b"ENCRYPTED_SECRET"
     mock_user.is_2fa_enabled = True
+    mock_user.hashed_password = "hashed"
 
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.first.return_value = mock_user
@@ -246,8 +247,18 @@ def test_disable_2fa_success():
     mock_auth = MagicMock()
     mock_auth.get_jwt_subject.return_value = "testuser"
 
-    with patch("api.routers.auth_2fa.auth_check") as mock_auth_check:
-        result = disable_2fa(db=mock_db, Authorize=mock_auth)
+    payload = Disable2FARequest(password="correctpw", code="123456")
+
+    with patch("api.routers.auth_2fa.auth_check") as mock_auth_check, \
+         patch("api.routers.auth_2fa.verify_password", return_value=True), \
+         patch("api.routers.auth_2fa.decrypt", return_value="DECRYPTED_SECRET"), \
+         patch("api.routers.auth_2fa.pyotp.TOTP") as mock_totp_class:
+
+        mock_totp = MagicMock()
+        mock_totp.verify.return_value = True
+        mock_totp_class.return_value = mock_totp
+
+        result = disable_2fa(payload=payload, db=mock_db, Authorize=mock_auth)
 
         mock_auth_check.assert_called_once_with(mock_auth)
         mock_auth.get_jwt_subject.assert_called_once_with()
@@ -407,14 +418,19 @@ def test_enable_2fa_no_setup_initiated():
 
 def test_disable_2fa_success():
     secret = pyotp.random_base32()
+    from api.db.crud.users import get_password_hash
+    plain_pw = "correct-horse-battery-staple"
     u1 = User(
-        username="admin_disable_2fa", hashed_password="pw", is_superuser=True,
+        username="admin_disable_2fa", hashed_password=get_password_hash(plain_pw),
+        is_superuser=True,
         otp_secret=encrypt(secret), is_2fa_enabled=True
     )
     db.add(u1)
     db.commit()
 
-    res = disable_2fa(db=db, Authorize=MockAuth("admin_disable_2fa"))
+    totp = pyotp.TOTP(secret)
+    payload = Disable2FARequest(password=plain_pw, code=totp.now())
+    res = disable_2fa(payload=payload, db=db, Authorize=MockAuth("admin_disable_2fa"))
     assert res == {"message": "2FA disabled successfully"}
 
     user = db.query(User).filter(User.username == "admin_disable_2fa").first()
@@ -578,13 +594,23 @@ def test_enable_2fa_not_initiated():
     assert exc.value.detail == "2FA setup not initiated"
 
 def test_disable_2fa_success():
-    u1 = User(username="disableuser", hashed_password="pw", is_superuser=False, is_2fa_enabled=True, otp_secret="some_secret")
+    from api.db.crud.users import get_password_hash
+    plain_pw = "disable-test-pw"
+    secret = pyotp.random_base32()
+    u1 = User(
+        username="disableuser",
+        hashed_password=get_password_hash(plain_pw),
+        is_superuser=False, is_2fa_enabled=True,
+        otp_secret=encrypt(secret),
+    )
     db.add(u1)
     db.commit()
 
     auth = MockAuth("disableuser")
 
-    result = disable_2fa(db=db, Authorize=auth)
+    totp = pyotp.TOTP(secret)
+    payload = Disable2FARequest(password=plain_pw, code=totp.now())
+    result = disable_2fa(payload=payload, db=db, Authorize=auth)
 
     assert result == {"message": "2FA disabled successfully"}
 
@@ -619,20 +645,25 @@ def test_generate_2fa_post_success():
 def test_disable_2fa_success(monkeypatch):
     monkeypatch.setattr("api.routers.auth_2fa.auth_check", lambda x: None)
 
+    from api.db.crud.users import get_password_hash
+    plain_pw = "monkey-test-pw"
+    secret = pyotp.random_base32()
     u = User(
-        username="testuser",
-        hashed_password="pw",
+        username="mp_disable_user",
+        hashed_password=get_password_hash(plain_pw),
         is_2fa_enabled=True,
-        otp_secret="secret"
+        otp_secret=encrypt(secret),
     )
     db.add(u)
     db.commit()
 
-    res = disable_2fa(db=db, Authorize=MockAuth("testuser"))
+    totp = pyotp.TOTP(secret)
+    payload = Disable2FARequest(password=plain_pw, code=totp.now())
+    res = disable_2fa(payload=payload, db=db, Authorize=MockAuth("mp_disable_user"))
 
     assert res == {"message": "2FA disabled successfully"}
 
-    db_user = db.query(User).filter(User.username == "testuser").first()
+    db_user = db.query(User).filter(User.username == "mp_disable_user").first()
     assert db_user.is_2fa_enabled is False
     assert db_user.otp_secret is None
 
@@ -640,8 +671,9 @@ def test_disable_2fa_success(monkeypatch):
 def test_disable_2fa_user_not_found(monkeypatch):
     monkeypatch.setattr("api.routers.auth_2fa.auth_check", lambda x: None)
 
+    payload = Disable2FARequest(password="anything", code="000000")
     with pytest.raises(HTTPException) as exc:
-        disable_2fa(db=db, Authorize=MockAuth("nonexistent"))
+        disable_2fa(payload=payload, db=db, Authorize=MockAuth("nonexistent"))
 
     assert exc.value.status_code == 404
     assert exc.value.detail == "User not found"

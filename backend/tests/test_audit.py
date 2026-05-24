@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker, Session
 from fastapi import HTTPException
 from api.db.database import Base
 from api.db.models.audit import AuditLog
+from api.db.models.users import User
 from api.routers.audit import get_audit_logs, get_db
 
 engine = create_engine('sqlite:///:memory:')
@@ -28,6 +29,10 @@ def db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
+    # /audit/ is superuser-gated now; seed the admin user that MockAuthValid
+    # resolves to so require_superuser passes.
+    db.add(User(username="admin", hashed_password="pw", is_superuser=True))
+    db.commit()
     yield db
     db.close()
 

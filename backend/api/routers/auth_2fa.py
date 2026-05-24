@@ -7,6 +7,7 @@ from api.db.models.users import User
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
 from api.utils.crypto import encrypt, decrypt
+from api.db.crud.users import verify_password
 import pyotp
 import qrcode
 import io
@@ -119,8 +120,18 @@ def enable_2fa(
         )
 
 
+class Disable2FARequest(BaseModel):
+    # Password reconfirmation is required to disable 2FA. Without it, a
+    # hijacked session (XSS, stolen cookie, leaked API key) could drop
+    # the user's second factor and downgrade them to single-factor auth
+    # without ever needing the password — defeating the point of 2FA.
+    password: str
+    code: Optional[str] = None
+
+
 @router.post("/disable")
 def disable_2fa(
+    payload: Disable2FARequest = Body(...),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
@@ -130,6 +141,26 @@ def disable_2fa(
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Password incorrect")
+
+    # If 2FA is currently enabled we additionally require a fresh TOTP
+    # code so the disable path can't be completed purely from the session
+    # cookie + a leaked/old password. The code check is skipped if 2FA
+    # was never enabled (idempotent disable).
+    if user.is_2fa_enabled:
+        if not payload.code:
+            raise HTTPException(status_code=400, detail="2FA code required")
+        try:
+            secret = decrypt(user.otp_secret)
+            totp = pyotp.TOTP(secret)
+            if not totp.verify(payload.code):
+                raise HTTPException(status_code=400, detail="Invalid 2FA code")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid 2FA code")
 
     user.is_2fa_enabled = False
     user.otp_secret = None

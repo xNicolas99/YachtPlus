@@ -47,6 +47,30 @@ def auth_check_setup_pending(
     else:
         Authorize.jwt_required(allow_setup_pending=True)
 
+def require_superuser(Authorize: get_auth_wrapper, db: Session) -> User:
+    """Reject anyone who isn't an active superuser.
+
+    Centralised gate for endpoints that mutate shared config (template
+    variables, SMTP, audit log, settings import/export, host-level update)
+    or read sensitive cross-tenant state (audit log).
+
+    Returns the resolved User row so callers can audit/log without a second
+    DB hit. Honours DISABLE_AUTH for dev mode parity with auth_check().
+    """
+    if settings.DISABLE_AUTH is True:
+        return None  # type: ignore[return-value]
+    Authorize.jwt_required(allow_setup_pending=False)
+    username = Authorize.get_jwt_subject()
+    if not username:
+        raise HTTPException(status_code=401, detail="Not logged in.")
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found or deleted")
+    if not user.is_superuser:
+        raise HTTPException(status_code=403, detail="Superuser required.")
+    return user
+
+
 def check_permission(permission_name: str, Authorize: get_auth_wrapper, db: Session):
     """
     Checks if the current user has the specified permission.

@@ -42,10 +42,12 @@ def test_get_setup_status(mock_is_setup_completed, mock_exists, override_db, exp
     assert response.status_code == 200
     assert response.json() == {"is_setup": expected_is_setup}
 
+# bypass_setup is now dev-mode-only (DISABLE_AUTH=True). The success-path
+# tests below open the gate via a Settings patch; an additional production-
+# mode regression test lives in test_setup_bypass_guard.py.
 @patch("api.routers.setup.setup.os.path.exists", return_value=False)
 @patch("api.main.is_setup_completed", return_value=True) # Bypass main's middleware
 def test_bypass_setup(mock_is_setup_completed, mock_exists):
-    # Using a fake DB with real query/add/commit mock
     db = MagicMock()
     def mock_query(model):
         q = MagicMock()
@@ -58,7 +60,9 @@ def test_bypass_setup(mock_is_setup_completed, mock_exists):
 
     app.dependency_overrides[get_db] = lambda: db
 
-    response = client.post("/api/setup/bypass")
+    with patch("api.settings.Settings") as fake_settings_cls:
+        fake_settings_cls.return_value.DISABLE_AUTH = True
+        response = client.post("/api/setup/bypass")
     assert response.status_code == 200
     assert response.json() == {"message": "Setup bypassed"}
     db.add.assert_called()
@@ -157,7 +161,9 @@ def test_mark_setup_completed_file_error(mock_makedirs):
 def test_bypass_setup_already_completed(mock_is_setup_completed, mock_exists):
     db = MagicMock()
     # Mocking is_setup_completed return True inside the route handler
-    with patch("api.routers.setup.setup.is_setup_completed", return_value=True):
+    with patch("api.routers.setup.setup.is_setup_completed", return_value=True), \
+         patch("api.settings.Settings") as fake_settings_cls:
+        fake_settings_cls.return_value.DISABLE_AUTH = True
         app.dependency_overrides[get_db] = lambda: db
         response = client.post("/api/setup/bypass")
         assert response.status_code == 200
@@ -180,7 +186,9 @@ def test_bypass_setup_users_exist(mock_is_setup_completed, mock_exists):
         return q
     db.query.side_effect = mock_query
 
-    with patch("api.routers.setup.setup.is_setup_completed", return_value=False):
+    with patch("api.routers.setup.setup.is_setup_completed", return_value=False), \
+         patch("api.settings.Settings") as fake_settings_cls:
+        fake_settings_cls.return_value.DISABLE_AUTH = True
         app.dependency_overrides[get_db] = lambda: db
         response = client.post("/api/setup/bypass")
         assert response.status_code == 400
@@ -205,7 +213,9 @@ def test_bypass_setup_existing_status(mock_is_setup_completed, mock_exists):
         return q
     db.query.side_effect = mock_query
 
-    with patch("api.routers.setup.setup.is_setup_completed", return_value=False):
+    with patch("api.routers.setup.setup.is_setup_completed", return_value=False), \
+         patch("api.settings.Settings") as fake_settings_cls:
+        fake_settings_cls.return_value.DISABLE_AUTH = True
         app.dependency_overrides[get_db] = lambda: db
         response = client.post("/api/setup/bypass")
         assert response.status_code == 200

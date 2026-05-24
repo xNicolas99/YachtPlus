@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, List, Any
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
@@ -13,9 +13,19 @@ import asyncio
 
 router = APIRouter()
 
+# Caps for the unified search:
+#  - q max 128 chars: prevents huge LIKE patterns that pin the DB on a
+#    full-table scan and keeps the DockerHub registry query bounded.
+#  - q min 1 char: empty `q` would match every template row.
+#  - max_results: hard ceiling on rows we serialize back so a tiny query
+#    can't fan out into a megabyte response.
+SEARCH_QUERY_MAX_LEN = 128
+SEARCH_RESULT_LIMIT = 100
+
+
 @router.get("/")
 async def search(
-    q: str,
+    q: str = Query(..., min_length=1, max_length=SEARCH_QUERY_MAX_LEN),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
@@ -36,7 +46,7 @@ async def search(
 
     # Convert ORM objects to dicts or Pydantic models
     template_results = []
-    for t in template_results_orm:
+    for t in template_results_orm[:SEARCH_RESULT_LIMIT]:
         template_results.append({
             "id": t.id,
             "title": t.title,
@@ -46,6 +56,9 @@ async def search(
             "logo": t.logo,
             "url": t.url
         })
+
+    if isinstance(dockerhub_results, list):
+        dockerhub_results = dockerhub_results[:SEARCH_RESULT_LIMIT]
 
     return {
         "dockerhub": dockerhub_results,

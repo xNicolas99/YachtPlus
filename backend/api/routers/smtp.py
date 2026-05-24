@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from api.db.database import SessionLocal
 from api.db.models.settings import SMTPSettings
 from api.auth.jwt import get_auth_wrapper
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, require_superuser
 from typing import Optional
 
 router = APIRouter()
@@ -40,7 +40,11 @@ def get_smtp_settings(db: Session = Depends(get_db), Authorize: get_auth_wrapper
 
 @router.post("/", response_model=SMTPSettingsSchema)
 def update_smtp_settings(settings: SMTPSettingsSchema, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    # SMTP server credentials are instance-global config. A non-admin who
+    # could overwrite them could redirect alert mail to a domain they
+    # control (credential phish / silent alerting downgrade) — superuser
+    # only.
+    require_superuser(Authorize, db)
     db_settings = db.query(SMTPSettings).first()
     if not db_settings:
         db_settings = SMTPSettings(**settings.dict())
@@ -54,7 +58,11 @@ def update_smtp_settings(settings: SMTPSettingsSchema, db: Session = Depends(get
 
 @router.post("/test")
 def send_test_email(email_data: TestEmailSchema, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    # Without a superuser gate this route is an authenticated open relay:
+    # any user can fire mail through the configured SMTP server to any
+    # arbitrary recipient, which is both a spam vector and a way to burn
+    # the configured mail server's reputation.
+    require_superuser(Authorize, db)
     settings = db.query(SMTPSettings).first()
     if not settings:
         raise HTTPException(status_code=400, detail="SMTP settings not configured")

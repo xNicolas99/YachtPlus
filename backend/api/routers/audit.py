@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
 from api.db.models.audit import AuditLog
 from api.auth.jwt import get_auth_wrapper
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, require_superuser
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
@@ -37,6 +37,14 @@ def get_audit_logs(
     """
     Fetch the latest audit logs.
     """
-    auth_check(Authorize)
+    # Audit log leaks who did what to which container plus admin usernames;
+    # gate behind superuser so a low-privileged operator can't enumerate
+    # admin activity or use the log as a reconnaissance channel.
+    require_superuser(Authorize, db)
+    # Clamp limit so a hostile caller can't request the whole table.
+    if limit < 1:
+        limit = 1
+    if limit > 1000:
+        limit = 1000
     logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
     return logs

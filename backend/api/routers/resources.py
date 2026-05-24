@@ -1,10 +1,12 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 from api.auth.jwt import get_auth_wrapper
 
 from api.actions import resources
 from api.db.schemas.resources import ImageWrite, VolumeWrite, NetworkWrite
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, require_superuser
+from api.utils.auth import get_db
 
 router = APIRouter()
 ### Images ###
@@ -45,8 +47,15 @@ async def pull_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wr
 @router.delete(
     "/images/{image_id}",
 )
-async def delete_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def delete_image(
+    image_id,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    # Image deletion is destructive and shared across the whole host; a
+    # non-admin pulling the rug out under another user's deploy is a real
+    # availability issue. Gate behind superuser.
+    require_superuser(Authorize, db)
     return await resources.delete_image(image_id)
 
 
@@ -78,8 +87,14 @@ async def get_volume(volume_name, Authorize: get_auth_wrapper = Depends(get_auth
 @router.delete(
     "/volumes/{volume_name}",
 )
-async def delete_volume(volume_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def delete_volume(
+    volume_name,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    # Volume deletion permanently destroys data — without a superuser gate
+    # any logged-in operator could wipe another team's persistent state.
+    require_superuser(Authorize, db)
     return await resources.delete_volume(volume_name)
 
 

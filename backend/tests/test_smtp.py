@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from api.db.database import Base
 from api.db.models.settings import SMTPSettings
+from api.db.models.users import User
 from api.routers.smtp import (
     SMTPSettingsSchema,
     TestEmailSchema as _TestEmailSchema,
@@ -41,6 +42,11 @@ def db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     session = SessionLocal()
+    # SMTP routes are now superuser-gated. Seed the admin user that
+    # MockAuthValid.get_jwt_subject() returns so require_superuser
+    # resolves to a real, privileged account.
+    session.add(User(username="admin", hashed_password="pw", is_superuser=True))
+    session.commit()
     yield session
     session.close()
 

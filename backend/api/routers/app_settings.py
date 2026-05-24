@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from api.utils.auth import get_db
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, require_superuser
 
 from api.db.crud import templates as crud
 from api.db.crud import settings as scrud
@@ -46,7 +46,10 @@ def set_template_variables(
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    auth_check(Authorize)
+    # Template variables substitute into every deploy — a non-admin who can
+    # overwrite ${REGISTRY} or ${DOMAIN} can redirect future deploys to a
+    # registry/host they control. Gate behind superuser.
+    require_superuser(Authorize, db)
     return crud.set_template_variables(new_variables=new_variables, db=db)
 
 
@@ -67,7 +70,10 @@ def import_settings(
     upload: UploadFile = File(...),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    auth_check(Authorize)
+    # Settings import overwrites the whole settings table from an uploaded
+    # JSON blob; any authenticated user could otherwise wipe the config of
+    # the entire instance. Gate behind superuser.
+    require_superuser(Authorize, db)
     return scrud.import_settings(db=db, upload=upload)
 
 
@@ -82,8 +88,15 @@ def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_aut
 @router.get(
     "/update",
 )
-def update_self(background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+def update_self(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    # Pulls + restarts the YachtPlus container itself. A non-admin able to
+    # trigger this could force a denial-of-service via repeated restarts or
+    # interrupt admin work mid-deploy. Restrict to superusers.
+    require_superuser(Authorize, db)
     return _update_self(background_tasks)
 
 
