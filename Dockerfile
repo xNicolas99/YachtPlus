@@ -25,9 +25,15 @@ FROM python:3.11-slim AS deploy-stage
 ENV PYTHONIOENCODING=UTF-8
 ENV THEME=Default
 
-# Create user 'appuser' (UID 1000) early to use for COPY permissions
+# Create user 'appuser' (UID 1000) early to use for COPY permissions.
+# Give it a real $HOME — gunicorn 26's control server writes a socket
+# into HOME at startup, and without it you get `Control server error:
+# [Errno 13] Permission denied: '/home/appuser'` on every boot (the
+# workers still run, but it spams the log and prevents the control
+# socket from coming up).
 RUN groupadd -r appuser -g 1000 && \
-    useradd -u 1000 -r -g appuser -s /bin/bash -c "App User" appuser
+    useradd -u 1000 -r -g appuser -s /bin/bash -m -d /home/appuser -c "App User" appuser && \
+    chown -R 1000:1000 /home/appuser
 
 WORKDIR /api
 

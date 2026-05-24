@@ -25,6 +25,13 @@ chown -R 1000:1000 /var/log/nginx
 # Also ensure other app directories are writable if they were mounted incorrectly
 chown -R 1000:1000 /app /api
 
+# Belt-and-braces: older images may have been built without /home/appuser.
+# Gunicorn 26's control server writes a socket into $HOME; without this,
+# you see `Control server error: [Errno 13] Permission denied: '/home/appuser'`
+# in every boot log (workers run, but the control socket never comes up).
+mkdir -p /home/appuser
+chown 1000:1000 /home/appuser
+
 # Drop privileges and run the application
 echo "Starting Application as appuser (UID 1000)..."
 

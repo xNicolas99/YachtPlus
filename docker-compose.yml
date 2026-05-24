@@ -26,7 +26,12 @@ services:
   yachtplus:
     build: .
     ports:
-      - "8000:8000"
+      # Host 8000 -> container 8080 (nginx). Nginx serves the Vue SPA
+      # from / and reverse-proxies /api/* to gunicorn on 127.0.0.1:8000
+      # *inside* the container. Mapping host 8000 -> container 8000
+      # would bypass nginx and expose only the raw FastAPI, with no UI
+      # and no SPA routing — that was the "I can't access it" symptom.
+      - "8000:8080"
     environment:
       - DOCKER_HOST=tcp://dockerproxy:2375 # Proxy statt direktem Socket
     depends_on:
