@@ -206,7 +206,10 @@ async def test_start_container_handles_docker_error(db, mock_auth_enabled, mock_
         await start_container("abc", db=db, Authorize=MockAuthValid())
 
     assert exc.value.status_code == 500
-    assert "boom" in exc.value.detail
+    # The raw exception message is intentionally NOT echoed back to the
+    # caller (would leak daemon internals) — only a sanitized detail.
+    assert "boom" not in exc.value.detail
+    assert exc.value.detail in ("Internal error", "Failed to start container")
     docker_instance.close.assert_awaited_once()
 
 

@@ -1,5 +1,7 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
 from typing import List
+import io
+import json
 
 from sqlalchemy.orm import Session
 
@@ -74,6 +76,40 @@ def import_settings(
     # JSON blob; any authenticated user could otherwise wipe the config of
     # the entire instance. Gate behind superuser.
     require_superuser(Authorize, db)
+
+    # Bound the upload BEFORE handing it to the CRUD layer:
+    #  - content_type: reject anything that doesn't claim to be JSON so a
+    #    user can't accidentally upload e.g. a 5 GB MP4.
+    #  - size: cap at 5 MiB. A legit settings export is a few KB; anything
+    #    larger is either a mistake or an OOM attempt against the worker
+    #    that calls upload.file.read() unconditionally.
+    #  - JSON well-formedness: parsing here gives a clean 400 instead of
+    #    a 500 from inside the CRUD layer.
+    MAX_IMPORT_BYTES = 5 * 1024 * 1024
+    allowed_content_types = {"application/json", "text/json", "application/octet-stream"}
+    ctype = (upload.content_type or "").lower().split(";")[0].strip()
+    if ctype and ctype not in allowed_content_types:
+        raise HTTPException(status_code=415, detail="Settings import must be application/json")
+
+    raw = upload.file.read(MAX_IMPORT_BYTES + 1)
+    if len(raw) > MAX_IMPORT_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Settings import exceeds {MAX_IMPORT_BYTES} bytes",
+        )
+    try:
+        raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Settings import must be UTF-8 text")
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Settings import is not valid JSON")
+
+    # Hand the CRUD layer a fresh file-like view so its `upload.file.read()`
+    # call sees the same bytes we just validated (the original stream was
+    # consumed by .read above).
+    upload.file = io.BytesIO(raw)
     return scrud.import_settings(db=db, upload=upload)
 
 

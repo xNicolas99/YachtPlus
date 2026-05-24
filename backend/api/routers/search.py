@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Dict, List, Any
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
 from sqlalchemy.orm import Session
 from api.utils.auth import get_db
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 import api.utils.registries as registries
 from api.db.crud.templates import match_templates
@@ -12,6 +14,12 @@ from fastapi.concurrency import run_in_threadpool
 import asyncio
 
 router = APIRouter()
+
+# Each search round-trips out to the DockerHub registry; without a rate
+# limit a hostile (or just buggy) client could turn this endpoint into a
+# free amplification proxy against the upstream registry, getting both
+# the YachtPlus instance and its host IP throttled.
+limiter = Limiter(key_func=get_remote_address)
 
 # Caps for the unified search:
 #  - q max 128 chars: prevents huge LIKE patterns that pin the DB on a
@@ -24,7 +32,9 @@ SEARCH_RESULT_LIMIT = 100
 
 
 @router.get("/")
+@limiter.limit("30/minute")
 async def search(
+    request: Request,
     q: str = Query(..., min_length=1, max_length=SEARCH_QUERY_MAX_LEN),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)

@@ -1,5 +1,7 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
 from api.db.models.users import User
@@ -9,7 +11,10 @@ from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
 from api.db.models.setup import SetupStatus
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 # Short-lived window in which the user must complete 2FA setup and call
 # /finalize. Long enough for a normal scan-the-QR-and-enter-code flow,
@@ -18,7 +23,51 @@ SETUP_PENDING_TOKEN_LIFETIME = timedelta(minutes=15)
 
 router = APIRouter()
 
-SETUP_FLAG_FILE = os.environ.get("SETUP_FLAG_FILE", "/config/.setup_completed")
+# /setup/register is unauthenticated by design (it bootstraps the first
+# admin) so without a rate limit it doubles as a CPU exhaust vector via
+# bcrypt — each call invokes the work-factor-12 hash. Cap at a value
+# that's still comfortable for a real install over a flaky connection.
+limiter = Limiter(key_func=get_remote_address)
+
+# Whitelist the directories the setup flag file is allowed to live under.
+# /config is the production volume mount; the rest cover the test-suite
+# tmpdirs and Windows dev paths. The env override is honoured only if its
+# resolved path lies inside one of these roots — otherwise we fall back
+# to the default. This stops a hostile SETUP_FLAG_FILE value from being
+# used as a path-traversal primitive to drop a file outside the volume.
+_SETUP_FLAG_ALLOWED_ROOTS = (
+    "/config",
+    "/tmp",
+    "/var/folders",
+    os.path.abspath(os.getcwd()),
+)
+
+
+def _resolve_setup_flag_file() -> str:
+    requested = os.environ.get("SETUP_FLAG_FILE", "/config/.setup_completed")
+    try:
+        resolved = os.path.abspath(requested)
+    except (TypeError, ValueError):
+        return "/config/.setup_completed"
+    for root in _SETUP_FLAG_ALLOWED_ROOTS:
+        try:
+            root_abs = os.path.abspath(root)
+        except (TypeError, ValueError):
+            continue
+        # commonpath raises if drives differ on Windows; treat that as a miss.
+        try:
+            if os.path.commonpath([resolved, root_abs]) == root_abs:
+                return resolved
+        except ValueError:
+            continue
+    logger.warning(
+        "SETUP_FLAG_FILE=%r outside allowed roots; falling back to default",
+        requested,
+    )
+    return "/config/.setup_completed"
+
+
+SETUP_FLAG_FILE = _resolve_setup_flag_file()
 
 def is_setup_completed(db: Session = None):
     if not db:
@@ -47,13 +96,26 @@ def mark_setup_completed(db: Session):
         status.is_complete = True
     db.commit()
 
-    # Legacy file (optional but good for backwards compatibility)
+    # Legacy file (optional but good for backwards compatibility).
+    # Failures are non-fatal — the DB row is the source of truth — but
+    # we log them at warning level so a wedged read-only volume or
+    # permission flip on /config doesn't silently degrade the legacy
+    # fallback path. The bare `except: pass` here previously hid those.
     try:
         os.makedirs(os.path.dirname(SETUP_FLAG_FILE), exist_ok=True)
         with open(SETUP_FLAG_FILE, "w") as f:
             f.write("Setup completed")
-    except Exception:
-        pass # Don't fail if filesystem is read-only, we rely on DB now
+    except Exception as e:
+        # Bare `except: pass` was masking real failures (permission flips,
+        # disk full, read-only volume). Catch broadly so we never break
+        # setup over a flag-file fluke, but log loud enough to be
+        # diagnosable from server logs.
+        logger.warning(
+            "Could not write SETUP_FLAG_FILE=%s (DB row is the source of "
+            "truth, continuing): %s",
+            SETUP_FLAG_FILE,
+            e,
+        )
 
 @router.get("/status")
 def get_setup_status(db: Session = Depends(get_db)):
@@ -99,7 +161,9 @@ def bypass_setup(db: Session = Depends(get_db)):
     return {"message": "Setup bypassed"}
 
 @router.post("/register")
+@limiter.limit("10/minute")
 def register_first_user(
+    request: Request,
     response: Response,
     user: UserCreate,
     db: Session = Depends(get_db),

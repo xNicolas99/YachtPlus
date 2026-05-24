@@ -175,17 +175,27 @@ def login(
                     "username": _user.username
                 }
             else:
+                # The previous implementation wrapped totp.verify() in a
+                # broad `except Exception` that ALSO caught the legitimate
+                # HTTPException(400) raised on a bad code — collapsing two
+                # distinct failure modes into one ambiguous handler and
+                # making it impossible to tell wrong-code from
+                # crypto-corruption in production. Re-raise HTTPException
+                # cleanly and only swallow real decrypt/parse errors.
                 try:
                     secret = decrypt(_user.otp_secret)
                     totp = pyotp.TOTP(secret)
-                    if not totp.verify(user_data.otp_token):
-                        record_login_attempt(db, client_ip, user_data.username, False)
-                        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+                    code_ok = totp.verify(user_data.otp_token)
+                except HTTPException:
+                    raise
                 except Exception as e:
                     logger.error(f"2FA Verify Error: {e}")
                     record_login_attempt(db, client_ip, user_data.username, False)
                     logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
+                    raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+                if not code_ok:
+                    record_login_attempt(db, client_ip, user_data.username, False)
+                    logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                     raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
         # Success
@@ -244,14 +254,17 @@ def login_cookie(
              try:
                  secret = decrypt(_user.otp_secret)
                  totp = pyotp.TOTP(secret)
-                 if not totp.verify(user_data.otp_token):
-                     record_login_attempt(db, client_ip, user_data.username, False)
-                     logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                     raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+                 code_ok = totp.verify(user_data.otp_token)
+             except HTTPException:
+                 raise
              except Exception as e:
                  logger.error(f"2FA Verify Error: {e}")
                  record_login_attempt(db, client_ip, user_data.username, False)
                  logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
+                 raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+             if not code_ok:
+                 record_login_attempt(db, client_ip, user_data.username, False)
+                 logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                  raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
         record_login_attempt(db, client_ip, user_data.username, True)

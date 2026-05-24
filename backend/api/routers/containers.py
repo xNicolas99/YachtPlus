@@ -5,6 +5,7 @@ from api.auth.auth import auth_check
 import api.actions.containers as actions
 import asyncio
 import aiodocker
+from aiodocker.exceptions import DockerError
 import logging
 import jwt
 import json
@@ -137,9 +138,17 @@ async def start_container(
         await container.start()
         log_activity(db, user=user, action="start", resource=container_id)
         return {"message": "Container started"}
+    except DockerError as e:
+        # Map docker daemon errors to their proper HTTP status (404 for
+        # "no such container", 409 for "already started", etc.) instead
+        # of collapsing everything to 500 with the raw message — which
+        # could echo internal paths / daemon details back to the client.
+        logger.error("Error starting container %s: %s", container_id, e)
+        status_code = getattr(e, "status", 500) or 500
+        raise HTTPException(status_code=status_code, detail="Failed to start container")
     except Exception as e:
-        logger.error(f"Error starting container {container_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Unexpected error starting container %s", container_id)
+        raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
 
@@ -158,9 +167,13 @@ async def stop_container(
         await container.stop()
         log_activity(db, user=user, action="stop", resource=container_id)
         return {"message": "Container stopped"}
-    except Exception as e:
-        logger.error(f"Error stopping container {container_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except DockerError as e:
+        logger.error("Error stopping container %s: %s", container_id, e)
+        status_code = getattr(e, "status", 500) or 500
+        raise HTTPException(status_code=status_code, detail="Failed to stop container")
+    except Exception:
+        logger.exception("Unexpected error stopping container %s", container_id)
+        raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
 
@@ -179,9 +192,13 @@ async def restart_container(
         await container.restart()
         log_activity(db, user=user, action="restart", resource=container_id)
         return {"message": "Container restarted"}
-    except Exception as e:
-        logger.error(f"Error restarting container {container_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except DockerError as e:
+        logger.error("Error restarting container %s: %s", container_id, e)
+        status_code = getattr(e, "status", 500) or 500
+        raise HTTPException(status_code=status_code, detail="Failed to restart container")
+    except Exception:
+        logger.exception("Unexpected error restarting container %s", container_id)
+        raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
 
@@ -201,9 +218,19 @@ async def delete_container(
         await container.delete(force=True)
         log_activity(db, user=user, action="delete", resource=container_id)
         return {"message": "Container deleted"}
-    except Exception as e:
-        logger.error(f"Error deleting container {container_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except DockerError as e:
+        # 404 for "no such container" is the right answer — the previous
+        # blanket 500 made it impossible for the frontend to distinguish
+        # "you deleted something that never existed" from "the docker
+        # daemon is unreachable".
+        logger.error("Error deleting container %s: %s", container_id, e)
+        status_code = getattr(e, "status", 500) or 500
+        if status_code == 404:
+            raise HTTPException(status_code=404, detail="Container not found")
+        raise HTTPException(status_code=status_code, detail="Failed to delete container")
+    except Exception:
+        logger.exception("Unexpected error deleting container %s", container_id)
+        raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
 
@@ -394,16 +421,22 @@ async def container_exec(
         reader.cancel()
         writer.cancel()
 
-    except aiodocker.exceptions.DockerError as e:
-        logger.error(f"Docker exec error: {e}")
-        await websocket.close(code=1011, reason=f"Docker error: {str(e)}")
-    except Exception as e:
-        logger.error(f"Unexpected error in shell: {e}")
+    except aiodocker.exceptions.DockerError:
+        # The previous code echoed the full DockerError message into the
+        # WS close `reason` field, which is visible to any caller. That
+        # leaked internal daemon details (file paths, container ids,
+        # capability names) on every failure. Keep the detail in the
+        # server log and send a generic reason over the wire.
+        logger.exception("Docker exec error for container %s", container_id)
+        await websocket.close(code=1011, reason="Docker error")
+    except Exception:
+        logger.exception("Unexpected error in shell for container %s", container_id)
         try:
-            await websocket.close(code=1011, reason=f"Internal error: {str(e)}")
-        except Exception as close_err:
-            # Socket may already be closed; nothing we can do but log it.
-            logger.debug(f"WS close after error failed: {close_err}")
+            await websocket.close(code=1011, reason="Internal error")
+        except Exception:
+            # Socket may already be closed; nothing we can do — but the
+            # stack trace above already captured the real cause.
+            logger.debug("WS close after error failed", exc_info=True)
     finally:
         if docker:
             await docker.close()

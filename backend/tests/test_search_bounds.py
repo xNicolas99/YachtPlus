@@ -7,14 +7,19 @@ arrays to SEARCH_RESULT_LIMIT before returning.
 """
 import asyncio
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from api.db.database import Base
 from api.routers import search as search_module
-from api.routers.search import search, SEARCH_QUERY_MAX_LEN, SEARCH_RESULT_LIMIT
+from api.routers.search import search, SEARCH_QUERY_MAX_LEN, SEARCH_RESULT_LIMIT, limiter as _search_limiter
+
+
+@pytest.fixture(autouse=True)
+def _disable_search_limiter(monkeypatch):
+    monkeypatch.setattr(_search_limiter, "enabled", False)
 
 
 engine = create_engine("sqlite:///:memory:")
@@ -65,7 +70,7 @@ def test_search_caps_template_results(db, monkeypatch):
     monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: overflow)
 
     result = asyncio.get_event_loop().run_until_complete(
-        search(q="nginx", db=db, Authorize=MockAuth())
+        search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     )
     assert len(result["templates"]) == SEARCH_RESULT_LIMIT
 
@@ -80,6 +85,6 @@ def test_search_caps_dockerhub_results(db, monkeypatch):
     monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: [])
 
     result = asyncio.get_event_loop().run_until_complete(
-        search(q="nginx", db=db, Authorize=MockAuth())
+        search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     )
     assert len(result["dockerhub"]) == SEARCH_RESULT_LIMIT

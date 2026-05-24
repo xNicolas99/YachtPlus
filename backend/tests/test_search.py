@@ -2,7 +2,15 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 
-from api.routers.search import search
+from api.routers.search import search, limiter as _search_limiter
+
+
+@pytest.fixture(autouse=True)
+def _disable_search_limiter(monkeypatch):
+    # slowapi's decorator demands a real starlette.Request as the first
+    # positional. These unit tests call the function directly, so disable
+    # the limiter rather than paper over it with fake Request stubs.
+    monkeypatch.setattr(_search_limiter, "enabled", False)
 
 
 class MockAuthValid:
@@ -54,7 +62,7 @@ async def test_search_returns_dockerhub_and_templates(mock_auth_enabled):
         "api.routers.search.match_templates",
         return_value=template_orm,
     ) as match_mock:
-        result = await search(q="nginx", db=db, Authorize=MockAuthValid())
+        result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
 
     registry_mock.assert_awaited_once_with("dockerhub", "nginx")
     match_mock.assert_called_once_with(db, "nginx")
@@ -76,7 +84,7 @@ async def test_search_empty_query_results(mock_auth_enabled):
         "api.routers.search.match_templates",
         return_value=[],
     ):
-        result = await search(q="zzz", db=db, Authorize=MockAuthValid())
+        result = await search(request=MagicMock(), q="zzz", db=db, Authorize=MockAuthValid())
 
     assert result == {"dockerhub": [], "templates": []}
 
@@ -102,7 +110,7 @@ async def test_search_template_orm_conversion(mock_auth_enabled):
         "api.routers.search.match_templates",
         return_value=template_orm,
     ):
-        result = await search(q="plex", db=db, Authorize=MockAuthValid())
+        result = await search(request=MagicMock(), q="plex", db=db, Authorize=MockAuthValid())
 
     t = result["templates"][0]
     assert t == {
@@ -120,7 +128,7 @@ async def test_search_template_orm_conversion(mock_auth_enabled):
 async def test_search_unauthorized(mock_auth_enabled):
     db = MagicMock()
     with pytest.raises(HTTPException) as exc:
-        await search(q="nginx", db=db, Authorize=MockAuthInvalid())
+        await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthInvalid())
     assert exc.value.status_code == 401
 
 
@@ -135,7 +143,7 @@ async def test_search_propagates_registry_failure(mock_auth_enabled):
         return_value=[],
     ):
         with pytest.raises(RuntimeError) as exc:
-            await search(q="nginx", db=db, Authorize=MockAuthValid())
+            await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
     assert "registry down" in str(exc.value)
 
 
@@ -150,7 +158,7 @@ async def test_search_propagates_template_failure(mock_auth_enabled):
         side_effect=RuntimeError("db boom"),
     ):
         with pytest.raises(RuntimeError) as exc:
-            await search(q="nginx", db=db, Authorize=MockAuthValid())
+            await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
     assert "db boom" in str(exc.value)
 
 
@@ -170,7 +178,7 @@ async def test_search_runs_template_match_in_threadpool(mock_auth_enabled):
         "api.routers.search.match_templates",
         return_value=[],
     ) as match_mock:
-        await search(q="abc", db=db, Authorize=MockAuthValid())
+        await search(request=MagicMock(), q="abc", db=db, Authorize=MockAuthValid())
 
     run_in_threadpool_mock.assert_awaited_once()
     # The first positional argument is the sync function reference
