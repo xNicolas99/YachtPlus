@@ -186,19 +186,52 @@ class AuthWrapper:
         return self.jwt_required(allow_setup_pending=allow_setup_pending).username
 
     def unset_jwt_cookies(self, response):
-        response.delete_cookie("access_token_cookie")
+        # path must match the one used in set_access_cookies, else the
+        # browser keeps the original cookie around (silent /logout no-op).
+        response.delete_cookie("access_token_cookie", path="/")
+
+    def _resolve_secure_flag(self) -> bool:
+        """Decide whether to mark the access-token cookie Secure.
+
+        Three cases:
+          - settings.SECURE_COOKIES is True  -> always Secure (admin opted in).
+          - settings.SECURE_COOKIES is False -> never Secure (admin opted out).
+          - settings.SECURE_COOKIES is None  -> auto: Secure only if THIS
+            request is HTTPS. We check the URL scheme first; behind nginx
+            that's always http://, so we also honour X-Forwarded-Proto.
+            (X-Forwarded-Proto is set by *our own* nginx in nginx.conf, so
+            trusting it here is safe — a remote attacker can't reach the
+            gunicorn worker except through that proxy.)
+
+        Without this auto-detect the LAN/HTTP setup flow was unrecoverable:
+        the browser refused the Secure cookie over http://192.168.x.y and
+        every subsequent /2fa/* call returned 401.
+        """
+        explicit = settings.SECURE_COOKIES
+        if explicit is True:
+            return True
+        if explicit is False:
+            return False
+        scheme = (self.request.url.scheme or "").lower()
+        if scheme == "https":
+            return True
+        forwarded_proto = self.request.headers.get("x-forwarded-proto", "")
+        # The header can be a comma-separated list ("https, http") when
+        # there are multiple proxies; the FIRST hop is the one closest
+        # to the original client, which is what we care about.
+        if forwarded_proto.split(",")[0].strip().lower() == "https":
+            return True
+        return False
 
     def set_access_cookies(self, token, response, max_age=None):
-        # We need to set the cookie.
-        # Using settings from main.py / settings.py
-        # Logic to enable/disable secure flag for LAN vs Prod
         response.set_cookie(
             key="access_token_cookie",
             value=token,
             httponly=True,
             max_age=max_age or int(settings.ACCESS_TOKEN_EXPIRES),
             samesite=settings.SAME_SITE_COOKIES,
-            secure=settings.SECURE_COOKIES
+            secure=self._resolve_secure_flag(),
+            path="/",  # explicit so it's sent on every API path, not just /api/setup/*
         )
 
 def get_auth_wrapper(request: Request):

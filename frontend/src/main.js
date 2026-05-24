@@ -60,6 +60,11 @@ const protocol = window.location.protocol;
 const hostname = window.location.hostname;
 const port = window.location.port ? `:${window.location.port}` : "";
 axios.defaults.baseURL = `${protocol}//${hostname}${port}/api`;
+// Send the access_token_cookie on every request — the setup wizard and
+// all 2FA / refresh calls rely on it. Previously each call site had to
+// opt in via `{ withCredentials: true }`, and the setup actions didn't,
+// so the cookie never reached /auth/2fa/* (401 -> QR never loaded).
+axios.defaults.withCredentials = true;
 
 // Auth Interceptor
 function createAxiosResponseInterceptor() {

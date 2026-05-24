@@ -409,7 +409,9 @@ def test_auth_wrapper_unset_jwt_cookies():
 
     wrapper.unset_jwt_cookies(mock_response)
 
-    mock_response.delete_cookie.assert_called_once_with("access_token_cookie")
+    # path="/" must match the path used in set_access_cookies, else the
+    # browser keeps the original cookie alive.
+    mock_response.delete_cookie.assert_called_once_with("access_token_cookie", path="/")
 
 @patch("api.auth.jwt.settings.ACCESS_TOKEN_EXPIRES", new="3600")
 @patch("api.auth.jwt.settings.SAME_SITE_COOKIES", new="Lax")
@@ -429,7 +431,8 @@ def test_auth_wrapper_set_access_cookies():
         httponly=True,
         max_age=3600,
         samesite="Lax",
-        secure=True
+        secure=True,
+        path="/",
     )
 
 @patch("api.auth.jwt.settings.ACCESS_TOKEN_EXPIRES", new="3600")
@@ -450,7 +453,8 @@ def test_auth_wrapper_set_access_cookies_custom_max_age():
         httponly=True,
         max_age=7200,
         samesite="Lax",
-        secure=True
+        secure=True,
+        path="/",
     )
     data = {"setup_pending": True}
     token = create_access_token(data)
@@ -532,9 +536,12 @@ def test_verify_token_expired(credentials_exception):
     assert excinfo.value.detail == "Could not validate credentials"
 
 class MockRequest:
-    def __init__(self, headers=None, cookies=None):
+    def __init__(self, headers=None, cookies=None, scheme="http"):
         self.headers = headers or {}
         self.cookies = cookies or {}
+        # set_access_cookies inspects request.url.scheme + X-Forwarded-Proto
+        # to decide on the Secure flag now.
+        self.url = type("U", (), {"scheme": scheme})()
 
 def test_get_current_user_token_from_header():
     request = MockRequest(headers={"Authorization": "Bearer testtoken"})
@@ -570,16 +577,17 @@ class MockResponse:
         self.cookies = {}
         self.deleted_cookies = set()
 
-    def set_cookie(self, key, value, httponly, max_age, samesite, secure):
+    def set_cookie(self, key, value, httponly, max_age, samesite, secure, path="/"):
         self.cookies[key] = {
             "value": value,
             "httponly": httponly,
             "max_age": max_age,
             "samesite": samesite,
-            "secure": secure
+            "secure": secure,
+            "path": path,
         }
 
-    def delete_cookie(self, key):
+    def delete_cookie(self, key, path="/"):
         self.deleted_cookies.add(key)
 
 def test_auth_wrapper_jwt_required(monkeypatch):
@@ -736,7 +744,7 @@ def test_auth_wrapper_unset_jwt_cookies():
     wrapper = AuthWrapper(request)
     wrapper.unset_jwt_cookies(response)
 
-    response.delete_cookie.assert_called_once_with("access_token_cookie")
+    response.delete_cookie.assert_called_once_with("access_token_cookie", path="/")
 
 
 def test_auth_wrapper_set_access_cookies(monkeypatch):
@@ -756,7 +764,8 @@ def test_auth_wrapper_set_access_cookies(monkeypatch):
         httponly=True,
         max_age=3600,
         samesite="lax",
-        secure=True
+        secure=True,
+        path="/",
     )
 
 

@@ -50,8 +50,18 @@ class Settings(BaseSettings):
     # Auth & Cookies (Fixes for jwt.py/auth.py)
     DISABLE_AUTH: bool = False
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
-    # Erzwinge HTTPS-Cookies, wenn wir nicht in der Entwicklung sind
-    SECURE_COOKIES: bool = os.getenv("SECURE_COOKIES", ENVIRONMENT == "production")
+    # Tri-state. None (default) -> auto-detect per request: only mark the
+    # cookie Secure when the request itself is HTTPS (or X-Forwarded-Proto
+    # says so via a trusted proxy). This is what unblocks the LAN-over-HTTP
+    # setup flow — the previous default of `ENVIRONMENT == "production"`
+    # forced Secure=True even on plain http://192.168.x.y, which browsers
+    # then rejected and the whole post-register / 2FA flow died with 401.
+    # Set explicitly to True if you terminate TLS in front and want to be
+    # extra strict, or to False to disable the Secure flag everywhere.
+    SECURE_COOKIES: Optional[bool] = (
+        None if os.getenv("SECURE_COOKIES") is None
+        else os.getenv("SECURE_COOKIES").strip().lower() in ("1", "true", "yes", "on")
+    )
     SAME_SITE_COOKIES: str = "lax"
 
     # Networking. The default list covers localhost only; for LAN deploys
