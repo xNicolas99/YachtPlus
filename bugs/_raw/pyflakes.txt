@@ -1,0 +1,57 @@
+api/services/watchtower.py:1:1: 'os' imported but unused
+api/db/__init__.py:1:1: 'from .models import *' used; unable to detect undefined names
+api/db/__init__.py:1:1: '.models.*' imported but unused
+api/db/models/__init__.py:1:1: 'api.db.models.users.User' imported but unused
+api/db/models/__init__.py:1:1: 'api.db.models.users.APIKEY' imported but unused
+api/db/models/__init__.py:1:1: 'api.db.models.users.LoginAttempt' imported but unused
+api/db/models/__init__.py:2:1: 'api.db.models.containers.Template' imported but unused
+api/db/models/__init__.py:2:1: 'api.db.models.containers.TemplateVariables' imported but unused
+api/db/models/__init__.py:3:1: 'api.db.models.settings.Settings' imported but unused
+api/db/models/__init__.py:3:1: 'api.db.models.settings.SecretKey' imported but unused
+api/db/models/__init__.py:3:1: 'api.db.models.settings.TokenBlacklist' imported but unused
+api/db/models/__init__.py:4:1: '.setup.SetupStatus' imported but unused
+api/db/models/__init__.py:5:1: 'api.db.models.audit.AuditLog' imported but unused
+api/db/crud/users.py:165:5: local variable 'exc' is assigned to but never used
+api/db/crud/users.py:190:5: local variable 'expired_list' is assigned to but never used
+api/db/crud/templates.py:397:9: local variable 'template_vars' is assigned to but never used
+api/utils/security.py:30:5: local variable 'admin_user' is assigned to but never used
+api/utils/apps.py:7:1: 'docker' imported but unused
+api/utils/apps.py:233:5: local variable 'exc' is assigned to but never used
+api/utils/apps.py:332:62: redefinition of unused 'docker' from line 7
+api/utils/apps.py:337:20: undefined name 'DockerContainer'
+api/routers/users.py:4:1: 'typing.Optional' imported but unused
+api/routers/users.py:7:1: 'api.db.crud.users.verify_password' imported but unused
+api/routers/containers.py:1:1: 'fastapi.status' imported but unused
+api/routers/containers.py:288:5: local variable 'exec_id' is assigned to but never used
+api/routers/app_settings.py:12:1: 'api.db.models.containers' imported but unused
+api/routers/app_settings.py:13:1: 'api.db.database.engine' imported but unused
+api/routers/watchtower.py:4:1: 'api.auth.auth.auth_check' imported but unused
+api/routers/templates.py:10:1: 'api.db.models.containers.Base' imported but unused
+api/routers/templates.py:11:1: 'api.db.database.engine' imported but unused
+api/routers/audit.py:6:1: 'api.auth.auth.auth_check' imported but unused
+api/routers/apps.py:1:1: 'fastapi.status' imported but unused
+api/routers/apps.py:12:1: 'api.utils.apps.calculate_cpu_percent' imported but unused
+api/routers/apps.py:12:1: 'api.utils.apps.calculate_cpu_percent2' imported but unused
+api/routers/apps.py:12:1: 'api.utils.apps.format_bytes' imported but unused
+api/routers/apps.py:27:1: 'aiodocker' imported but unused
+api/routers/apps.py:28:1: 'json' imported but unused
+api/routers/apps.py:29:1: 'asyncio' imported but unused
+api/routers/search.py:1:1: 'fastapi.HTTPException' imported but unused
+api/routers/search.py:2:1: 'typing.Dict' imported but unused
+api/routers/search.py:2:1: 'typing.List' imported but unused
+api/routers/search.py:2:1: 'typing.Any' imported but unused
+api/routers/setup/setup.py:2:1: 'fastapi.Body' imported but unused
+api/routers/setup/setup.py:2:1: 'fastapi.Request' imported but unused
+api/routers/setup/setup.py:4:1: 'api.db.database.SessionLocal' imported but unused
+api/routers/setup/setup.py:10:1: 'api.auth.auth.auth_check' imported but unused
+api/routers/setup/__init__.py:1:1: '.setup.router' imported but unused
+api/actions/compose.py:76:5: local variable 'files' is assigned to but never used
+api/actions/compose.py:99:11: f-string is missing placeholders
+api/actions/compose.py:134:5: local variable 'files' is assigned to but never used
+api/actions/compose.py:158:11: f-string is missing placeholders
+api/actions/containers.py:275:13: local variable 'e' is assigned to but never used
+api/actions/apps.py:5:1: 'api.utils.apps.format_bytes' imported but unused
+api/actions/apps.py:22:1: 'api.utils.templates.conv2dict' imported but unused
+api/actions/apps.py:28:1: 'time' imported but unused
+api/actions/apps.py:29:1: 'subprocess' imported but unused
+api/auth/jwt.py:3:1: 'typing.Dict' imported but unused
