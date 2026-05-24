@@ -313,12 +313,40 @@ async def deploy_app(template: DeployForm):
         )
     except HTTPException as exc:
         raise exc
+    except docker.errors.APIError as exc:
+        # docker-py gives us a structured status_code + explanation; map
+        # it through instead of swallowing it into a generic 500. This is
+        # the path most "image not pullable / conflicting name / no such
+        # image" deploy failures take.
+        logger.warning(
+            "Deploy failed (docker APIError): status=%s detail=%s",
+            getattr(exc, "status_code", None),
+            getattr(exc, "explanation", None),
+        )
+        raise HTTPException(
+            status_code=getattr(exc, "status_code", 500) or 500,
+            detail=getattr(exc, "explanation", None) or "Docker daemon error",
+        )
     except (docker.errors.DockerException, aiodocker.exceptions.DockerError) as exc:
-        raise exc
-    except Exception as exc:
-         raise HTTPException(status_code=500, detail=str(exc))
+        logger.warning("Deploy failed (docker error): %s", exc)
+        raise HTTPException(
+            status_code=getattr(exc, "status", 500) or 500,
+            detail=getattr(exc, "message", None) or "Docker error",
+        )
+    except Exception:
+        # Don't echo the raw exception message to the client (could leak
+        # paths or config); log it loudly and return a sanitized 500.
+        logger.exception("Unexpected error deploying %s", template.name)
+        raise HTTPException(status_code=500, detail="Deploy failed")
 
-    logs = await launch.log(stdout=True, stderr=True)
+    try:
+        logs = await launch.log(stdout=True, stderr=True)
+    except Exception:
+        # A deploy that succeeded but whose log fetch failed should NOT
+        # be a 500 — the container is already running. Return an empty
+        # log body so the frontend can confirm success.
+        logger.exception("Deploy succeeded but log fetch failed for %s", template.name)
+        logs = []
     return DeployLogs(logs="".join(logs))
 
 def Merge(dict1, dict2):

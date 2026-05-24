@@ -2,7 +2,8 @@ from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.trustedhost import TrustedHostMiddleware
+from starlette.responses import PlainTextResponse
+import ipaddress
 import os
 
 # Import ALL routers (Fixed 'settings' -> 'app_settings')
@@ -72,11 +73,50 @@ app.add_middleware(
 
 # Reject requests with Host headers that aren't in ALLOWED_HOSTS so the API
 # can't be tricked into emitting absolute URLs (password resets etc.) under
-# an attacker-controlled host.
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=get_settings().ALLOWED_HOSTS,
-)
+# an attacker-controlled host. Two convenience escapes from the strict
+# whitelist for the typical YachtPlus deployment (LAN / private network):
+#
+#   1. YACHT_ALLOWED_HOSTS="*"  -> disable host pinning entirely.
+#   2. ALLOW_PRIVATE_NETWORK_HOSTS=true (default) -> accept any RFC 1918 /
+#      link-local IP literal in addition to the configured list. This is
+#      what unblocks the "I hit http://192.168.1.42:8000/" case without
+#      forcing every user to edit ALLOWED_HOSTS.
+_host_settings = get_settings()
+_allowed_hosts_raw = list(_host_settings.ALLOWED_HOSTS)
+
+
+def _host_allowed(host_header: str) -> bool:
+    if not host_header:
+        # An empty Host header is a protocol-level oddity; reject it.
+        return False
+    # Strip the port and any IPv6 brackets.
+    hostname = host_header.split(":")[0].strip("[]").lower()
+    if "*" in _allowed_hosts_raw:
+        return True
+    for allowed in _allowed_hosts_raw:
+        allowed = allowed.strip().lower()
+        if not allowed:
+            continue
+        if allowed == hostname:
+            return True
+        # Starlette-style suffix wildcards: "*.example.com".
+        if allowed.startswith("*.") and hostname.endswith(allowed[1:]):
+            return True
+    if _host_settings.ALLOW_PRIVATE_NETWORK_HOSTS:
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            return False
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    return False
+
+
+@app.middleware("http")
+async def _trusted_host_middleware(request: Request, call_next):
+    host_header = request.headers.get("host", "")
+    if not _host_allowed(host_header):
+        return PlainTextResponse("Invalid host header", status_code=400)
+    return await call_next(request)
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):

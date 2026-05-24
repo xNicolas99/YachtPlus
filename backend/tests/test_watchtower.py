@@ -4,8 +4,9 @@ import pytest
 from api.services.watchtower import update_compose_project
 
 @patch("api.services.watchtower.logger")
-@patch("api.services.watchtower.compose_action", new_callable=MagicMock)
-def test_update_compose_project_success(mock_compose_action, mock_logger):
+@patch("api.services.watchtower._compose_action_sync", new_callable=MagicMock)
+def test_update_compose_project_success(mock_sync_action, mock_logger):
+    mock_compose_action = mock_sync_action
     """
     Test that update_compose_project successfully calls compose_action twice
     and logs appropriately.
@@ -22,8 +23,9 @@ def test_update_compose_project_success(mock_compose_action, mock_logger):
     mock_logger.info.assert_any_call("Successfully updated test_project")
 
 @patch("api.services.watchtower.logger")
-@patch("api.services.watchtower.compose_action", new_callable=MagicMock)
-def test_update_compose_project_exception(mock_compose_action, mock_logger):
+@patch("api.services.watchtower._compose_action_sync", new_callable=MagicMock)
+def test_update_compose_project_exception(mock_sync_action, mock_logger):
+    mock_compose_action = mock_sync_action
     """
     Test that update_compose_project handles exceptions raised by compose_action,
     and logs the error instead of bubbling up.

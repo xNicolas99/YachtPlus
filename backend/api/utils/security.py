@@ -95,6 +95,21 @@ def _is_trusted_proxy(client_ip: str) -> bool:
     return False
 
 
+def rate_limit_key(request: Request) -> str:
+    """slowapi `key_func` that respects TRUSTED_PROXIES.
+
+    Previously every limiter used slowapi.util.get_remote_address, which
+    returns `request.client.host` and therefore reported 127.0.0.1 for
+    every request — because YachtPlus's own nginx sits in front of
+    gunicorn on the loopback. That made the rate limit globally shared:
+    one bad actor could blow the budget for every other user. Routing
+    through _resolve_client_ip honours X-Real-IP / X-Forwarded-For ONLY
+    when the direct peer is in TRUSTED_PROXIES, so a sibling container
+    can't spoof the header to dodge the limit either.
+    """
+    return _resolve_client_ip(request)
+
+
 def _resolve_client_ip(request: Request) -> str:
     """Return the originating client IP.
 

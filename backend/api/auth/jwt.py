@@ -1,4 +1,5 @@
 import jwt
+import secrets as _secrets
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from fastapi import HTTPException, status, Depends, Request
@@ -7,6 +8,78 @@ from pydantic import BaseModel
 from api.settings import Settings
 
 settings = Settings()
+
+
+def _is_jti_revoked(jti: str) -> bool:
+    """Return True if `jti` is in the JWT blacklist. Used by verify_token
+    to refuse tokens that were explicitly revoked via /logout, even if
+    they're still inside their `exp` window.
+    """
+    if not jti:
+        return False
+    # Lazy import to avoid the circular dependency between auth.jwt and
+    # the DB layer at module import time.
+    try:
+        from api.db.database import SessionLocal
+        from api.db.models.settings import TokenBlacklist
+    except Exception:
+        return False
+    db = SessionLocal()
+    try:
+        row = db.query(TokenBlacklist).filter(TokenBlacklist.jti == jti).first()
+        return bool(row and row.revoked)
+    finally:
+        db.close()
+
+
+def revoke_token(token: str) -> None:
+    """Insert the token's jti into the blacklist with the token's exp as
+    its TTL. Called from /logout. Tolerates malformed / already-revoked
+    tokens — the caller is asking us to forget the token, so anything
+    short of "we wrote a row" should still leave the user logged out.
+    """
+    if not token:
+        return
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[ALGORITHM],
+            options={"verify_exp": False},  # may be expired by now; that's fine
+        )
+    except jwt.PyJWTError:
+        return
+    jti = payload.get("jti")
+    if not jti:
+        return
+    exp_ts = payload.get("exp")
+    expires_at = (
+        datetime.utcfromtimestamp(exp_ts) if isinstance(exp_ts, (int, float)) else None
+    )
+
+    from api.db.database import SessionLocal
+    from api.db.models.settings import TokenBlacklist
+    db = SessionLocal()
+    try:
+        # Prune expired blacklist entries opportunistically so the table
+        # doesn't grow without bound — entries past their `expires` are
+        # safe to drop since the JWT itself would fail `verify_exp` now.
+        db.query(TokenBlacklist).filter(
+            TokenBlacklist.expires.isnot(None),
+            TokenBlacklist.expires < datetime.utcnow(),
+        ).delete(synchronize_session=False)
+
+        existing = db.query(TokenBlacklist).filter(TokenBlacklist.jti == jti).first()
+        if existing:
+            existing.revoked = True
+            existing.expires = expires_at
+        else:
+            db.add(TokenBlacklist(jti=jti, expires=expires_at, revoked=True))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 # Schemas
 class Token(BaseModel):
@@ -36,7 +109,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    # jti = unique per-token id so /logout can blacklist exactly THIS
+    # token (and re-uses of an older JWT for the same user are not
+    # accidentally invalidated). Without this, JWTs were stateless and
+    # remained valid until `exp` even after the user logged out.
+    to_encode.update({"exp": expire, "jti": _secrets.token_urlsafe(16)})
     encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
@@ -46,6 +123,10 @@ def verify_token(token: str, credentials_exception):
         username: str = payload.get("sub")
         setup_pending: bool = payload.get("setup_pending", False)
         if username is None:
+            raise credentials_exception
+        if _is_jti_revoked(payload.get("jti")):
+            # Token was explicitly invalidated via /logout. Treat exactly
+            # like an expired token from the client's perspective.
             raise credentials_exception
         token_data = TokenData(username=username, setup_pending=setup_pending)
         return token_data

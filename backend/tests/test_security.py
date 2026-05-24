@@ -130,11 +130,16 @@ def test_check_ip_restriction_private_ip():
     result = check_ip_restriction(mock_request, mock_db)
     assert result == "192.168.1.5"
 
-def test_check_ip_restriction_x_forwarded_for_ignored_without_trusted_proxy():
-    """Default config has no trusted proxies, so X-Forwarded-For must be
-    ignored even when the peer is on a private network. Previously the code
-    trusted *any* private peer, which let a same-LAN attacker spoof their IP.
+def test_check_ip_restriction_x_forwarded_for_ignored_without_trusted_proxy(monkeypatch):
+    """The default config now lists 127.0.0.1 as a trusted proxy (nginx
+    loopback). Explicitly clear that here so the test still asserts the
+    "no trusted proxy" branch: XFF must be ignored when the peer isn't
+    trusted.
     """
+    monkeypatch.setattr(
+        "api.utils.security._settings",
+        type("S", (), {"TRUSTED_PROXIES": []})(),
+    )
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {"X-Forwarded-For": "10.0.0.5, 10.0.0.6"}
     mock_request.client.host = "127.0.0.1"
@@ -145,7 +150,11 @@ def test_check_ip_restriction_x_forwarded_for_ignored_without_trusted_proxy():
     result = check_ip_restriction(mock_request, mock_db)
     assert result == "127.0.0.1"
 
-def test_check_ip_restriction_x_real_ip_ignored_without_trusted_proxy():
+def test_check_ip_restriction_x_real_ip_ignored_without_trusted_proxy(monkeypatch):
+    monkeypatch.setattr(
+        "api.utils.security._settings",
+        type("S", (), {"TRUSTED_PROXIES": []})(),
+    )
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {"X-Real-IP": "10.0.0.6", "X-Forwarded-For": "1.2.3.4"}
     mock_request.client.host = "127.0.0.1"
@@ -153,8 +162,8 @@ def test_check_ip_restriction_x_real_ip_ignored_without_trusted_proxy():
     mock_db = MagicMock()
     mock_db.query.return_value.filter.return_value.count.return_value = 0
 
-    # Peer 127.0.0.1 is not in TRUSTED_PROXIES (default empty), so headers
-    # are ignored and we use the direct peer.
+    # With TRUSTED_PROXIES cleared, peer 127.0.0.1 is not trusted, so
+    # headers are ignored and we use the direct peer.
     result = check_ip_restriction(mock_request, mock_db)
     assert result == "127.0.0.1"
 
@@ -189,8 +198,15 @@ def test_check_ip_restriction_x_real_ip_ignored_if_host_public():
 
     assert excinfo.value.status_code == 403
 
-def test_check_ip_restriction_x_forwarded_for_spoof_ignored_without_proxy():
-    """Untrusted peer sending an XFF chain — must be ignored entirely."""
+def test_check_ip_restriction_x_forwarded_for_spoof_ignored_without_proxy(monkeypatch):
+    """Untrusted peer sending an XFF chain — must be ignored entirely.
+    Clear the default TRUSTED_PROXIES so the peer (127.0.0.1) is not
+    trusted in this scenario.
+    """
+    monkeypatch.setattr(
+        "api.utils.security._settings",
+        type("S", (), {"TRUSTED_PROXIES": []})(),
+    )
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {"X-Forwarded-For": "127.0.0.1, 8.8.8.8"}
     mock_request.client.host = "127.0.0.1"

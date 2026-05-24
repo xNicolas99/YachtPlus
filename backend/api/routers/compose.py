@@ -51,14 +51,30 @@ def _require_action_permission(action: str, Authorize, db):
 
 
 @router.get("/")
-async def get_projects(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_projects(
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # The listing exposes project names + paths; gate behind perm_start
+    # so a read-only-account user can't enumerate stack layouts. (perm_start
+    # is the lowest "operator" privilege already required to do anything
+    # with a project.)
     auth_check(Authorize)
+    check_permission("perm_start", Authorize, db)
     return await get_compose_projects()
 
 
 @router.get("/{project_name}")
-async def get_project(project_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def get_project(
+    project_name,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # Project detail returns the raw compose YAML which routinely contains
+    # secrets (DB passwords, API keys, OIDC client secrets) as `environment`
+    # values. Restrict to superusers — perm_start operators can run actions
+    # but should not get a free dump of every stack's secrets.
+    _require_superuser(Authorize, db)
     return await get_compose(project_name)
 
 

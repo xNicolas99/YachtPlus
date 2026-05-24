@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
-from api.auth.jwt import get_auth_wrapper, create_access_token
+from api.auth.jwt import get_auth_wrapper, create_access_token, revoke_token, get_current_user_token
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
@@ -15,14 +15,16 @@ from api.utils.security import check_ip_restriction, record_login_attempt
 from api.utils.crypto import decrypt
 import pyotp
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from api.utils.security import rate_limit_key
 
 router = APIRouter()
 settings = Settings()
 logger = logging.getLogger(__name__)
 
-# Initialize limiter (ensure it matches the one in main.py)
-limiter = Limiter(key_func=get_remote_address)
+# Initialize limiter (ensure it matches the one in main.py).
+# key_func uses our own TRUSTED_PROXIES-aware resolver so the rate limit
+# applies per real client, not per nginx loopback peer.
+limiter = Limiter(key_func=rate_limit_key)
 
 # Used to keep login response time roughly constant when the supplied username
 # is unknown. bcrypt.checkpw still runs against this fixed digest, so an
@@ -395,12 +397,34 @@ def update_user(
 
 
 @router.get("/logout")
-def logout(response: Response, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+def logout(
+    request: Request,
+    response: Response,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    # Blacklist the token's jti so a copy of the cookie/bearer that's been
+    # captured elsewhere (browser session restored from disk, leaked from
+    # a debug tool, etc.) can't be replayed for the remainder of the exp
+    # window. The cookie is also cleared, but stateless JWTs were the
+    # whole pre-existing gap — without the blacklist, /logout was
+    # effectively a frontend-only cosmetic clear.
+    token = get_current_user_token(request)
+    if token:
+        revoke_token(token)
     Authorize.unset_jwt_cookies(response)
     return {"msg": "Logout Successful"}
 
 
 @router.get("/logout/refresh")
-def logout_refresh(response: Response, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
+def logout_refresh(
+    request: Request,
+    response: Response,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: Session = Depends(get_db),
+):
+    token = get_current_user_token(request)
+    if token:
+        revoke_token(token)
     Authorize.unset_jwt_cookies(response)
     return {"msg": "Logout Successful"}

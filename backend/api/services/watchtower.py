@@ -1,6 +1,11 @@
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
-from api.actions.compose import compose_action
+# Watchtower runs inside the *sync* BackgroundScheduler thread, so it
+# must call the sync implementation directly. Previously this file
+# imported `compose_action` (the `async def` wrapper) and invoked it
+# without await — every call produced a "RuntimeWarning: coroutine
+# never awaited" and silently did nothing. Auto-update was broken.
+from api.actions.compose import _compose_action_sync
 from api.settings import Settings
 from api.utils.compose import find_yml_files
 import logging
@@ -27,11 +32,11 @@ def update_compose_project(project_name):
         # But 'docker-compose pull' is a valid command.
         # api.actions.compose.compose_action calls docker_compose(action, ...)
         # So it should work if we pass "pull" as action.
-        compose_action(project_name, "pull")
+        _compose_action_sync(project_name, "pull")
 
         # 2. Up -d
         logger.info(f"Recreating containers for {project_name}...")
-        compose_action(project_name, "up")
+        _compose_action_sync(project_name, "up")
 
         logger.info(f"Successfully updated {project_name}")
     except Exception as e:

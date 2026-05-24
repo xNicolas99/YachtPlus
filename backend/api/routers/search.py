@@ -5,7 +5,7 @@ from api.auth.auth import auth_check
 from sqlalchemy.orm import Session
 from api.utils.auth import get_db
 from slowapi import Limiter
-from slowapi.util import get_remote_address
+from api.utils.security import rate_limit_key
 
 import api.utils.registries as registries
 from api.db.crud.templates import match_templates
@@ -19,7 +19,7 @@ router = APIRouter()
 # limit a hostile (or just buggy) client could turn this endpoint into a
 # free amplification proxy against the upstream registry, getting both
 # the YachtPlus instance and its host IP throttled.
-limiter = Limiter(key_func=get_remote_address)
+limiter = Limiter(key_func=rate_limit_key)
 
 # Caps for the unified search:
 #  - q max 128 chars: prevents huge LIKE patterns that pin the DB on a

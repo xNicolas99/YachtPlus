@@ -54,6 +54,13 @@ async def get_images():
 
 
 async def write_image(image_tag):
+    # Previously: `if delim in image_tag` -> TypeError when image_tag is
+    # None (Pydantic schema treats the field as Optional). Catch the
+    # missing/blank input early and surface it as a 422.
+    if not image_tag or not isinstance(image_tag, str) or not image_tag.strip():
+        raise HTTPException(status_code=422, detail="Image name is required")
+    image_tag = image_tag.strip()
+
     delim = ":"
     repo, tag = None, image_tag
     if delim in image_tag:
@@ -339,10 +346,20 @@ async def write_network(network_form):
     return await get_networks()
 
 
+async def _inspect_network(docker, network_id):
+    # aiodocker's `DockerNetworks` does NOT expose `.inspect(id)` — the
+    # idiomatic API is `.get(id)` (returns a `DockerNetwork` stub, no
+    # request issued yet) followed by `.show()` (issues the actual
+    # inspect call). The previous direct `.inspect()` call raised
+    # AttributeError on every network-detail page.
+    network_obj = await docker.networks.get(network_id)
+    return await network_obj.show()
+
+
 async def get_network(network_id):
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
-        network_task = docker.networks.inspect(network_id)
+        network_task = _inspect_network(docker, network_id)
 
         try:
             results = await asyncio.gather(containers_task, network_task, return_exceptions=True)

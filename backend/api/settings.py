@@ -54,8 +54,15 @@ class Settings(BaseSettings):
     SECURE_COOKIES: bool = os.getenv("SECURE_COOKIES", ENVIRONMENT == "production")
     SAME_SITE_COOKIES: str = "lax"
 
-    # Networking
+    # Networking. The default list covers localhost only; for LAN deploys
+    # set YACHT_ALLOWED_HOSTS to your hostname(s) or use the wildcard "*"
+    # to disable Host-header pinning. ALLOW_PRIVATE_NETWORK_HOSTS=true (the
+    # default) additionally accepts any RFC 1918 / link-local IP regardless
+    # of this list — covers the "access via 192.168.x.y" case without
+    # forcing every user to edit the env file. Set it to false to enforce
+    # strict matching (typical for a public-internet deploy).
     ALLOWED_HOSTS: list = os.getenv("YACHT_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if os.getenv("YACHT_ALLOWED_HOSTS") else ["localhost", "127.0.0.1", "[::1]"]
+    ALLOW_PRIVATE_NETWORK_HOSTS: bool = os.getenv("YACHT_ALLOW_PRIVATE_NETWORK_HOSTS", "true").lower() in ("1", "true", "yes", "on")
     CORS_ORIGINS: list = os.getenv("YACHT_CORS_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080").split(",") if os.getenv("YACHT_CORS_ORIGINS") else ["http://localhost", "http://127.0.0.1", "http://localhost:8080", "http://127.0.0.1:8080"]
 
     # Database
@@ -76,13 +83,16 @@ class Settings(BaseSettings):
 
     # Comma-separated list of reverse-proxy IPs (or CIDRs) whose
     # X-Real-IP / X-Forwarded-For headers we trust for client-IP attribution.
-    # Empty list -> never trust those headers, always use the direct peer.
-    # This stops a local-network attacker from spoofing X-Real-IP to dodge
-    # IP-based rate limits or impersonate a legitimate user.
+    # 127.0.0.1 is in the default because YachtPlus's own nginx sits in
+    # front of gunicorn on the loopback — without it every request looks
+    # like it's coming from 127.0.0.1, and one user's traffic burns the
+    # rate-limit budget for everyone. To harden against header spoofing
+    # from co-located containers etc., this list is *exclusive*: anything
+    # NOT listed here will never have its X-Forwarded-For honoured.
     TRUSTED_PROXIES: list = (
         [p.strip() for p in os.getenv("YACHT_TRUSTED_PROXIES", "").split(",") if p.strip()]
         if os.getenv("YACHT_TRUSTED_PROXIES") is not None
-        else []
+        else ["127.0.0.1", "::1"]
     )
 
     class Config:

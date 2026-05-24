@@ -33,7 +33,13 @@ settings = Settings()
 
 
 def conv_ports2data(data, network, network_mode):
+    # `data` is Optional on the DeployForm — every conv_* helper here
+    # used to crash with `TypeError: 'NoneType' object is not iterable`
+    # when the caller didn't pass any ports/labels/volumes/etc., which
+    # then bubbled up through deploy_app as a generic 500.
     ports = {}
+    if not data:
+        return ports
     for d in data:
         cport = d.cport
         hport = d.hport
@@ -46,6 +52,8 @@ def conv_ports2data(data, network, network_mode):
 
 def conv_portlabels2data(data):
     labels = {}
+    if not data:
+        return labels
     for d in data:
         if d.label and d.hport:
             labels.update({"local.yacht.port." + d.hport: d.label})
@@ -79,6 +87,8 @@ def _load_template_variables():
 
 
 def conv_volumes2data(data, t_variables=None):
+    if not data:
+        return {}
     if t_variables is None:
         t_variables = _load_template_variables()
 
@@ -140,6 +150,8 @@ def conv_volumes2data(data, t_variables=None):
 def conv_env2data(data, t_variables=None):
     # Set is depracated. Name is the actual value. Label is the name of the field.
     # Label is the label of the label field.
+    if not data:
+        return []
     if t_variables is None:
         t_variables = _load_template_variables()
 
