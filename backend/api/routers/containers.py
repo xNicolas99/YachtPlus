@@ -276,8 +276,12 @@ async def container_exec(
             return
 
         if claims.get("setup_pending"):
+            # %r so any newlines/CR/escape sequences in a hostile `sub`
+            # claim get quoted instead of fragmenting the log line (log
+            # injection / forging fake entries against a downstream
+            # log aggregator).
             logger.warning(
-                "WebSocket exec rejected: setup_pending token for user %s",
+                "WebSocket exec rejected: setup_pending token for user %r",
                 claims.get("sub"),
             )
             await websocket.send_json({"error": "Forbidden: setup not completed"})
@@ -297,7 +301,7 @@ async def container_exec(
             auth_db.close()
 
         if not user or not user.is_active:
-            logger.warning("WebSocket exec rejected: inactive or unknown user %s", username)
+            logger.warning("WebSocket exec rejected: inactive or unknown user %r", username)
             await websocket.send_json({"error": "Forbidden"})
             await websocket.close(code=1008)
             return
@@ -306,7 +310,7 @@ async def container_exec(
         # capability for the container's payload. Gate it behind perm_start
         # (admins implicitly pass).
         if not user.is_superuser and not getattr(user, "perm_start", False):
-            logger.warning("WebSocket exec rejected: user %s lacks perm_start", username)
+            logger.warning("WebSocket exec rejected: user %r lacks perm_start", username)
             await websocket.send_json({"error": "Forbidden: missing permission"})
             await websocket.close(code=1008)
             return

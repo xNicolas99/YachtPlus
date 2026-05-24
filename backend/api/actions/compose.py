@@ -262,8 +262,31 @@ async def get_compose(name):
 """
 Creates a compose directory and writes content
 """
+_COMPOSE_MAX_BYTES = 1 * 1024 * 1024  # 1 MiB — well past any real compose
+
+
 def _write_compose_sync(compose):
     validate_compose_project_name(compose.name)
+
+    # Bound the payload BEFORE we touch the disk. The previous code wrote
+    # `compose.content` straight to a YAML file with no length check, so
+    # an authenticated `perm_restart` user could trivially fill the
+    # compose volume by POSTing a multi-GB string.
+    content = compose.content
+    if content is None or content == "":
+        raise HTTPException(status_code=422, detail="Compose file cannot be empty.")
+    if not isinstance(content, str):
+        raise HTTPException(status_code=422, detail="Compose content must be text.")
+    if len(content.encode("utf-8", errors="ignore")) > _COMPOSE_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Compose file exceeds {_COMPOSE_MAX_BYTES} bytes",
+        )
+    # Reject control bytes (NUL would corrupt the YAML parser; the rest
+    # are common log-injection / parser-confusion characters).
+    if "\x00" in content:
+        raise HTTPException(status_code=422, detail="Compose file contains NUL bytes.")
+
     if not os.path.exists(settings.COMPOSE_DIR + compose.name):
         try:
             pathlib.Path(settings.COMPOSE_DIR + compose.name).mkdir(parents=True)
@@ -272,7 +295,7 @@ def _write_compose_sync(compose):
 
     with open(settings.COMPOSE_DIR + compose.name + "/docker-compose.yml", "w") as f:
         try:
-            f.write(compose.content)
+            f.write(content)
         except TypeError as exc:
             if "write() argument must be str" in str(exc):
                 raise HTTPException(

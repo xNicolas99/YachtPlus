@@ -30,15 +30,17 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 # Whitelist the directories the setup flag file is allowed to live under.
-# /config is the production volume mount; the rest cover the test-suite
-# tmpdirs and Windows dev paths. The env override is honoured only if its
-# resolved path lies inside one of these roots — otherwise we fall back
-# to the default. This stops a hostile SETUP_FLAG_FILE value from being
-# used as a path-traversal primitive to drop a file outside the volume.
+# /config is the production volume mount; $cwd covers dev installs and the
+# pytest tmpdirs. The env override is honoured only if its resolved path
+# lies inside one of these roots — otherwise we fall back to the default.
+# This stops a hostile SETUP_FLAG_FILE value from being used as a
+# path-traversal primitive to drop a file outside the volume.
+#
+# Note for Bandit: /tmp / /var/folders are deliberately NOT in this list
+# (B108). The volume mount path /config is a fixed in-container path, not
+# a world-writable tempdir.
 _SETUP_FLAG_ALLOWED_ROOTS = (
     "/config",
-    "/tmp",
-    "/var/folders",
     os.path.abspath(os.getcwd()),
 )
 

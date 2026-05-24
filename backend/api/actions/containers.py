@@ -29,20 +29,22 @@ async def get_containers():
 
 async def stream_stats_generator(request, container_id: str):
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+        stats_iter = None
         try:
             container = await docker.containers.get(container_id)
-            # Nutze den nativen Docker Stats Stream
-            async for stats in container.stats(stream=True):
+            # Hold a reference to the async iterator so we can explicitly
+            # aclose() it in the finally — without that, when the client
+            # disconnects (`break` below) the underlying aiohttp response
+            # was leaking until GC ran.
+            stats_iter = container.stats(stream=True)
+            async for stats in stats_iter:
                 if await request.is_disconnected():
                     break
 
-                # Gleiche CPU/RAM Kalkulation wie in get_stats()...
-                # (Nutze deine interne Logik aus get_stats, um mem_percent und cpu_percent zu berechnen)
                 mem_usage = stats.get("memory_stats", {}).get("usage", 0)
                 mem_limit = stats.get("memory_stats", {}).get("limit", 1)
                 mem_percent = (mem_usage / mem_limit) * 100.0
 
-                # Vereinfachte CPU Calc für Stream
                 cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
                 system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
                 online_cpus = stats["cpu_stats"].get("online_cpus", 1)
@@ -54,9 +56,25 @@ async def stream_stats_generator(request, container_id: str):
                     "memory_usage_mb": round(mem_usage / 1024 / 1024, 2)
                 }
                 yield {"event": "stats", "data": json.dumps(payload)}
-        except Exception as e:
-            logger.error(f"SSE Stream Error: {e}")
-            yield {"event": "error", "data": str(e)}
+        except asyncio.CancelledError:
+            # Client disconnected — normal SSE exit, don't log an error.
+            raise
+        except Exception:
+            logger.exception("SSE stats stream error for container %s", container_id)
+            # Send a generic error frame; don't echo the raw exception
+            # message back to the browser (could include internal paths
+            # or daemon details).
+            yield {"event": "error", "data": "stats stream error"}
+        finally:
+            if stats_iter is not None and hasattr(stats_iter, "aclose"):
+                try:
+                    await stats_iter.aclose()
+                except Exception:
+                    logger.debug(
+                        "Failed to close stats iterator for %s",
+                        container_id,
+                        exc_info=True,
+                    )
 
 async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = True, timestamps: bool = False):
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)

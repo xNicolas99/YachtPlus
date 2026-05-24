@@ -16,6 +16,78 @@ from api.auth.jwt import get_auth_wrapper
 from api.utils.audit import log_activity
 
 
+import re as _re
+
+# Docker container-name regex: must start alnum, then alnum/dot/dash/underscore.
+_DEPLOY_NAME_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+# Network-mode strings the daemon actually accepts. Anything else (e.g.
+# `container:<id-of-an-admin's-app>`) was sailing through unvalidated and
+# would let a perm_start user attach their workload into another tenant's
+# network namespace by name.
+_DEPLOY_NETWORK_MODES = {"bridge", "host", "none", "default"}
+# Capabilities considered dangerous-by-default. perm_start is not the same
+# as root-on-host, so reject these and force the operator to add caps via
+# a host-side change instead of through a deploy form.
+_DEPLOY_FORBIDDEN_CAPS = {
+    "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO", "SYS_BOOT",
+    "MAC_ADMIN", "MAC_OVERRIDE", "ALL",
+}
+
+
+def _validate_deploy_template(template: "schemas.DeployForm") -> None:
+    """Defense-in-depth checks on the DeployForm before we hand it to the
+    docker daemon. Pydantic only checks types — these are the
+    semantic-validity rules. Failures map to 422 so the frontend can
+    surface them as input validation errors instead of a 500.
+    """
+    if not _DEPLOY_NAME_RE.match(template.name or ""):
+        raise HTTPException(status_code=422, detail="Invalid container name")
+
+    image = (template.image or "").strip()
+    # Block obvious shell-metacharacter smuggling through the image field
+    # (image is forwarded to the docker daemon, but downstream tooling
+    # sometimes echoes it into log lines or pulls scripts).
+    if not image or any(ch in image for ch in (" ", "\n", "\r", "\t", ";", "|", "`", "$")):
+        raise HTTPException(status_code=422, detail="Invalid image reference")
+    if len(image) > 512:
+        raise HTTPException(status_code=422, detail="Image reference too long")
+
+    if template.network_mode is not None:
+        mode = template.network_mode.strip()
+        if mode and mode not in _DEPLOY_NETWORK_MODES:
+            # `container:<id>` is technically valid but lets a perm_start
+            # user jump into another tenant's netns; disallowed here.
+            raise HTTPException(status_code=422, detail="Unsupported network_mode")
+
+    if template.cap_add:
+        for cap in template.cap_add:
+            cap_name = (cap or "").strip().upper().removeprefix("CAP_")
+            if cap_name in _DEPLOY_FORBIDDEN_CAPS:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Capability {cap_name} not permitted via deploy form",
+                )
+
+    # Volumes / devices: refuse bind-mounting docker.sock or anything
+    # under /proc, /sys, /etc — a deploy with these would be equivalent
+    # to handing out root on the host.
+    sensitive_prefixes = ("/var/run/docker.sock", "/proc", "/sys", "/etc", "/root", "/boot")
+    for vol in template.volumes or []:
+        bind = (vol.bind or "").strip() if vol else ""
+        if bind and any(bind == p or bind.startswith(p + "/") for p in sensitive_prefixes):
+            raise HTTPException(
+                status_code=422,
+                detail="Volume bind path is restricted",
+            )
+    for dev in template.devices or []:
+        host_path = (dev.host or "").strip() if dev else ""
+        if host_path and any(host_path == p or host_path.startswith(p + "/") for p in sensitive_prefixes):
+            raise HTTPException(
+                status_code=422,
+                detail="Device host path is restricted",
+            )
+
+
 def _require_superuser(Authorize, db: Session) -> None:
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
@@ -139,6 +211,8 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
         raise HTTPException(status_code=422, detail="Image field is required and could not be determined from template.")
     if not template.name:
          raise HTTPException(status_code=422, detail="Name field is required.")
+
+    _validate_deploy_template(template)
 
     result = await actions.deploy_app(template=template)
 

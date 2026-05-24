@@ -13,7 +13,11 @@ logger = logging.getLogger(__name__)
 _settings = Settings()
 
 def is_private_ip(ip: str) -> bool:
-    if ip == '0.0.0.0':
+    # The literal here is the unspecified-address sentinel, NOT a bind
+    # target — we treat it as private/unsafe so the SSRF guard refuses
+    # to connect to it. Suppress Bandit's B104 "binding to all interfaces"
+    # match — this is the opposite intent.
+    if ip == '0.0.0.0':  # nosec B104
         return True
     try:
         ip_obj = ipaddress.ip_address(ip)
