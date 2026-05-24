@@ -32,15 +32,20 @@ def test_add_template_fetch_failure_is_logged(caplog):
     assert any("Template fetch failed" in rec.message for rec in caplog.records)
 
 
-def test_init_templates_failure_uses_logger_exception(caplog):
+def _fake_settings(url_list="LSIO|http://example.test/feed.json"):
+    return lambda: type("S", (), {"DEFAULT_TEMPLATE_URLS": url_list})()
+
+
+def test_init_templates_failure_uses_logger_exception(caplog, monkeypatch):
     """The old silent print() left operators in the dark when the default
     templates feed was unreachable; that path now produces a structured
     error log (with traceback)."""
     caplog.set_level(logging.ERROR, logger="api.db.crud.templates")
+    monkeypatch.setattr("api.settings.get_settings", _fake_settings())
 
     fake_db = MagicMock()
-    # No existing templates -> init_templates tries to add the default.
-    with patch.object(crud_templates, "get_templates", return_value=[]), \
+    # Catalog not yet installed -> init_templates tries to add it.
+    with patch.object(crud_templates, "get_template", return_value=None), \
          patch.object(crud_templates, "add_template", side_effect=Exception("dns timeout")):
         # init_templates must NOT raise (boot must continue).
         crud_templates.init_templates(fake_db)
@@ -50,16 +55,16 @@ def test_init_templates_failure_uses_logger_exception(caplog):
     assert any("Failed to add default template" in r.message for r in error_records)
 
 
-def test_init_templates_success_path_logs_info(caplog):
+def test_init_templates_success_path_logs_info(caplog, monkeypatch):
     caplog.set_level(logging.INFO, logger="api.db.crud.templates")
+    monkeypatch.setattr("api.settings.get_settings", _fake_settings())
     fake_db = MagicMock()
 
-    with patch.object(crud_templates, "get_templates", return_value=[]), \
+    with patch.object(crud_templates, "get_template", return_value=None), \
          patch.object(crud_templates, "add_template", return_value=MagicMock()):
         crud_templates.init_templates(fake_db)
 
     info_records = [r for r in caplog.records if r.levelno == logging.INFO]
-    assert any("No templates found" in r.message for r in info_records)
     assert any("Added default template" in r.message for r in info_records)
 
 

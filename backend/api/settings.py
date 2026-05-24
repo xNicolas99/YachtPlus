@@ -84,6 +84,23 @@ class Settings(BaseSettings):
     # with AttributeError under pydantic v2's extra='forbid'.
     COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
 
+    # Community Docker-image catalogs the setup wizard auto-installs on
+    # first finalize, so the user doesn't land on an empty Templates page
+    # after install. Each entry is `Title|URL` (pipe-separated); comma
+    # separates entries. Failures are non-fatal — a network blip during
+    # setup must not block the user from finishing the wizard. Set
+    # YACHT_DEFAULT_TEMPLATE_URLS="" to disable seeding entirely.
+    DEFAULT_TEMPLATE_URLS: str = os.getenv(
+        "YACHT_DEFAULT_TEMPLATE_URLS",
+        # SelfhostedPro: ~300 curated self-hosted apps (Plex/Jellyfin/
+        # Vaultwarden/Nextcloud/arr-stack/…); de-facto standard catalog
+        # in this ecosystem.
+        "SelfhostedPro|https://raw.githubusercontent.com/SelfhostedPro/selfhosted_templates/master/Template/portainer-v2.json,"
+        # Portainer Community: ~100 entries, official Portainer format,
+        # more conservative selection.
+        "Portainer Community|https://raw.githubusercontent.com/portainer/templates/master/templates-2.0.json",
+    )
+
     # Docker daemon endpoint. None -> let the docker SDK / aiodocker pick up
     # the standard discovery (DOCKER_HOST env var, then /var/run/docker.sock).
     # Set this when fronting the daemon via a TCP proxy so that *all* code

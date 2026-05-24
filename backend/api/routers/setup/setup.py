@@ -98,6 +98,18 @@ def mark_setup_completed(db: Session):
         status.is_complete = True
     db.commit()
 
+    # Auto-install the configured community Docker-image catalogs so the
+    # user lands on a populated Templates page (image, ports, env, etc.
+    # pre-filled per app) instead of an empty list. Failures are absorbed
+    # inside init_templates — a network blip here must NEVER block
+    # /setup/finalize from succeeding, otherwise the user can never
+    # leave the wizard.
+    try:
+        from api.db.crud.templates import init_templates
+        init_templates(db)
+    except Exception:
+        logger.exception("Default template seeding failed; continuing setup.")
+
     # Legacy file (optional but good for backwards compatibility).
     # Failures are non-fatal — the DB row is the source of truth — but
     # we log them at warning level so a wedged read-only volume or

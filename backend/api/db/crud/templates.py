@@ -421,32 +421,72 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
 def read_template_variables(db: Session):
     return db.query(models.TemplateVariables).all()
 
-def init_templates(db: Session):
-    """
-    Initializes default templates if none exist.
-    """
-    templates_exist = get_templates(db)
-    if not templates_exist:
-        logger.info("No templates found. Adding default templates.")
-        defaults = [
-            {
-                "title": "LSIO Portainer Templates",
-                "url": "https://raw.githubusercontent.com/technorabilia/portainer-templates/main/lsio/templates/templates.json"
-            }
-        ]
+def _parse_default_template_urls(raw: str):
+    """Parse the YACHT_DEFAULT_TEMPLATE_URLS setting into [(title, url), ...].
 
-        for default in defaults:
+    Format: `Title|URL` per entry, comma-separated. Whitespace around each
+    field is stripped. Empty entries are skipped so a trailing comma in
+    the env value doesn't blow up. Returns [] on empty/None so a deploy
+    can explicitly disable seeding via YACHT_DEFAULT_TEMPLATE_URLS="".
+    """
+    if not raw:
+        return []
+    out = []
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry:
+            continue
+        if "|" in entry:
+            title, _, url = entry.partition("|")
+            title = title.strip()
+            url = url.strip()
+        else:
+            # Tolerant: bare URL with no title — derive title from host.
+            url = entry
             try:
-                template = models.Template(title=default["title"], url=default["url"])
-                # add_template handles validation and fetching
-                add_template(db, template)
-                logger.info("Added default template: %s", default["title"])
-            except Exception as e:
-                # We deliberately do NOT re-raise: a transient network failure
-                # while fetching the default templates feed must not crash app
-                # startup. But silent print() previously made these failures
-                # invisible in container log aggregators — use the real logger
-                # with traceback so operators actually see them.
-                logger.exception(
-                    "Failed to add default template %s: %s", default["title"], e,
-                )
+                from urllib.parse import urlparse
+                title = urlparse(url).netloc or url
+            except Exception:
+                title = url
+        if title and url:
+            out.append((title, url))
+    return out
+
+
+def init_templates(db: Session):
+    """Idempotently install the community Docker-image catalogs configured
+    via Settings.DEFAULT_TEMPLATE_URLS. Called from `mark_setup_completed`
+    so a fresh install lands on a populated Templates page instead of an
+    empty one — but skips anything that's already installed (so re-running
+    setup, or seeding after the user manually added the same URL, is a
+    no-op).
+
+    Network failures are caught per-entry and logged: an offline install,
+    a Github outage, or a malformed feed must NEVER block the user from
+    completing setup. The catalog will simply be missing and the user can
+    refresh later from the UI.
+    """
+    from api.settings import get_settings
+
+    raw = get_settings().DEFAULT_TEMPLATE_URLS
+    defaults = _parse_default_template_urls(raw)
+    if not defaults:
+        logger.info("No default template URLs configured; skipping seed.")
+        return
+
+    for title, url in defaults:
+        # get_template(url=...) returns None when not installed; otherwise
+        # we leave the existing row alone (operator may have customised it).
+        if get_template(db=db, url=url) is not None:
+            logger.info("Default template already installed: %s", title)
+            continue
+        try:
+            template = models.Template(title=title, url=url)
+            add_template(db, template)
+            logger.info("Added default template: %s (%s)", title, url)
+        except Exception as e:
+            # Non-fatal: setup-finalize must always succeed. Use logger.exception
+            # so the traceback reaches container log aggregators.
+            logger.exception(
+                "Failed to add default template %s (%s): %s", title, url, e,
+            )
