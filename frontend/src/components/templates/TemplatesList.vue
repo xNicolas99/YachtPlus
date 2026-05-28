@@ -90,11 +90,28 @@
                         </v-list-item-icon>
                         <v-list-item-title>View</v-list-item-title>
                       </v-list-item>
-                      <v-list-item @click="updateTemplate(item.id)">
+                      <!-- Update = re-fetch from the remote URL. Only
+                           makes sense for URL-sourced catalogs; local
+                           catalogs have no remote to fetch from. -->
+                      <v-list-item
+                        v-if="!isLocalTemplate(item)"
+                        @click="updateTemplate(item.id)"
+                      >
                         <v-list-item-icon>
                           <v-icon>mdi-update</v-icon>
                         </v-list-item-icon>
-                        <v-list-item-title>Update</v-list-item-title>
+                        <v-list-item-title>Refresh from URL</v-list-item-title>
+                      </v-list-item>
+                      <!-- Edit = open the manual JSON editor with the
+                           current items pre-loaded. Available for any
+                           catalog; PUT /templates/{id}/content replaces
+                           the items list (URL templates effectively
+                           snapshot themselves until next Refresh). -->
+                      <v-list-item @click="openEditDialog(item)">
+                        <v-list-item-icon>
+                          <v-icon>mdi-pencil</v-icon>
+                        </v-list-item-icon>
+                        <v-list-item-title>Edit JSON</v-list-item-title>
                       </v-list-item>
                       <v-divider />
                       <v-list-item
@@ -111,6 +128,29 @@
                     </v-list>
                   </v-menu>
                 </div>
+              </template>
+              <!-- Source chip + URL preview. Lets the user tell a
+                   GitHub-fetched catalog from a JSON upload from a
+                   hand-written one at a glance — previously they all
+                   looked identical in the list. -->
+              <template v-slot:item.source="{ item }">
+                <v-chip
+                  :color="sourceFor(item).color"
+                  :prepend-icon="sourceFor(item).icon"
+                  size="small"
+                  variant="tonal"
+                >
+                  {{ sourceFor(item).label }}
+                </v-chip>
+              </template>
+              <template v-slot:item.url_preview="{ item }">
+                <span
+                  class="yp-mono text-medium-emphasis"
+                  style="font-size:0.85em"
+                  :title="item.url"
+                >
+                  {{ urlPreviewFor(item) }}
+                </span>
               </template>
               <template v-slot:item.created_at="{ item }">
                 <span>{{ $formatDate(item.created_at) }}</span>
@@ -277,16 +317,28 @@ export default {
           align: "start"
         },
         {
+          text: "Source",
+          value: "source",
+          sortable: false,
+          width: "120px"
+        },
+        {
+          text: "Origin",
+          value: "url_preview",
+          sortable: false,
+          width: "30%"
+        },
+        {
           text: "Created At",
           value: "created_at",
           sortable: true,
-          width: "20%"
+          width: "18%"
         },
         {
           text: "Updated At",
           value: "updated_at",
           sortable: true,
-          width: "20%"
+          width: "18%"
         }
       ]
     };
@@ -302,6 +354,55 @@ export default {
     },
     templateDetails(templateId) {
       this.$router.push({ path: `/templates/${templateId}` });
+    },
+    isLocalTemplate(item) {
+      // Backend stores uploaded/manual catalogs under a synthetic
+      // `local://<uuid>.json` URL. Use that as the "local" signal
+      // here — URL-fetched catalogs always have http(s) URLs.
+      return typeof item?.url === "string" && item.url.startsWith("local://");
+    },
+    sourceFor(item) {
+      if (this.isLocalTemplate(item)) {
+        return { label: "Uploaded", color: "primary", icon: "mdi-upload" };
+      }
+      return { label: "URL", color: "secondary", icon: "mdi-cloud-download" };
+    },
+    urlPreviewFor(item) {
+      if (this.isLocalTemplate(item)) return "(local catalog)";
+      if (!item?.url) return "";
+      // Show host + last path component so the user can still tell
+      // catalogs apart without dumping the whole 100-char URL into a
+      // narrow table cell.
+      try {
+        const u = new URL(item.url);
+        const parts = u.pathname.split("/").filter(Boolean);
+        const tail = parts.slice(-2).join("/") || u.hostname;
+        return `${u.host}/${tail}`;
+      } catch (_) {
+        return item.url;
+      }
+    },
+    openEditDialog(item) {
+      this.manualForm = {
+        title: item.title || "",
+        // Load the FULL JSON for editing. For local templates this is
+        // the canonical source. For URL templates we still let the
+        // user edit (becomes a snapshot — refresh will overwrite).
+        content: "",
+        editingId: item.id,
+      };
+      this.manualError = null;
+      this.manualDialog = true;
+      // Async fetch of the items so the user can edit content
+      axios
+        .get(`/templates/${item.id}`)
+        .then(resp => {
+          const items = resp?.data?.items || [];
+          this.manualForm.content = JSON.stringify(items, null, 2);
+        })
+        .catch(err => {
+          this.manualError = this.extractError(err, "Failed to load template content");
+        });
     },
     openCreateDialog() {
       this.manualForm = { title: "", content: "", editingId: null };
