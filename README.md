@@ -72,32 +72,85 @@ WebSocket exec sessions (container terminal) reuse the same cookie: `backend/api
 ### Docker Compose (recommended)
 
 ```yaml
-version: "3"
 services:
+  # tecnativa/docker-socket-proxy whitelists only the docker API endpoints
+  # YachtPlus needs (containers/images/networks/volumes + POST). Without
+  # it, a compromise of the yachtplus container would have full root on
+  # the host via the docker daemon — direct-mounting docker.sock is the
+  # single biggest risk in this kind of deploy.
+  dockerproxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: yachtplus-dockerproxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      POST: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    security_opt: [no-new-privileges:true]
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    pids_limit: 100
+
   yachtplus:
-    image: ghcr.io/yachtplus/yachtplus:devel
+    image: ghcr.io/xnicolas99/yachtplus:latest
     container_name: yachtplus
     restart: unless-stopped
+    depends_on: [dockerproxy]
     ports:
       - "8000:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
+      # /config holds the SQLite DB, secret_key, fernet_salt, custom
+      # templates, audit log — mandatory persistent mount.
       - ./config:/config
     environment:
+      # Tells YachtPlus to talk to docker via the proxy instead of
+      # mounting docker.sock directly.
+      DOCKER_HOST: tcp://dockerproxy:2375
+      ENVIRONMENT: production
       # Pin a SECRET_KEY in production; otherwise the value is generated
       # once and persisted to /config/.secret_key.
       # SECRET_KEY: change-me-to-a-long-random-string
-      ENVIRONMENT: production
       YACHT_ALLOWED_HOSTS: yachtplus.example.com,localhost
       YACHT_CORS_ORIGINS: https://yachtplus.example.com
+      # Set to "false" to lock down to YACHT_ALLOWED_HOSTS only. Default
+      # "true" accepts any RFC 1918 / link-local IP so LAN access via
+      # http://192.168.x.y just works.
+      # YACHT_ALLOW_PRIVATE_NETWORK_HOSTS: "true"
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    cap_add:
+      - CHOWN          # start.sh chowns /config to appuser
+      - SETUID         # gosu drops to appuser
+      - SETGID
+      - DAC_OVERRIDE   # nginx writes pid + cache
+      - NET_BIND_SERVICE  # nginx listens on 8080
+    mem_limit: 1g
+    pids_limit: 200
 ```
 
 ```bash
-docker-compose up -d
+docker compose up -d
 # → open http://<host>:8000 and run through the setup wizard
 ```
 
-`/var/run/docker.sock` and `/config` are **mandatory** mounts — without them apps can't be managed and credentials can't be persisted across restarts.
+`./config` is a **mandatory** mount — without it the SQLite DB, secret
+key, and your custom templates are lost on every container recreation
+(every `docker compose build --no-cache`, image pull, or `docker rm`).
+
+The docker daemon is reached via the `dockerproxy` service rather than
+a direct `docker.sock` mount: a compromise of yachtplus then can't
+escape into the host because the proxy refuses every API call that
+isn't a whitelisted containers / images / networks / volumes request.
+If you intentionally want raw socket access (e.g. for debugging),
+remove the proxy service and replace
+`DOCKER_HOST: tcp://dockerproxy:2375` with
+`- /var/run/docker.sock:/var/run/docker.sock` in the yachtplus volumes
+— but understand the trade-off.
 
 ### Environment variables
 

@@ -40,7 +40,13 @@
         aria-label="View notifications"
         title="View notifications"
       >
-        <v-badge content="0" color="primary" dot offset-x="2" offset-y="2">
+        <!-- :model-value gates the badge entirely. Vuetify 3's `dot` mode
+             draws the badge unconditionally when the model is truthy
+             regardless of `content`, so `content="0"` was NOT enough to
+             hide it — the small blue dot showed even with zero unread.
+             Bind to a real unread count once the notification stream is
+             implemented; for now keep the badge off. -->
+        <v-badge :model-value="hasUnreadNotifications" color="primary" dot offset-x="2" offset-y="2">
           <v-icon>mdi-bell-outline</v-icon>
         </v-badge>
         <v-tooltip activator="parent" location="bottom">Notifications</v-tooltip>
@@ -104,6 +110,9 @@ export default {
       // hosts store once the multi-host backend lands.
       hostLabel: 'prod-01',
       hostMeta: window.location.hostname || '10.0.4.18',
+      // Wired to a real source the day the notification feature lands.
+      // Until then keep the badge off so it doesn't lie to the user.
+      hasUnreadNotifications: false,
     };
   },
   computed: {

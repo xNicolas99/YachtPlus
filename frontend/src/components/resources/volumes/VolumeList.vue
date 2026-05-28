@@ -13,8 +13,23 @@
         Volumes
         <v-dialog v-model="createDialog" max-width="290">
           <template v-slot:activator="{ on, attrs }">
-            <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on">
+            <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on" aria-label="Create volume" title="Create volume">
               <v-icon>mdi-plus</v-icon>
+            </v-btn>
+            <!-- Prune sits next to the create button so it mirrors the
+                 layout used on the Images and Networks pages. Wired to
+                 the same /api/settings/prune/<resource> backend route as
+                 those, so no new API work is needed. -->
+            <v-btn
+              class="ml-2"
+              color="warning"
+              :loading="pruning"
+              :disabled="pruning"
+              @click="pruneDialog = true"
+              aria-label="Prune unused volumes"
+              title="Prune unused volumes"
+            >
+              <v-icon>mdi-broom</v-icon>
             </v-btn>
           </template>
           <v-card color="foreground">
@@ -156,6 +171,35 @@
       </v-data-table>
     </v-card>
 
+    <!-- Prune confirm dialog: volume pruning is destructive — every
+         unused volume on the host gets deleted, including ones from
+         other docker-compose projects on the same host. Make the user
+         confirm explicitly. -->
+    <v-dialog v-model="pruneDialog" max-width="380">
+      <v-card color="foreground">
+        <v-card-title class="headline">Prune unused volumes?</v-card-title>
+        <v-card-text>
+          This will permanently delete every volume that is not currently
+          attached to a container — including dangling volumes from other
+          projects on this host. Data inside those volumes cannot be
+          recovered.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn text @click="pruneDialog = false">Cancel</v-btn>
+          <v-btn
+            text
+            color="warning"
+            :loading="pruning"
+            :disabled="pruning"
+            @click="pruneVolumes"
+          >
+            Prune
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-if="selectedVolume" v-model="deleteDialog" max-width="290">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
@@ -187,12 +231,15 @@
 </template>
 
 <script>
+import axios from "axios";
 import { mapActions, mapState } from "vuex";
 export default {
   data() {
     return {
       selectedVolume: null,
       deleteDialog: false,
+      pruneDialog: false,
+      pruning: false,
       form: {
         name: ""
       },
@@ -237,6 +284,27 @@ export default {
     submit() {
       const data = this.form;
       this.writeVolume(data);
+    },
+    async pruneVolumes() {
+      this.pruning = true;
+      try {
+        // Same route the Images and Networks pages hit. The backend
+        // forwards to docker's /volumes/prune. Returns {Volumes Pruned: […]}
+        // (capitalised key from the daemon).
+        const { data } = await axios.get("/settings/prune/volumes");
+        const action = data ? Object.keys(data)[0] : null;
+        const deleted = action && Array.isArray(data[action]) ? data[action].length : 0;
+        this.$store.commit("snackbar/setMessage", `${deleted} volumes pruned.`);
+        this.pruneDialog = false;
+        await this.readVolumes();
+      } catch (err) {
+        // 403 (no superuser), 503 (docker unreachable), 400 (validation)
+        // — surface the backend detail to the user without leaking traces.
+        const detail = err?.response?.data?.detail || "Prune failed";
+        this.$store.commit("snackbar/setMessage", detail);
+      } finally {
+        this.pruning = false;
+      }
     }
   },
   computed: {

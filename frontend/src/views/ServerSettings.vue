@@ -1,7 +1,8 @@
 <template lang="html">
   <v-card color="foreground" class="d-flex mx-auto page">
     <v-container fluid class="component">
-      <Nav class="mb-3" />
+      <!-- <Nav> was referenced but never imported (Vuetify 2 leftover);
+           sidebar is the global nav in Vuetify 3 layout. -->
       <v-card color="foreground" tile>
         <v-row>
           <v-col class="flex-grow-1 flex-shrink-0">
@@ -43,40 +44,39 @@
                   <v-icon left class="mr-1">mdi-history</v-icon>Audit Logs
                 </v-tab>
               </v-tabs>
-              <transition
-                name="slide"
-                enter-active-class="animated fadeIn delay"
-                leave-active-class="animated fadeOut"
-                mode="out-in"
-              >
-                <v-tabs-items v-model="SettingsTab" touchless class="mt-3">
-                  <v-tab-item> </v-tab-item>
-                  <v-tab-item>
-                    <Info />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <Theme />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <Variables />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <Prune />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <Update />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <SMTPSettings @notify="notify" />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <TwoFactor @notify="notify" />
-                  </v-tab-item>
-                  <v-tab-item>
-                    <AuditLogs />
-                  </v-tab-item>
-                </v-tabs-items>
-              </transition>
+              <!-- Vuetify 3 replaced v-tabs-items / v-tab-item with
+                   v-window / v-window-item. The old elements silently
+                   render nothing in v3, so every tab past "Info"
+                   appeared blank and Audit Logs were unreachable.
+                   Migrated to the v3 names; behaviour and the
+                   SettingsTab v-model are unchanged. -->
+              <v-window v-model="SettingsTab" class="mt-3">
+                <v-window-item> </v-window-item>
+                <v-window-item>
+                  <Info />
+                </v-window-item>
+                <v-window-item>
+                  <Theme />
+                </v-window-item>
+                <v-window-item>
+                  <Variables />
+                </v-window-item>
+                <v-window-item>
+                  <Prune />
+                </v-window-item>
+                <v-window-item>
+                  <Update />
+                </v-window-item>
+                <v-window-item>
+                  <SMTPSettings @notify="notify" />
+                </v-window-item>
+                <v-window-item>
+                  <TwoFactor @notify="notify" />
+                </v-window-item>
+                <v-window-item>
+                  <AuditLogs />
+                </v-window-item>
+              </v-window>
             </div>
           </v-col>
         </v-row>
