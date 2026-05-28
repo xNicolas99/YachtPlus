@@ -308,6 +308,30 @@ export default {
       this.manualError = null;
       this.manualDialog = true;
     },
+    extractError(err, fallback) {
+      // FastAPI 422 returns `detail` as an array of {loc, msg, type};
+      // the previous string-only handler rendered "[object Object]" and
+      // looked exactly like a silent failure. Flatten + pretty-print
+      // so the user can tell upload-blocked-on-validation from
+      // backend-route-not-found.
+      const data = err?.response?.data;
+      if (!data) {
+        if (err?.response?.status === 404) {
+          return "Endpoint not found — backend image may be outdated; run `docker compose pull`.";
+        }
+        return err?.message || fallback;
+      }
+      if (typeof data.detail === "string") return data.detail;
+      if (Array.isArray(data.detail)) {
+        return data.detail
+          .map(d => {
+            const loc = Array.isArray(d.loc) ? d.loc.slice(-1)[0] : "field";
+            return `${loc}: ${d.msg}`;
+          })
+          .join("; ");
+      }
+      return fallback;
+    },
     async submitUpload() {
       this.uploadError = null;
       this.uploading = true;
@@ -329,7 +353,7 @@ export default {
         this.uploadForm = { title: "", file: null };
         await this.readTemplates();
       } catch (err) {
-        this.uploadError = err?.response?.data?.detail || err.message || "Upload failed";
+        this.uploadError = this.extractError(err, "Upload failed");
       } finally {
         this.uploading = false;
       }
@@ -358,7 +382,7 @@ export default {
         this.manualDialog = false;
         await this.readTemplates();
       } catch (err) {
-        this.manualError = err?.response?.data?.detail || err.message || "Save failed";
+        this.manualError = this.extractError(err, "Save failed");
       } finally {
         this.manualSaving = false;
       }

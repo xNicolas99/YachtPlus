@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 from typing import List, Optional, Any
 import json
@@ -145,7 +145,12 @@ def _parse_uploaded_json(raw: bytes):
 
 @router.post("/upload", response_model=schemas.TemplateRead)
 def upload_template(
-    title: str,
+    # `title` MUST be annotated as a query param. Without the explicit
+    # Query(...) tag FastAPI, on a route that has `File(...)`, treats
+    # every other primitive param as Form data — and the frontend sends
+    # the title as `?title=…`, so the request 422'd before my code ever
+    # ran. From the user's POV the Upload dialog "did nothing".
+    title: str = Query(..., min_length=1, max_length=255),
     upload: UploadFile = File(...),
     db: Session = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
