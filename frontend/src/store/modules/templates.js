@@ -45,17 +45,24 @@ const mutations = {
 };
 
 const actions = {
+  // Returns the promise so callers (e.g. submitUpload, submitManual)
+  // can `await this.readTemplates()` and reliably see their freshly-
+  // created catalog before closing their dialog. Previously the action
+  // swallowed the promise and `await` resolved instantly — the new
+  // template appeared only after a manual reload.
   readTemplates({ commit }) {
     commit("setLoading", true);
     const url = "/templates/";
-    axios
+    return axios
       .get(url)
       .then(response => {
         const templates = response.data;
         commit("setTemplates", templates);
+        return templates;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        throw err;
       })
       .finally(() => {
         commit("setLoading", false);

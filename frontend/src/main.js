@@ -108,19 +108,28 @@ createAxiosResponseInterceptor();
 // worker alive across reloads — it then intercepts /api/apps/ and
 // other XHRs and serves stale 404s from its precache. Symptom in the
 // wild was a fast 5ms 404 from /api/apps/ even though the backend was
-// healthy (verified with curl from inside the container).
+// healthy.
 //
-// One-shot cleanup that's safe to run on every boot: nukes any
-// registered SW + Cache Storage entries for this origin. Users who
-// never had the old SW pay nothing; users who did get healed silently.
-if ("serviceWorker" in navigator) {
+// Unregister + caches.delete are async — by the time they resolve,
+// the SW has already intercepted the first batch of XHRs on this page
+// load. Solution: when we DO find a stale SW, force one extra reload
+// so the next pageload runs without any SW in the picture. The
+// sessionStorage flag stops this from looping.
+const SW_CLEANUP_FLAG = "yp_sw_cleanup_done";
+if ("serviceWorker" in navigator && !sessionStorage.getItem(SW_CLEANUP_FLAG)) {
   navigator.serviceWorker.getRegistrations()
-    .then(regs => Promise.all(regs.map(r => r.unregister())))
-    .catch(() => {});
-}
-if (typeof caches !== "undefined") {
-  caches.keys()
-    .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+    .then(async regs => {
+      if (regs.length === 0) return;
+      await Promise.all(regs.map(r => r.unregister()));
+      if (typeof caches !== "undefined") {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      sessionStorage.setItem(SW_CLEANUP_FLAG, "1");
+      // One-shot reload now that the SW is gone; this pageload's
+      // already-intercepted XHRs would otherwise stay broken.
+      window.location.reload();
+    })
     .catch(() => {});
 }
 
