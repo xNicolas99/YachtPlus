@@ -102,6 +102,28 @@ function createAxiosResponseInterceptor() {
 }
 createAxiosResponseInterceptor();
 
+// Aggressively unregister leftover service workers + their caches.
+// Earlier YachtPlus versions registered a Workbox precache SW. The
+// current build does NOT register one, but the browser keeps an old
+// worker alive across reloads — it then intercepts /api/apps/ and
+// other XHRs and serves stale 404s from its precache. Symptom in the
+// wild was a fast 5ms 404 from /api/apps/ even though the backend was
+// healthy (verified with curl from inside the container).
+//
+// One-shot cleanup that's safe to run on every boot: nukes any
+// registered SW + Cache Storage entries for this origin. Users who
+// never had the old SW pay nothing; users who did get healed silently.
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.getRegistrations()
+    .then(regs => Promise.all(regs.map(r => r.unregister())))
+    .catch(() => {});
+}
+if (typeof caches !== "undefined") {
+  caches.keys()
+    .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+    .catch(() => {});
+}
+
 const pinia = createPinia()
 app.use(pinia)
 app.use(router)
