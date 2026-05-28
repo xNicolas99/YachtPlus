@@ -17,7 +17,13 @@ const state = {
   status: "",
   username: localStorage.getItem("username") || "",
   authDisabled: null,
-  isSetup: false, // Default to false to ensure check is performed
+  // Three-valued: true once we've seen setup is done, false once we've
+  // confirmed it isn't, null while we don't know yet. Persisted in
+  // localStorage so a reload while gunicorn is mid-boot (or any other
+  // transient /setup/status failure) doesn't yank a finished install
+  // back into the wizard. The backend remains the source of truth — we
+  // never UPGRADE to true on our own, only the live API response does.
+  isSetup: localStorage.getItem("yp_isSetup") === "true" ? true : null,
   setupStep: 1, // Setup Wizard Step
   setupSecret: null, // Temporary storage for 2FA secret
   setupQrCode: null, // Temporary storage for QR Code
@@ -181,7 +187,7 @@ const actions = {
         });
     });
   },
-  CHECK_SETUP: ({ commit }) => {
+  CHECK_SETUP: ({ commit, state }) => {
     return axios
       .get("/setup/status")
       .then(resp => {
@@ -189,12 +195,20 @@ const actions = {
         return resp.data.is_setup;
       })
       .catch(err => {
-        console.error("Setup check failed", err);
-        // If the check fails (e.g., network error), we shouldn't assume false
-        // But for safety, we might default to false or handle it better.
-        // Given the requirement, we want to avoid incorrect redirects.
-        commit("SET_SETUP_STATUS", false);
-        return false;
+        // The previous behaviour was to commit `isSetup=false` on ANY
+        // error — including transient 502s while gunicorn was booting,
+        // or a bad cookie that 401's the request. That bounced finished
+        // installs straight into the setup wizard. We now:
+        //   - keep the last known value if we have one (cached from
+        //     localStorage or a previous successful call),
+        //   - only fall back to false when we have no prior signal at
+        //     all (genuine first run).
+        console.warn("Setup check failed; keeping last known state.", err);
+        if (state.isSetup === null) {
+          commit("SET_SETUP_STATUS", false);
+          return false;
+        }
+        return state.isSetup;
       });
   },
 
@@ -242,6 +256,20 @@ const mutations = {
   },
   SET_SETUP_STATUS: (state, isSetup) => {
     state.isSetup = isSetup;
+    // Cache the "setup is done" signal across reloads so a transient
+    // /setup/status failure on the very next boot doesn't drop us back
+    // into the wizard. We only persist the `true` signal — a `false`
+    // result is volatile (could be a server hiccup) and shouldn't
+    // poison the cache.
+    try {
+      if (isSetup === true) {
+        localStorage.setItem("yp_isSetup", "true");
+      } else if (isSetup === false) {
+        localStorage.removeItem("yp_isSetup");
+      }
+    } catch (_) {
+      // localStorage can throw in private-browsing on some browsers.
+    }
   },
   SET_SETUP_STEP: (state, step) => {
     state.setupStep = step;

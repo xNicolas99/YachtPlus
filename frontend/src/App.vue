@@ -1,12 +1,19 @@
 <template>
   <v-app id="yachtplus">
+    <!-- Chrome (Sidebar + Appbar) is hidden on the auth-bootstrap
+         routes. Previously these were keyed off isLoggedIn only — so if
+         a user reloaded with a valid session cookie AND the setup-status
+         check returned false (e.g. a backend hiccup or a wiped /config),
+         the router redirected to /setup but the dashboard chrome stayed
+         on screen, producing the confusing "Setup-Wizard mit normaler UI
+         im Hintergrund" state. -->
     <Sidebar
-      v-if="isLoggedIn"
+      v-if="showChrome"
       v-model="drawer"
     />
 
     <Appbar
-      v-if="isLoggedIn"
+      v-if="showChrome"
       @toggle-drawer="drawer = !drawer"
     />
 
@@ -54,6 +61,17 @@ export default {
       isLoggedIn: "auth/isAuthenticated",
       authDisabled: "auth/authDisabled"
     }),
+    showChrome() {
+      // Suppress Sidebar/Appbar during the bootstrap flows. /setup
+      // intentionally takes the whole viewport — having the dashboard
+      // chrome around it looked like a half-broken render. /login does
+      // its own layout. Everything else gets the standard chrome iff
+      // the user is actually authenticated.
+      if (this.$route.path === "/setup" || this.$route.path === "/login") {
+        return false;
+      }
+      return this.isLoggedIn;
+    },
     theme() {
       return this.$vuetify.theme.global.current.dark ? "dark" : "light";
     }

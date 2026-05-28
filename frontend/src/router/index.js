@@ -287,7 +287,11 @@ router.beforeEach(async (to, from, next) => {
   const isSetup = store.getters["auth/isSetup"];
   const isLoggedIn = store.getters["auth/isAuthenticated"];
 
-  if (!isSetup) {
+  // Treat `null` (= unknown) as "do not redirect to setup". Only an
+  // explicit `false` from the API counts. Without this guard, a
+  // transient /setup/status failure during cold start would still
+  // bounce a finished install into the wizard.
+  if (isSetup === false) {
     if (to.path !== "/setup") {
       next("/setup");
     } else {
