@@ -274,6 +274,17 @@ def refresh_template(db: Session, template_id: id):
     template = (
         db.query(models.Template).filter(models.Template.id == template_id).first()
     )
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    # Local-only templates (uploaded / created in-UI) have no remote
+    # URL to refresh — surface a clean 400 instead of bouncing off
+    # validate_url's "Invalid scheme" error.
+    if template.url and template.url.startswith(_LOCAL_TEMPLATE_URL_PREFIX):
+        raise HTTPException(
+            status_code=400,
+            detail="This catalog has no remote source; edit it via the manual editor instead.",
+        )
 
     validate_url(template.url)
 
@@ -453,6 +464,128 @@ def _parse_default_template_urls(raw: str):
     return out
 
 
+_LOCAL_TEMPLATE_URL_PREFIX = "local://"
+
+
+def add_template_from_payload(db: Session, title: str, payload) -> models.Template:
+    """Create a catalog from an in-memory payload (no HTTP fetch).
+
+    Used by:
+      - the bundled-config loader (init_templates seeds configs/*.json),
+      - the new /api/templates/upload endpoint (multipart file),
+      - the /api/templates/manual endpoint (paste JSON in the UI).
+
+    Stores under a synthetic `local://...` URL so the existing unique
+    constraint on Template.url still holds and `/refresh` cleanly
+    no-ops (it checks the scheme via validate_url, which rejects
+    `local`).
+    """
+    if not title or not title.strip():
+        raise HTTPException(status_code=422, detail="Catalog title is required")
+    title = title.strip()
+
+    # Reject empty/non-list+non-dict payloads up front so the user gets
+    # a clean 422 instead of a confusing IntegrityError after a partial
+    # write.
+    try:
+        items = _items_from_payload(payload)
+    except HTTPException:
+        raise
+    except (TypeError, ValueError, KeyError) as err:
+        raise HTTPException(status_code=422, detail=f"Invalid template payload: {err}")
+    if not items:
+        raise HTTPException(status_code=422, detail="Template payload contains no entries")
+
+    import uuid as _uuid
+    synthetic_url = f"{_LOCAL_TEMPLATE_URL_PREFIX}{_uuid.uuid4().hex}.json"
+
+    _template = models.Template(title=title, url=synthetic_url)
+    _template.items = items
+
+    try:
+        db.add(_template)
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Template with this title already exists."
+        )
+
+    return get_template(db=db, url=synthetic_url)
+
+
+def replace_template_items(db: Session, template_id: int, payload, title: str = None) -> models.Template:
+    """Replace a catalog's items from a new in-memory payload. Used by the
+    Edit dialog for `local://` templates (URL-based ones use /refresh).
+    """
+    template = (
+        db.query(models.Template).filter(models.Template.id == template_id).first()
+    )
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+
+    try:
+        items = _items_from_payload(payload)
+    except HTTPException:
+        raise
+    except (TypeError, ValueError, KeyError) as err:
+        raise HTTPException(status_code=422, detail=f"Invalid template payload: {err}")
+
+    # Wipe & rebuild the items list. cascade="all, delete-orphan" on
+    # Template.items handles the actual row deletions on commit.
+    template.items.clear()
+    db.flush()
+    template.items = items
+    if title and title.strip():
+        template.title = title.strip()
+
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409, detail="Template with this title already exists."
+        )
+    return template
+
+
+def _seed_bundled_catalogs(db: Session) -> None:
+    """Scan BUILTIN_CATALOG_DIR for *.json and import each one as a
+    catalog (titled from the filename stem). Idempotent: skips any title
+    already present in the DB so re-running on a populated install is
+    a no-op.
+
+    Failures are absorbed per-file — a malformed bundled JSON must NEVER
+    block setup-finalize.
+    """
+    from api.settings import get_settings
+    import glob as _glob
+
+    # getattr so test stubs that don't declare the field don't AttributeError
+    # — defaulting to empty disables bundled seeding cleanly.
+    catalog_dir = getattr(get_settings(), "BUILTIN_CATALOG_DIR", "")
+    if not catalog_dir or not os.path.isdir(catalog_dir):
+        logger.info("BUILTIN_CATALOG_DIR=%r is not a directory; skipping bundled seed.", catalog_dir)
+        return
+
+    for path in sorted(_glob.glob(os.path.join(catalog_dir, "*.json"))):
+        title = os.path.splitext(os.path.basename(path))[0]
+        # Skip if a catalog by this exact title is already installed.
+        existing = (
+            db.query(models.Template).filter(models.Template.title == title).first()
+        )
+        if existing is not None:
+            logger.info("Bundled catalog already installed: %s", title)
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as fp:
+                payload = json.load(fp)
+            add_template_from_payload(db, title, payload)
+            logger.info("Loaded bundled catalog: %s (%s)", title, path)
+        except Exception as e:
+            logger.exception("Failed to load bundled catalog %s: %s", path, e)
+
+
 def init_templates(db: Session):
     """Idempotently install the community Docker-image catalogs configured
     via Settings.DEFAULT_TEMPLATE_URLS. Called from `mark_setup_completed`
@@ -465,13 +598,21 @@ def init_templates(db: Session):
     a Github outage, or a malformed feed must NEVER block the user from
     completing setup. The catalog will simply be missing and the user can
     refresh later from the UI.
+
+    Also seeds bundled JSON catalogs from BUILTIN_CATALOG_DIR (configs/*.json
+    in the repo, shipped into the image at /api/configs/). That part works
+    offline since no HTTP fetch is involved.
     """
+    # Bundled catalogs first (offline-safe) so they always land even if
+    # the GitHub seed fetch fails immediately afterwards.
+    _seed_bundled_catalogs(db)
+
     from api.settings import get_settings
 
     raw = get_settings().DEFAULT_TEMPLATE_URLS
     defaults = _parse_default_template_urls(raw)
     if not defaults:
-        logger.info("No default template URLs configured; skipping seed.")
+        logger.info("No default template URLs configured; skipping URL seed.")
         return
 
     for title, url in defaults:

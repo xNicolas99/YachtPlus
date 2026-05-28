@@ -80,6 +80,12 @@ COPY --from=build-stage --chown=appuser:appuser /app/dist /app
 # If we run nginx as appuser, the config file must be readable.
 COPY --chown=appuser:appuser nginx.conf /etc/nginx/nginx.conf
 
+# Ship the built-in app catalogs (configs/*.json). init_templates() scans
+# this directory on first setup-finalize and imports every JSON file as
+# a catalog, so a fresh install lands on a populated Templates page
+# even when the box is offline (no GitHub fetch needed).
+COPY --chown=appuser:appuser configs/ /api/configs/
+
 # Expose ports
 EXPOSE 8080
 

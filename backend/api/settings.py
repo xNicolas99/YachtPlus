@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     # with AttributeError under pydantic v2's extra='forbid'.
     COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
 
+    # Directory shipped *inside the image* with bundled catalog JSON
+    # files (configs/*.json in the repo -> /api/configs/ in the container).
+    # Loaded by init_templates() on first setup-finalize, so a fresh
+    # install always has a populated Templates page — even fully offline.
+    # Files matching *.json get one catalog entry each, titled from the
+    # filename stem.
+    BUILTIN_CATALOG_DIR: str = os.getenv("YACHT_BUILTIN_CATALOG_DIR", "/api/configs")
+
     # Community Docker-image catalogs the setup wizard auto-installs on
     # first finalize, so the user doesn't land on an empty Templates page
     # after install. Each entry is `Title|URL` (pipe-separated); comma
