@@ -1,5 +1,29 @@
 from typing import List, Dict, Any
 
+
+def safe_http_status(exc, default: int = 503) -> int:
+    """Clamp a docker-library exception's `.status` (or `.status_code`)
+    to a valid HTTP status code.
+
+    aiodocker raises `DockerError(900, …)` as a sentinel meaning "couldn't
+    even reach the daemon" (Temporary failure in name resolution / refused
+    connection / etc.). Forwarding 900 as `HTTPException(status_code=…)`
+    crashes uvicorn with `KeyError: 900` when it tries to render the
+    status line — 900 isn't in the HTTP status table. Anything outside
+    400-599 collapses to `default` (503 = Service Unavailable, which
+    matches the situation: request is fine, upstream is down).
+    """
+    raw = getattr(exc, "status", None)
+    if raw is None:
+        raw = getattr(exc, "status_code", None)
+    try:
+        code = int(raw)
+    except (TypeError, ValueError):
+        return default
+    if 400 <= code <= 599:
+        return code
+    return default
+
 SENSITIVE_FIELDS = {
     "password",
     "token",

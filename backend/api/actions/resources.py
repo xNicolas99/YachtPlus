@@ -3,6 +3,7 @@ from fastapi import HTTPException
 import asyncio
 import logging
 from api.settings import Settings
+from api.utils.error_handler import safe_http_status
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -124,7 +125,7 @@ async def update_image(image_id):
                 await docker.images.pull(tag)
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
     return await get_image(image_id)
 
@@ -137,7 +138,7 @@ async def delete_image(image_id):
              return image
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
 
 
@@ -186,7 +187,7 @@ async def write_volume(volume_name):
             await docker.volumes.create({"Name": volume_name})
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
     return await get_volumes()
 
@@ -217,7 +218,7 @@ async def get_volume(volume_name):
                           # If it passed, `volume` would be undefined.
                           # I will keep the behavior but ensure `volume` is handled.
                           # Actually, if 404, we should probably raise 404.
-                     raise HTTPException(status_code=exc.status, detail=exc.message)
+                     raise HTTPException(status_code=safe_http_status(exc), detail=exc.message)
                  raise HTTPException(status_code=500, detail=str(exc))
             else:
                  volume = results[1]
@@ -249,7 +250,7 @@ async def delete_volume(volume_name):
             return volume
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
 
 
@@ -340,7 +341,7 @@ async def write_network(network_form):
             await docker.networks.create(config)
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
 
     return await get_networks()
@@ -372,7 +373,7 @@ async def get_network(network_id):
             if isinstance(results[1], Exception):
                  exc = results[1]
                  if isinstance(exc, aiodocker.exceptions.DockerError):
-                      raise HTTPException(status_code=exc.status, detail=exc.message)
+                      raise HTTPException(status_code=safe_http_status(exc), detail=exc.message)
                  raise HTTPException(status_code=500, detail=str(exc))
             else:
                  network = results[1]
@@ -402,7 +403,7 @@ async def delete_network(network_id):
             return network
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
-                status_code=exc.status, detail=exc.message
+                status_code=safe_http_status(exc), detail=exc.message
             )
 
 async def prune_resources(resource):

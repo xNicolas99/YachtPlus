@@ -68,7 +68,9 @@ async def check_app_update(app_name):
             app = await docker.containers.get(app_name)
             attrs = await app.show()
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+             raise HTTPException(
+                 status_code=_safe_http_status(exc), detail=exc.message,
+             )
 
         config = attrs.get("Config")
         if config and config.get("Image"):
@@ -119,6 +121,9 @@ def normalize_ports(summary_ports):
 
     return ports_dict
 
+from api.utils.error_handler import safe_http_status as _safe_http_status
+
+
 async def get_apps():
     apps_list = []
     try:
@@ -127,7 +132,9 @@ async def get_apps():
                 apps = await docker.containers.list(all=True)
             except aiodocker.exceptions.DockerError as exc:
                 logger.error(f"Docker API Error in get_apps: {exc.message}")
-                raise HTTPException(status_code=exc.status, detail=exc.message)
+                raise HTTPException(
+                    status_code=_safe_http_status(exc), detail=exc.message,
+                )
             except Exception as exc:
                 logger.error(f"Unexpected error in get_apps (Docker connection?): {exc}")
                 raise HTTPException(status_code=503, detail="Docker unavailable")
@@ -190,7 +197,7 @@ async def get_app(app_name):
             app = await docker.containers.get(app_name)
             attrs = await app.show()
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
 
         attrs["name"] = attrs.get("Name", "")[1:]
         attrs["short_id"] = attrs.get("Id", "")[:12]
@@ -460,7 +467,7 @@ async def app_action(app_name, action, background_tasks=None):
         try:
             app = await docker.containers.get(app_name)
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
 
         try:
             async with aiofiles.open("/proc/self/cgroup", "r") as f:
@@ -498,7 +505,7 @@ async def app_action(app_name, action, background_tasks=None):
             elif action == "unpause":
                 await app.unpause()
         except aiodocker.exceptions.DockerError as exc:
-            raise HTTPException(status_code=exc.status, detail=exc.message)
+            raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
 
     return await get_apps()
 
@@ -509,7 +516,7 @@ async def app_update(app_name):
             old_info = await old.show()
             old_name = old_info["Name"][1:]
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
 
         config = {
             "Image": "containrrr/watchtower:latest",
@@ -529,7 +536,7 @@ async def app_update(app_name):
             await updater.wait(timeout=120)
 
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=exc.status, detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
 
     await asyncio.sleep(1)
     return await get_apps()
