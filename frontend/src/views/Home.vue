@@ -244,7 +244,22 @@ export default {
     async fetchOverviewStats() {
       try {
         const response = await axios.get("/dashboard/stats");
-        this.overview = response.data;
+        // Merge into the existing structure rather than replacing it
+        // wholesale. If the backend ever returns a partial / older
+        // shape, the template still has its initial `{ total, running,
+        // stopped, … }` zeros to render against instead of throwing
+        // `can't access property "total" of undefined`.
+        const data = response.data || {};
+        const next = { ...this.overview };
+        for (const key of Object.keys(this.overview)) {
+          next[key] = { ...this.overview[key], ...(data[key] || {}) };
+        }
+        // Also pick up unexpected top-level keys (e.g. "resources",
+        // "info") so they're still available where consumed.
+        for (const key of Object.keys(data)) {
+          if (!(key in next)) next[key] = data[key];
+        }
+        this.overview = next;
       } catch (e) {
         console.error("Failed to fetch dashboard stats", e);
       }
