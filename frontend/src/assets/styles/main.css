@@ -1,3 +1,6 @@
+/* INDEX Overhaul design tokens + utility classes (--yp-*, .yp-card, etc.) */
+@import './yp-design.css';
+
 :root {
   --v-border-radius: 8px;
 }

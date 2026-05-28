@@ -1,20 +1,26 @@
 <template>
-  <v-container fluid class="pa-6 dashboard-container">
-    <!-- Header Section -->
-    <div class="d-flex flex-wrap align-center justify-space-between mb-6 gap-2">
+  <v-container fluid class="pa-6 yp-dashboard">
+    <!-- Page head -->
+    <div class="yp-page-head">
       <div>
-        <h1 class="text-h4 font-weight-bold">Dashboard</h1>
-        <div class="text-subtitle-2 text-medium-emphasis">Overview of your Docker environment</div>
+        <h1 class="yp-page-title">Dashboard</h1>
+        <p class="yp-page-sub">
+          Overview of <span class="yp-mono">{{ hostLabel }}</span>
+          ·
+          <span class="yp-mono">{{ overview.containers.total }}</span> containers
+          across
+          <span class="yp-mono">{{ overview.projects.total }}</span> stacks
+        </p>
       </div>
 
-      <div class="d-flex align-center controls-wrapper">
-        <!-- Polling Controls -->
+      <div class="d-flex align-center" style="gap:8px;">
+        <!-- Polling cadence -->
         <v-menu>
           <template v-slot:activator="{ props }">
             <v-btn
               variant="outlined"
               color="primary"
-              class="mr-2 text-none"
+              class="text-none yp-action-btn"
               v-bind="props"
               prepend-icon="mdi-clock-outline"
               append-icon="mdi-chevron-down"
@@ -42,112 +48,129 @@
           :color="polling ? 'warning' : 'success'"
           variant="tonal"
           size="small"
-          class="mr-2"
           @click="togglePolling"
           :aria-label="polling ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh'"
         >
-           <v-icon>{{ polling ? 'mdi-pause' : 'mdi-play' }}</v-icon>
-           <v-tooltip activator="parent" location="bottom">
-             {{ polling ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh' }}
-           </v-tooltip>
+          <v-icon>{{ polling ? 'mdi-pause' : 'mdi-play' }}</v-icon>
+          <v-tooltip activator="parent" location="bottom">
+            {{ polling ? 'Pause Auto-Refresh' : 'Resume Auto-Refresh' }}
+          </v-tooltip>
         </v-btn>
 
         <v-btn
-          icon="mdi-refresh"
           color="primary"
           variant="flat"
           size="small"
+          class="text-none yp-action-btn"
+          prepend-icon="mdi-refresh"
           @click="refresh()"
           :loading="loading"
-          aria-label="Refresh Now"
         >
-          <v-icon>mdi-refresh</v-icon>
-          <v-tooltip activator="parent" location="bottom">Refresh Now</v-tooltip>
+          Refresh
+        </v-btn>
+
+        <v-btn
+          color="primary"
+          variant="flat"
+          size="small"
+          class="text-none yp-action-btn yp-action-primary"
+          prepend-icon="mdi-plus"
+          to="/apps/deploy"
+        >
+          New Container
         </v-btn>
       </div>
     </div>
 
-    <!-- KPI Cards Grid -->
-    <div class="dashboard-grid mb-8">
-      <!-- Containers KPI -->
-      <v-card class="kpi-card container-kpi" elevation="2">
-        <div class="kpi-icon-wrapper">
-           <span class="kpi-emoji">🐳</span>
+    <!-- KPI strip -->
+    <div class="yp-kpi-grid">
+      <!-- Containers -->
+      <div class="yp-card yp-card-pad">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <span class="yp-kpi-eyebrow">Containers</span>
+          <v-icon size="16" color="medium-emphasis">mdi-package-variant-closed</v-icon>
         </div>
-        <div class="kpi-content">
-          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Containers</div>
-          <div class="text-h3 font-weight-bold text-primary mb-1">{{ overview.containers.total }}</div>
-          <div class="d-flex align-center gap-2">
-            <v-chip size="x-small" color="success" variant="flat" class="font-weight-bold">
-              {{ overview.containers.running }} Running
-            </v-chip>
-            <v-chip size="x-small" color="medium-emphasis" variant="tonal">
-              {{ overview.containers.stopped }} Stopped
-            </v-chip>
+        <div class="yp-kpi-num yp-tnum">{{ overview.containers.total }}</div>
+        <div class="d-flex flex-wrap" style="gap:14px; margin-top:14px;">
+          <div class="yp-row" style="gap:6px;">
+            <span class="yp-dot" :style="{ background: 'var(--yp-ok)' }"></span>
+            <span class="yp-kpi-leg">Running</span>
+            <span class="yp-mono yp-tnum yp-kpi-val">{{ overview.containers.running }}</span>
+          </div>
+          <div class="yp-row" style="gap:6px;">
+            <span class="yp-dot" :style="{ background: 'var(--yp-warn)' }"></span>
+            <span class="yp-kpi-leg">Unhealthy</span>
+            <span class="yp-mono yp-tnum yp-kpi-val">{{ overview.containers.unhealthy }}</span>
+          </div>
+          <div class="yp-row" style="gap:6px;">
+            <span class="yp-dot" :style="{ background: 'var(--yp-err)' }"></span>
+            <span class="yp-kpi-leg">Stopped</span>
+            <span class="yp-mono yp-tnum yp-kpi-val">{{ overview.containers.stopped }}</span>
           </div>
         </div>
-      </v-card>
+      </div>
 
-      <!-- Images KPI -->
-      <v-card class="kpi-card image-kpi" elevation="2">
-        <div class="kpi-icon-wrapper">
-           <span class="kpi-emoji">📦</span>
+      <!-- Images -->
+      <div class="yp-card yp-card-pad">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <span class="yp-kpi-eyebrow">Images</span>
+          <v-icon size="16" color="medium-emphasis">mdi-layers</v-icon>
         </div>
-        <div class="kpi-content">
-          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Images</div>
-          <div class="text-h3 font-weight-bold text-info mb-1">{{ overview.images.total }}</div>
-          <div class="text-caption text-medium-emphasis">
-            Total Size: <span class="font-weight-bold text-white">{{ formatBytes(overview.images.total_size) }}</span>
-          </div>
+        <div class="yp-kpi-num yp-tnum">{{ overview.images.total }}</div>
+        <div class="yp-kpi-label">
+          Total size
+          <span class="yp-mono" style="color: var(--yp-text); margin-left:4px;">
+            {{ formatBytes(overview.images.total_size) }}
+          </span>
         </div>
-      </v-card>
+      </div>
 
-      <!-- Volumes KPI -->
-      <v-card class="kpi-card volume-kpi" elevation="2">
-        <div class="kpi-icon-wrapper">
-           <span class="kpi-emoji">💾</span>
+      <!-- Volumes -->
+      <div class="yp-card yp-card-pad">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <span class="yp-kpi-eyebrow">Volumes</span>
+          <v-icon size="16" color="medium-emphasis">mdi-database</v-icon>
         </div>
-        <div class="kpi-content">
-          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Volumes</div>
-          <div class="text-h3 font-weight-bold text-warning mb-1">{{ overview.volumes.total }}</div>
-          <div class="text-caption text-medium-emphasis">
-             <span class="text-warning font-weight-bold">{{ overview.volumes.unused }}</span> Unused
-          </div>
+        <div class="yp-kpi-num yp-tnum">{{ overview.volumes.total }}</div>
+        <div class="yp-kpi-label">
+          <span class="yp-mono" style="color: var(--yp-warn);">{{ overview.volumes.unused }}</span>
+          unused ·
+          <span class="yp-mono">{{ overview.volumes.in_use }}</span>
+          in use
         </div>
-      </v-card>
+      </div>
 
-      <!-- Networks KPI -->
-      <v-card class="kpi-card network-kpi" elevation="2">
-        <div class="kpi-icon-wrapper">
-           <span class="kpi-emoji">🌐</span>
+      <!-- Networks -->
+      <div class="yp-card yp-card-pad">
+        <div class="d-flex align-center justify-space-between mb-3">
+          <span class="yp-kpi-eyebrow">Networks</span>
+          <v-icon size="16" color="medium-emphasis">mdi-lan</v-icon>
         </div>
-        <div class="kpi-content">
-          <div class="text-overline font-weight-bold text-medium-emphasis mb-0">Networks</div>
-          <div class="text-h3 font-weight-bold text-secondary mb-1">{{ overview.networks.total }}</div>
-           <div class="text-caption text-medium-emphasis">
-             {{ overview.networks.custom }} Custom
-          </div>
+        <div class="yp-kpi-num yp-tnum">{{ overview.networks.total }}</div>
+        <div class="yp-kpi-label">
+          <span class="yp-mono">{{ overview.networks.custom }}</span> custom ·
+          <span class="yp-mono">{{ overview.networks.default }}</span> default
         </div>
-      </v-card>
+      </div>
     </div>
 
-    <!-- Active Containers Section -->
-    <div class="d-flex align-center mb-4">
-      <h2 class="text-h5 font-weight-bold">Active Containers</h2>
-      <v-chip color="primary" size="small" class="ml-3 font-weight-bold" variant="tonal">
-        {{ apps.length }}
-      </v-chip>
+    <!-- Active containers -->
+    <div class="d-flex align-center mt-8 mb-4" style="gap:12px;">
+      <h2 class="yp-section-title">Active Containers</h2>
+      <span class="yp-tag yp-mono yp-tnum">{{ apps.length }}</span>
     </div>
 
-    <!-- Empty State -->
     <v-fade-transition>
-      <div v-if="!loading && apps.length === 0" class="empty-state-wrapper text-center pa-8 border-dashed rounded-lg">
-        <v-icon size="64" color="medium-emphasis" class="mb-4">mdi-docker</v-icon>
-        <h3 class="text-h5 font-weight-medium mb-2">No Containers Running</h3>
-        <p class="text-body-1 text-medium-emphasis mb-6">
+      <div
+        v-if="!loading && apps.length === 0"
+        class="yp-empty-state text-center pa-8"
+      >
+        <v-icon size="56" color="medium-emphasis" class="mb-3">mdi-docker</v-icon>
+        <h3 class="text-h6 font-weight-medium mb-2">No containers running</h3>
+        <p class="text-body-2 yp-muted mb-6">
           Your dashboard looks a bit empty. Start a container to see stats here.
         </p>
-        <div class="d-flex justify-center gap-4">
+        <div class="d-flex justify-center" style="gap:12px;">
           <v-btn color="primary" to="/templates" prepend-icon="mdi-store">
             Deploy from Templates
           </v-btn>
@@ -158,8 +181,7 @@
       </div>
     </v-fade-transition>
 
-    <!-- Container Grid -->
-    <div v-if="apps.length > 0" class="container-grid">
+    <div v-if="apps.length > 0" class="yp-container-grid">
       <ContainerCard
         v-for="app in sortByTitle(apps)"
         :key="app.name"
@@ -171,7 +193,6 @@
         class="cursor-pointer"
       />
     </div>
-
   </v-container>
 </template>
 
@@ -191,6 +212,7 @@ export default {
       polling: true,
       pollingInterval: 5000,
       loading: false,
+      hostLabel: 'prod-01',
       pollingOptions: [
         { text: "2s (Fast)", value: 2000 },
         { text: "5s (Normal)", value: 5000 },
@@ -231,7 +253,7 @@ export default {
       if (this.statsInterval) clearInterval(this.statsInterval);
       if (this.pollingInterval === 0) return;
 
-      this.pollAll(); // Initial
+      this.pollAll();
 
       this.statsInterval = setInterval(() => {
         if (this.polling) {
@@ -241,12 +263,9 @@ export default {
     },
     async pollAll() {
       try {
-        // Fetch dashboard stats and container stats concurrently
         const [_, statsResponse] = await Promise.all([
           this.fetchOverviewStats(),
-          axios.get("/containers/stats", {
-            skipAuthRefresh: true
-          })
+          axios.get("/containers/stats", { skipAuthRefresh: true })
         ]);
         const statsData = statsResponse.data;
 
@@ -254,27 +273,25 @@ export default {
           this.apps.forEach(app => {
             const stat = statsData[app.name];
             if (stat) {
-               let memUsage = stat.memory_usage;
-               let memLimit = stat.memory_limit;
+              let memUsage = stat.memory_usage;
+              let memLimit = stat.memory_limit;
 
-               if (memUsage === undefined && stat.memory_usage_mb !== undefined) {
-                   memUsage = stat.memory_usage_mb * 1024 * 1024;
-               }
-               if (memLimit === undefined && stat.memory_limit_mb !== undefined) {
-                   memLimit = stat.memory_limit_mb * 1024 * 1024;
-               }
+              if (memUsage === undefined && stat.memory_usage_mb !== undefined) {
+                memUsage = stat.memory_usage_mb * 1024 * 1024;
+              }
+              if (memLimit === undefined && stat.memory_limit_mb !== undefined) {
+                memLimit = stat.memory_limit_mb * 1024 * 1024;
+              }
 
-               this.stats[app.name] = {
-                 cpu_percent: stat.cpu_percent,
-                 mem_percent: stat.memory_percent,
-                 mem_current: this.formatBytes(memUsage),
-                 mem_total: this.formatBytes(memLimit),
-                 name: app.name
-               };
-            } else {
-                if(app.State.Status !== 'running') {
-                    this.stats[app.name] = null;
-                }
+              this.stats[app.name] = {
+                cpu_percent: stat.cpu_percent,
+                mem_percent: stat.memory_percent,
+                mem_current: this.formatBytes(memUsage),
+                mem_total: this.formatBytes(memLimit),
+                name: app.name
+              };
+            } else if (app.State.Status !== 'running') {
+              this.stats[app.name] = null;
             }
           });
         }
@@ -300,38 +317,34 @@ export default {
       }
     },
     sortByTitle(arr) {
-       if(!arr) return [];
+      if (!arr) return [];
       return [...arr].sort((a, b) => a.name.localeCompare(b.name));
     },
     handleAppClick(appName) {
       this.$router.push({ path: `/apps/${appName}/info` });
     },
     handleLogs(appName) {
-      // Assuming logs route
-       this.$router.push({ path: `/apps/${appName}/logs` });
+      this.$router.push({ path: `/apps/${appName}/logs` });
     },
     async handleContainerAction(action, appName) {
-        try {
-            this.loading = true;
-            await axios.get(`/containers/${appName}/${action}`);
-            // Wait a bit for state to change then refresh
-            setTimeout(() => {
-                this.refresh();
-            }, 1000);
-            this.$store.commit('snackbar/setSnack', { message: `Container ${action}ed successfully.`, color: 'success' }, { root: true });
-        } catch(err) {
-             this.$store.commit('snackbar/setErr', err, { root: true });
-        } finally {
-            this.loading = false;
-        }
+      try {
+        this.loading = true;
+        await axios.get(`/containers/${appName}/${action}`);
+        setTimeout(() => { this.refresh(); }, 1000);
+        this.$store.commit('snackbar/setSnack', { message: `Container ${action}ed successfully.`, color: 'success' }, { root: true });
+      } catch (err) {
+        this.$store.commit('snackbar/setErr', err, { root: true });
+      } finally {
+        this.loading = false;
+      }
     },
     formatBytes(bytes, decimals = 2) {
-        if (!+bytes) return '0 B';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+      if (!+bytes) return '0 B';
+      const k = 1024;
+      const dm = decimals < 0 ? 0 : decimals;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
   },
   async created() {
@@ -342,12 +355,12 @@ export default {
 
     this.loading = true;
     try {
-        await Promise.all([
-          this.readApps(),
-          this.fetchOverviewStats()
-        ]);
+      await Promise.all([
+        this.readApps(),
+        this.fetchOverviewStats()
+      ]);
     } finally {
-        this.loading = false;
+      this.loading = false;
     }
     this.startStatsPolling();
   },
@@ -360,56 +373,61 @@ export default {
 </script>
 
 <style scoped>
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1.5rem;
+.yp-dashboard {
+  background: var(--yp-bg);
+  min-height: 100%;
 }
 
-.container-grid {
+.yp-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.yp-kpi-eyebrow {
+  color: var(--yp-muted);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.yp-kpi-leg { font-size: 12px; color: var(--yp-muted); }
+.yp-kpi-val { font-size: 12px; color: var(--yp-text); }
+
+.yp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.yp-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--yp-text);
+  margin: 0;
+}
+
+.yp-action-btn {
+  letter-spacing: 0;
+  font-weight: 500;
+}
+.yp-action-primary {
+  /* primary CTA matches the design's accent button */
+  color: #062231 !important;
+  font-weight: 600 !important;
+}
+
+.yp-container-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1.5rem;
+  gap: 14px;
 }
 
-.kpi-card {
-  padding: 1.25rem;
-  border-radius: 16px;
-  display: flex;
-  align-items: flex-start;
-  min-height: 140px;
-  background: linear-gradient(135deg, rgba(30, 30, 46, 0.9) 0%, rgba(20, 20, 35, 0.95) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  position: relative;
-  overflow: hidden;
+.yp-empty-state {
+  border: 1px dashed var(--yp-border);
+  border-radius: var(--yp-radius-lg);
+  background: var(--yp-surface);
 }
-
-.kpi-card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: linear-gradient(to bottom right, rgba(255,255,255,0.05), transparent);
-  pointer-events: none;
-}
-
-.kpi-icon-wrapper {
-  margin-right: 1rem;
-  padding: 10px;
-  background: rgba(0,0,0,0.2);
-  border-radius: 12px;
-}
-
-.kpi-emoji {
-  font-size: 2rem;
-}
-
-.kpi-content {
-  flex: 1;
-  z-index: 1;
-}
-
-.gap-2 { gap: 0.5rem; }
-.gap-4 { gap: 1rem; }
-.cursor-pointer { cursor: pointer; }
-.border-dashed { border: 1px dashed rgba(255,255,255,0.15); }
 </style>

@@ -23,6 +23,11 @@ export function updateTheme(vuetifyInstance, primaryColor, secondaryColor) {
 const savedPrimary = localStorage.getItem('theme_primary');
 const savedSecondary = localStorage.getItem('theme_secondary');
 
+// Palette synchronised with src/assets/styles/yp-design.css (the INDEX
+// Overhaul design tokens). When components use Vuetify color names like
+// `color="primary"` or `bg-surface` they will pick these up automatically;
+// raw markup that needs the exact same colours can use the --yp-* CSS
+// variables defined in yp-design.css.
 export default createVuetify({
   components,
   directives,
@@ -32,29 +37,29 @@ export default createVuetify({
       dark: {
         dark: true,
         colors: {
-          primary: savedPrimary || '#1E88E5',
-          secondary: savedSecondary || '#43A047',
-          accent: '#82B1FF',
-          error: '#E53935',
-          info: '#2196F3',
-          success: '#43A047',
-          warning: '#FB8C00',
-          surface: '#121212',
-          background: '#0A0E27',
+          primary:    savedPrimary   || '#38BDF8', // sky-400 — design accent
+          secondary:  savedSecondary || '#A78BFA', // violet-400 — secondary accent
+          accent:     '#38BDF8',
+          error:      '#EF4444',
+          info:       '#38BDF8',
+          success:    '#22C55E',
+          warning:    '#F59E0B',
+          surface:    '#1E293B', // slate-800 — cards
+          background: '#0F172A', // slate-900 — app background
         },
       },
       light: {
         dark: false,
         colors: {
-          primary: savedPrimary || '#1E88E5',
-          secondary: savedSecondary || '#43A047',
-          accent: '#82B1FF',
-          error: '#E53935',
-          info: '#2196F3',
-          success: '#43A047',
-          warning: '#FB8C00',
-          surface: '#FFFFFF',
-          background: '#F5F5F5',
+          primary:    savedPrimary   || '#0EA5E9',
+          secondary:  savedSecondary || '#7C3AED',
+          accent:     '#0EA5E9',
+          error:      '#DC2626',
+          info:       '#0EA5E9',
+          success:    '#16A34A',
+          warning:    '#D97706',
+          surface:    '#FFFFFF',
+          background: '#F8FAFC',
         },
       }
     },

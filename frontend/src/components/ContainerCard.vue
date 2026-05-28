@@ -164,17 +164,18 @@ export default {
 
 <style scoped>
 .container-card {
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgb(var(--v-theme-surface));
-  transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+  border-radius: var(--yp-radius);
+  border: 1px solid var(--yp-border-soft);
+  background: var(--yp-surface);
+  box-shadow: var(--yp-shadow-1);
+  transition: transform 0.18s, box-shadow 0.18s, border-color 0.18s;
   overflow: visible; /* For menu/tooltips */
 }
 
 .container-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.2) !important;
-  border-color: rgba(var(--v-theme-primary), 0.5);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+  border-color: rgba(56, 189, 248, 0.35);
   z-index: 1;
 }
 
@@ -185,10 +186,10 @@ export default {
   position: relative;
 }
 
-.status-indicator.running { background-color: rgb(var(--v-theme-success)); box-shadow: 0 0 8px rgba(var(--v-theme-success), 0.6); }
-.status-indicator.stopped { background-color: rgb(var(--v-theme-medium-emphasis)); }
-.status-indicator.warning { background-color: rgb(var(--v-theme-warning)); }
-.status-indicator.default { background-color: rgb(var(--v-theme-grey)); }
+.status-indicator.running { background-color: var(--yp-ok); box-shadow: 0 0 0 3px var(--yp-ok-soft); }
+.status-indicator.stopped { background-color: var(--yp-muted-2); }
+.status-indicator.warning { background-color: var(--yp-warn); box-shadow: 0 0 0 3px var(--yp-warn-soft); }
+.status-indicator.default { background-color: var(--yp-muted-2); }
 
 .pulse-ring {
   position: absolute;
@@ -196,7 +197,7 @@ export default {
   transform: translate(-50%, -50%);
   width: 100%; height: 100%;
   border-radius: 50%;
-  border: 2px solid rgb(var(--v-theme-success));
+  border: 2px solid var(--yp-ok);
   animation: pulse 2s infinite;
   opacity: 0;
 }
