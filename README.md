@@ -92,6 +92,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt: [no-new-privileges:true]
     read_only: true
+    # The proxy's entrypoint writes /tmp/haproxy.cfg; with read_only: true
+    # alone the container crash-loops. tmpfs gives /tmp a writable
+    # in-memory mount, the rest of the rootfs stays read-only.
+    tmpfs: ["/tmp"]
     cap_drop: [ALL]
     mem_limit: 128m
     pids_limit: 100

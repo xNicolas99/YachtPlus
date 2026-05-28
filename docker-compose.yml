@@ -18,6 +18,13 @@ services:
     security_opt:
       - no-new-privileges:true
     read_only: true
+    # tecnativa/docker-socket-proxy's entrypoint writes its haproxy
+    # config to /tmp/haproxy.cfg on every start. With read_only: true
+    # alone the container crash-loops with `can't create /tmp/haproxy.cfg:
+    # Read-only file system`. tmpfs gives /tmp a writable in-memory
+    # mount while keeping the rest of the rootfs read-only.
+    tmpfs:
+      - /tmp
     cap_drop:
       - ALL
     mem_limit: 128m
