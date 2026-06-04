@@ -34,7 +34,15 @@ def _run_compose_command(command_args, cwd, env_vars):
     """
     Executes a docker-compose command using subprocess.
     """
-    cmd = ["docker-compose"] + command_args
+    # Compose v2 ships as a Docker CLI plugin invoked via `docker compose`.
+    # The standalone `docker-compose` v1 binary has been deprecated since
+    # 2023 and is not installed on most modern hosts (Docker Desktop, the
+    # docker.io / docker-ce packages on current Ubuntu/Debian, etc.). Using
+    # the plugin form keeps us compatible with every supported runtime; on
+    # the few v1-only legacy hosts the operator can symlink `docker-compose`
+    # into a wrapper, but the inverse (assuming v1 exists) was guaranteed
+    # to fail with ENOENT on a clean install.
+    cmd = ["docker", "compose"] + command_args
     logger.info(f"Executing: {' '.join(cmd)} in {cwd}")
 
     try:
