@@ -107,30 +107,42 @@ def update_user(db: Session, user: schemas.UserUpdate, current_user):
     _hashed_password = get_password_hash(user.password) if user.password else None
     _user = get_user_by_name(db=db, username=current_user)
 
-    if _user and _user.is_active:
-        if user.username:
-            new_canonical = _normalize_username(user.username)
-            if new_canonical != _user.username.casefold():
-                # Reject if another row already owns the canonical name —
-                # otherwise an attacker could squat a case-variant of
-                # someone else's username and starve their login lookup.
-                if _username_is_taken(db, new_canonical, excluding_id=_user.id):
-                    raise HTTPException(
-                        status_code=409, detail="Username already in use."
-                    )
-                _user.username = new_canonical
+    # Previously this function fell off the end returning None when the
+    # user was missing or inactive, so the endpoint silently succeeded
+    # with a 200 / null body. Surface both cases as explicit errors so an
+    # admin attempting to re-activate an inactive account gets feedback
+    # instead of an undetectable no-op.
+    if not _user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    if not _user.is_active:
+        raise HTTPException(
+            status_code=409,
+            detail="User is inactive. Reactivate the account before editing it.",
+        )
 
-        if user.password:
-            _user.hashed_password = _hashed_password
+    if user.username:
+        new_canonical = _normalize_username(user.username)
+        if new_canonical != _user.username.casefold():
+            # Reject if another row already owns the canonical name —
+            # otherwise an attacker could squat a case-variant of
+            # someone else's username and starve their login lookup.
+            if _username_is_taken(db, new_canonical, excluding_id=_user.id):
+                raise HTTPException(
+                    status_code=409, detail="Username already in use."
+                )
+            _user.username = new_canonical
 
-        try:
-            db.add(_user)
-            db.commit()
-            db.refresh(_user)
-        except Exception as exc:
-            db.rollback()
-            raise HTTPException(status_code=400, detail=str(exc))
-        return _user
+    if user.password:
+        _user.hashed_password = _hashed_password
+
+    try:
+        db.add(_user)
+        db.commit()
+        db.refresh(_user)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _user
 
 def update_user_by_id(db: Session, user_id: int, user_update: schemas.UserUpdate):
     db_user = get_user(db, user_id)

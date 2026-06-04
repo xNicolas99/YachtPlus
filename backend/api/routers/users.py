@@ -272,10 +272,12 @@ def login_cookie(
         record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
         Authorize.set_access_cookies(access_token, response)
+        # Token lives only in the HttpOnly cookie. Echoing it in the body
+        # would defeat the cookie strategy by making the JWT reachable to
+        # any DOM XSS via response.data.access_token.
         return {
             "login": "successful",
             "username": _user.username,
-            "access_token": access_token,
         }
     else:
         record_login_attempt(db, client_ip, user_data.username, False)
@@ -310,7 +312,7 @@ def refresh(
 
     new_access_token = create_access_token(data={"sub": current_user})
     Authorize.set_access_cookies(new_access_token, response)
-    return {"refresh": "successful", "access_token": new_access_token}
+    return {"refresh": "successful"}
 
 
 @router.get("/api/keys", response_model=List[schemas.APIKEY])
@@ -366,13 +368,16 @@ def get_user(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depend
     auth_check(Authorize)
     auth_setting = str(settings.DISABLE_AUTH)
     if auth_setting.lower() == "true":
-        current_user = schemas.User
-        current_user.authDisabled = True
-        current_user.id = 0
-        current_user.username = "user"
-        current_user.is_active = True
-        current_user.is_superuser = True
-        return current_user
+        # Previous code mutated the schemas.User CLASS object directly,
+        # which AttributeErrors on Pydantic v2 model classes and bleeds
+        # state across requests. Construct a real instance instead.
+        return schemas.User(
+            id=0,
+            username="user",
+            is_active=True,
+            is_superuser=True,
+            authDisabled=True,
+        )
     else:
         Authorize.jwt_required()
         current_user_name = Authorize.get_jwt_subject()

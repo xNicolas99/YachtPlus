@@ -15,8 +15,10 @@ import api.db.crud.users as users_crud
 from api.auth.jwt import get_auth_wrapper
 from api.utils.audit import log_activity
 
-
+import logging
 import re as _re
+
+logger = logging.getLogger(__name__)
 
 # Docker container-name regex: must start alnum, then alnum/dot/dash/underscore.
 _DEPLOY_NAME_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
@@ -185,7 +187,14 @@ async def container_actions(app_name, action, background_tasks: BackgroundTasks,
         user = Authorize.get_jwt_subject()
         log_activity(db, user=user, action=action, resource=app_name)
     except Exception as e:
-        print(f"Audit Log Error: {e}")
+        # We deliberately don't block the action on audit-write failure
+        # (an unavailable audit DB shouldn't lock operators out of the
+        # platform), but the failure must reach the operator instead of
+        # disappearing into stdout.
+        logger.error(
+            "Audit log write failed for action=%s resource=%s: %s",
+            action, app_name, e, exc_info=True,
+        )
 
     return await actions.app_action(app_name, action, background_tasks)
 
@@ -224,7 +233,10 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
         user = Authorize.get_jwt_subject()
         log_activity(db, user=user, action="deploy", resource=template.name, details=f"Image: {template.image}")
     except Exception as e:
-        print(f"Audit Log Error: {e}")
+        logger.error(
+            "Audit log write failed for action=deploy resource=%s: %s",
+            template.name, e, exc_info=True,
+        )
 
     return result
 
