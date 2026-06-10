@@ -16,7 +16,11 @@ class User(Base):
     is_superuser = Column(Boolean, default=False, nullable=False)
 
     # New fields for 2FA and Roles
-    otp_secret = Column(String(length=32), nullable=True)
+    # Stores the Fernet-ENCRYPTED TOTP seed ("v2:" prefix + ciphertext),
+    # which runs ~120-200 chars — not the raw 32-char base32 secret. The
+    # old length=32 was silently ignored by SQLite but would reject every
+    # 2FA enrolment on PostgreSQL/MySQL with a value-too-long error.
+    otp_secret = Column(String(length=512), nullable=True)
     is_2fa_enabled = Column(Boolean, default=False, nullable=False)
     # Storing permissions as boolean columns for explicit clarity as requested
     # "Restart, start, stop, remove/delete"

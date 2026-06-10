@@ -40,7 +40,7 @@ const mutations = {
     state.isLoadingValue += increment;
   },
   setLoadingComplete(state) {
-    state.isLoadingValue == null;
+    state.isLoadingValue = null;
   },
   setAction(state, action) {
     state.action = action;
@@ -159,7 +159,7 @@ const actions = {
     console.log("Update started for " + Name + ", please wait...");
     const url = `/apps/${Name}/update`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const app = response.data;
         commit("setApps", app);
@@ -185,7 +185,7 @@ const actions = {
 
     const url = `/apps/actions/${Name}/${Action}`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const app = response.data;
         commit("setApps", app);

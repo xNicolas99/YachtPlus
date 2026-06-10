@@ -78,8 +78,15 @@ async def get_project(
     return await get_compose(project_name)
 
 
-@router.get("/{project_name}/actions/{action}")
-async def get_compose_action(
+# POST is the correct verb for state-changing compose actions: the GET
+# variant was CSRF-triggerable via <img src=...> / link click (SameSite=lax
+# sends cookies on top-level GET navigation) and could be prefetched or
+# cached by intermediaries — `.../actions/delete` as a GET is a stack-wipe
+# waiting to happen. The GET alias is retained for one release so existing
+# clients keep working — remove once they're migrated.
+@router.post("/{project_name}/actions/{action}")
+@router.get("/{project_name}/actions/{action}", deprecated=True)
+async def compose_project_action(
     project_name,
     action,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -109,8 +116,9 @@ async def write_compose_project(
     return await write_compose(compose=compose)
 
 
-@router.get("/{project_name}/actions/{action}/{app}")
-async def get_compose_app_action(
+@router.post("/{project_name}/actions/{action}/{app}")
+@router.get("/{project_name}/actions/{action}/{app}", deprecated=True)
+async def compose_app_action_route(
     project_name,
     action,
     app,

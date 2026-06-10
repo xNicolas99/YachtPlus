@@ -28,7 +28,7 @@ def is_private_ip(ip: str) -> bool:
 def send_security_alert(db: Session, ip_address: str, reason: str, username: str = None):
     settings = db.query(SMTPSettings).first()
     if not settings:
-        print("SMTP Settings not found, cannot send alert.")
+        logger.warning("SMTP settings not found, cannot send security alert.")
         return
 
     admin_user = db.query(User).filter(User.username == settings.sender_email).first() # Fallback to sender email if admin email not stored explicitly
@@ -66,7 +66,9 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
         server.sendmail(settings.sender_email, recipient, msg.as_string())
         server.quit()
     except Exception as e:
-        print(f"Failed to send security alert: {e}")
+        # Log the exception class but not its full text — smtplib errors can
+        # embed the AUTH exchange, leaking credentials into container logs.
+        logger.error("Failed to send security alert (%s)", type(e).__name__)
 
 def _is_trusted_proxy(client_ip: str) -> bool:
     """Return True when client_ip matches a configured TRUSTED_PROXIES entry.
@@ -178,7 +180,10 @@ def _count_recent_failed_attempts_for_username(
 def check_ip_restriction(request: Request, db: Session, username: str = None):
     client_ip = _resolve_client_ip(request)
 
-    if not is_private_ip(client_ip):
+    # Hard-blocking every public IP made hosted/VPS deployments impossible
+    # to log into; the block is now opt-out via YACHT_BLOCK_PUBLIC_IP_LOGIN.
+    # getattr fallback keeps older Settings stubs (tests, embedders) working.
+    if getattr(_settings, "BLOCK_PUBLIC_IP_LOGIN", True) and not is_private_ip(client_ip):
         send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
