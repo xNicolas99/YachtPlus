@@ -50,7 +50,8 @@ def test_search_result_limit_constant_is_sane():
     assert 16 <= SEARCH_QUERY_MAX_LEN <= 1024
 
 
-def test_search_caps_template_results(db, monkeypatch):
+@pytest.mark.asyncio
+async def test_search_caps_template_results(db, monkeypatch):
     class FakeTemplate:
         def __init__(self, i):
             self.id = i
@@ -69,13 +70,12 @@ def test_search_caps_template_results(db, monkeypatch):
     monkeypatch.setattr(search_module.registries, "search_registry", fake_registry)
     monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: overflow)
 
-    result = asyncio.get_event_loop().run_until_complete(
-        search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
-    )
+    result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     assert len(result["templates"]) == SEARCH_RESULT_LIMIT
 
 
-def test_search_caps_dockerhub_results(db, monkeypatch):
+@pytest.mark.asyncio
+async def test_search_caps_dockerhub_results(db, monkeypatch):
     overflow = [{"name": f"img-{i}"} for i in range(SEARCH_RESULT_LIMIT + 25)]
 
     async def fake_registry(*_a, **_kw):
@@ -84,7 +84,5 @@ def test_search_caps_dockerhub_results(db, monkeypatch):
     monkeypatch.setattr(search_module.registries, "search_registry", fake_registry)
     monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: [])
 
-    result = asyncio.get_event_loop().run_until_complete(
-        search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
-    )
+    result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     assert len(result["dockerhub"]) == SEARCH_RESULT_LIMIT

@@ -1,4 +1,4 @@
-# YachtPlus Bug Hunt — Growing Prompt (v2, 2026-06-10)
+# YachtPlus Bug Hunt — Growing Prompt (v3, 2026-06-11)
 
 You are auditing the YachtPlus repository (FastAPI backend + Vue 3 frontend,
 self-hosted Docker management UI). Your job has three phases: VERIFY, HUNT,
@@ -148,23 +148,45 @@ audit round — it must be self-contained.
 - O14 [CONFIRMED] [Low] db/crud bulk `.delete()` calls: audit for missing rollback /
   synchronize_session (jwt.py revoke_token has it; others unverified).
 
-### OPEN-NEW-1 [Medium] Exception swallowing in setup endpoints
-- File: backend/api/routers/setup/setup.py:117, 123
-- Severity: Medium
-- Evidence: `except: pass`
-- Proposed fix: Avoid bare except clauses, especially in setup methods, which can hide critical errors like permission errors. Log the exception or handle specific exceptions (e.g., `OSError`).
+- O15 [CONFIRMED] [Medium] Exception swallowing in setup endpoints: backend/api/routers/setup/setup.py:117, 123 uses `except: pass`. Avoid bare except clauses, especially in setup methods, which can hide critical errors like permission errors. Log the exception or handle specific exceptions (e.g., `OSError`).
+- O16 [CONFIRMED] [Medium] Exception swallowing in background actions: backend/api/actions/dashboard.py:60, backend/api/actions/apps.py:60 uses `except Exception:` followed by `pass` or returning default values silently. Log the exception using `logger.error` before returning the default or empty value, so failures are not completely swallowed.
+- O17 [CONFIRMED] [Low] Settings drift due to module-level instantiations: backend/api/db/database.py:8, backend/api/utils/docker_client.py:28, backend/api/actions/compose.py:84 (and ~19 other files, relates to O04). Accessing `settings.DATABASE_URL`, `settings.DOCKER_HOST` directly using module-level `settings` instance instead of LRU cached `get_settings()`. Replace module-level `Settings()` instantiation with `get_settings()` from `api.settings` to respect LRU cache and prevent memory leaks/drift.
 
-### OPEN-NEW-2 [Medium] Exception swallowing in background actions
-- File: backend/api/actions/dashboard.py:60, backend/api/actions/apps.py:60
-- Severity: Medium
-- Evidence: `except Exception:` followed by `pass` or returning default values silently.
-- Proposed fix: Log the exception using `logger.error` before returning the default or empty value, so failures are not completely swallowed.
+### OPEN-NEW-4 [High] Missing Auth Gate Coverage
+- File: backend/api/routers/users.py:329, backend/api/routers/auth_2fa.py:86, backend/api/routers/resources.py:47
+- Severity: High
+- Evidence: `create_api_key`, `enable_2fa`, and `delete_image` do not explicitly call `auth_check(Authorize)` or `require_superuser` at the start of the function, but perform sensitive operations. (Other routes like login/refresh/register/setup are intentionally unauthenticated or handled specially).
+- Proposed fix: Add `auth_check(Authorize)` or `require_superuser(Authorize, db)` appropriately.
 
-### OPEN-NEW-3 [Low] Settings drift due to module-level instantiations
-- File: backend/api/db/database.py:8, backend/api/utils/docker_client.py:28, backend/api/actions/compose.py:84 (and ~19 other files, relates to O04)
+### OPEN-NEW-5 [Medium] State-changing GET routes
+- File: backend/api/routers/users.py:353, backend/api/routers/users.py:410, backend/api/routers/users.py:424, backend/api/routers/app_settings.py:88, backend/api/routers/templates.py:188
+- Severity: Medium
+- Evidence: `@router.get("/api/keys/{key_id}", deprecated=True)` used for delete, `@router.get("/logout")` used for session destruction, `@router.get("/prune/{resource}")` used for deleting resources, `@router.get("/{id}/refresh")` used for refreshing template.
+- Proposed fix: Convert these state-changing GET endpoints to POST/DELETE to prevent CSRF under SameSite=lax. Keep GET only as a temporary deprecated alias if necessary, but transition the frontend.
+
+### OPEN-NEW-6 [Low] Missing resource lifecycle cleanup
+- File: frontend/src/views/Home.vue:356, frontend/src/App.vue:185
 - Severity: Low
-- Evidence: Accessing `settings.DATABASE_URL`, `settings.DOCKER_HOST` directly using module-level `settings` instance instead of LRU cached `get_settings()`.
-- Proposed fix: Replace module-level `Settings()` instantiation with `get_settings()` from `api.settings` to respect LRU cache and prevent memory leaks/drift.
+- Evidence: `this.statsInterval = setInterval(...)`, `this.refreshTimer = setInterval(...)` without corresponding `clearInterval` in `beforeUnmount`.
+- Proposed fix: Add `beforeUnmount` hooks to clear all intervals to prevent resource leaks when navigating away.
+
+### OPEN-NEW-7 [Medium] Transaction hygiene missing rollback
+- File: backend/api/db/crud/users.py:203, backend/api/db/crud/settings.py:69, backend/api/db/crud/templates.py:186, backend/api/db/crud/templates.py:419
+- Severity: Medium
+- Evidence: `db.query(...).delete()` without `synchronize_session=False` or try/except block for rollback.
+- Proposed fix: Add `synchronize_session=False` to bulk deletes, and wrap `db.commit()` in a `try...except...db.rollback()` block to ensure hygiene on failure.
+
+### OPEN-NEW-8 [Low] DB Schema vs Data mismatch
+- File: backend/api/db/models/users.py
+- Severity: Low
+- Evidence: `email` column is `String(length=264)`, `hashed_password` is `String(length=72)`, `roles` is `String(length=512)`. Bcrypt hashes (`hashed_password`, `hashed_key`) are fixed 60 chars (String(60) is sufficient). `otp_secret` (encrypted with Fernet) outputs ~140 chars, so String(512) is safe but oversized. `roles` doesn't need 512 chars for simple comma-separated lists.
+- Proposed fix: Optimize schema: downsize `hashed_password` and `hashed_key` to `String(60)`, `roles` to `String(255)`, to optimize space and index sizes on strict SQL databases like Postgres.
+
+### OPEN-NEW-9 [Low] Endpoint contract diff mismatch (Double Prefix)
+- File: frontend/src/views/UserManagement.vue:227
+- Severity: Low
+- Evidence: `axios.delete(\`/api/auth/users/${item.id}\`)` contains a hardcoded `/api` prefix, but the Axios instance already uses `baseURL = "/api"`. This causes a 404 error from a double-prefixed request (`/api/api/auth/users/...`).
+- Proposed fix: Remove the hardcoded `/api` prefix and use `axios.delete(\`/auth/users/${item.id}\`)` instead to respect the global Axios configuration.
 
 ### FALSE POSITIVES — do not re-report
 - FP1 `actions/apps.py` "\proc\self\cgroup": display artifact of a Windows
