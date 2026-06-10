@@ -110,14 +110,14 @@ def test_send_security_alert_no_tls_no_auth(mock_smtp):
     assert call_args[0] == "alerts@example.com"
     assert call_args[1] == "alerts@example.com" # Fallback to sender_email
 
-@patch("builtins.print")
-def test_send_security_alert_no_settings(mock_print):
+def test_send_security_alert_no_settings(caplog):
     mock_db = MagicMock()
     mock_db.query.return_value.first.return_value = None
 
-    send_security_alert(mock_db, "1.2.3.4", "Test Reason")
+    with caplog.at_level("WARNING", logger="api.utils.security"):
+        send_security_alert(mock_db, "1.2.3.4", "Test Reason")
 
-    mock_print.assert_called_once_with("SMTP Settings not found, cannot send alert.")
+    assert "SMTP settings not found" in caplog.text
 
 def test_check_ip_restriction_private_ip():
     mock_request = MagicMock(spec=Request)

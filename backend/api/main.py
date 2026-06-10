@@ -138,6 +138,8 @@ async def add_security_headers(request: Request, call_next):
         "object-src 'none'; "
         "base-uri 'self';"
     )
+    # Legacy clickjacking fallback for browsers without CSP frame-ancestors.
+    response.headers["X-Frame-Options"] = "DENY"
     return response
 
 # --- REGISTER ALL ROUTERS ---

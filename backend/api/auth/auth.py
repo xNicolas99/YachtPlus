@@ -58,7 +58,10 @@ def require_superuser(Authorize: get_auth_wrapper, db: Session) -> User:
     DB hit. Honours DISABLE_AUTH for dev mode parity with auth_check().
     """
     if settings.DISABLE_AUTH is True:
-        return None  # type: ignore[return-value]
+        # Return a transient (never persisted) User so callers that audit
+        # `user.id` / `user.username` don't AttributeError on None in dev
+        # mode. id=0 marks it as synthetic — no real row ever has id 0.
+        return User(id=0, username="dev", is_active=True, is_superuser=True)
     Authorize.jwt_required(allow_setup_pending=False)
     username = Authorize.get_jwt_subject()
     if not username:

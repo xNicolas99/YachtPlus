@@ -73,7 +73,7 @@ const actions = {
   },
   readNetwork({ commit }, id) {
     commit("setLoading", true);
-    const url = `/api/resources/networks/${id}`;
+    const url = `/resources/networks/${id}`;
     axios
       .get(url)
       .then(response => {

@@ -12,7 +12,7 @@ from fastapi import HTTPException
 
 from api.db.database import Base
 from api.db.models.users import User
-from api.routers.compose import get_compose_action, get_compose_app_action
+from api.routers.compose import compose_project_action as get_compose_action, compose_app_action_route as get_compose_app_action
 
 
 engine = create_engine("sqlite:///:memory:")

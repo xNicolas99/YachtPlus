@@ -98,9 +98,6 @@ def _require_superuser(Authorize, db: Session) -> None:
     user = users_crud.get_user_by_name(db=db, username=username)
     if not user or not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
-import aiodocker
-import json
-import asyncio
 
 settings = Settings()
 
@@ -126,7 +123,8 @@ async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_
     return await actions.check_app_update(app_name)
 
 
-@router.get("/{app_name}/update")
+@router.post("/{app_name}/update")
+@router.get("/{app_name}/update", deprecated=True)
 async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     check_permission("perm_restart", Authorize, db) # Update is effectively a restart/recreate
@@ -170,7 +168,11 @@ async def get_support_bundle(
     return await actions.generate_support_bundle(app_name)
 
 
-@router.get("/actions/{app_name}/{action}")
+# POST is the correct verb — start/stop/kill/remove are state-changing and
+# were CSRF-triggerable via GET (SameSite=lax sends the auth cookie on
+# top-level GET navigation). GET alias kept for one release for old clients.
+@router.post("/actions/{app_name}/{action}")
+@router.get("/actions/{app_name}/{action}", deprecated=True)
 async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
     auth_check(Authorize)
     if action == "start":

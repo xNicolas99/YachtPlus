@@ -116,6 +116,15 @@ class Settings(BaseSettings):
     # docker.from_env() — go through the configured endpoint.
     DOCKER_HOST: Optional[str] = os.getenv("DOCKER_HOST")
 
+    # When true (default), login attempts from non-RFC1918 client IPs are
+    # rejected outright. This protects the typical LAN/homelab deployment,
+    # but makes any public-internet deployment (VPS behind TLS) impossible
+    # to log into. Set YACHT_BLOCK_PUBLIC_IP_LOGIN=false for such deploys —
+    # rate limiting, fail2ban counters and username lockout still apply.
+    BLOCK_PUBLIC_IP_LOGIN: bool = os.getenv(
+        "YACHT_BLOCK_PUBLIC_IP_LOGIN", "true"
+    ).lower() in ("1", "true", "yes", "on")
+
     # Comma-separated list of reverse-proxy IPs (or CIDRs) whose
     # X-Real-IP / X-Forwarded-For headers we trust for client-IP attribution.
     # 127.0.0.1 is in the default because YachtPlus's own nginx sits in

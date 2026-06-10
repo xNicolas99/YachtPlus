@@ -375,7 +375,9 @@ export default {
       this.isConnected = false;
     }
   },
-  beforeDestroy() {
+  // Vue 3: beforeDestroy was renamed to beforeUnmount; the old name is
+  // never invoked, leaking the websocket + xterm instance on navigation.
+  beforeUnmount() {
     this.dispose();
   }
 };

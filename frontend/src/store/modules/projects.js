@@ -118,7 +118,7 @@ const actions = {
     commit("setAction", Action);
     const url = `/compose/${Name}/actions/${Action}`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const projects = response.data;
         commit("setProjects", projects);
@@ -140,7 +140,7 @@ const actions = {
     commit("setAction", Action);
     const url = `/compose/${Project}/actions/${Action}/${Name}`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const projects = response.data;
         commit("setProjects", projects);

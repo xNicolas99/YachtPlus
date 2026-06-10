@@ -249,7 +249,9 @@ export default {
       }
     }
   },
-  beforeDestroy() {
+  // Vue 3: beforeDestroy was renamed to beforeUnmount; the old name is
+  // never invoked, leaking the log EventSource on navigation.
+  beforeUnmount() {
     this.closeLogs();
   }
 };

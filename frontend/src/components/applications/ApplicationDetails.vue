@@ -372,6 +372,7 @@ export default {
         mem_total: []
       },
       connection: null,
+      logConnection: null,
       statConnection: null
     };
   },
@@ -407,12 +408,18 @@ export default {
       this.$router.push({ name: "View Applications" });
     },
     readAppLogs(appName) {
+      if (this.logConnection) {
+        this.logConnection.close();
+      }
       this.logConnection = new EventSource(`/api/apps/${appName}/logs`);
       this.logConnection.addEventListener("update", event => {
         this.logs.push(event.data);
       });
     },
     readAppStats(appName) {
+      if (this.statConnection) {
+        this.statConnection.close();
+      }
       this.statConnection = new EventSource(`/api/apps/${appName}/stats`);
       this.statConnection.addEventListener("update", event => {
         let statsGroup = JSON.parse(event.data);
@@ -429,11 +436,17 @@ export default {
       });
     },
     closeLogs() {
-      this.logConnection.close();
+      if (this.logConnection) {
+        this.logConnection.close();
+        this.logConnection = null;
+      }
       this.logs = [];
     },
     closeStats() {
-      this.statConnection.close();
+      if (this.statConnection) {
+        this.statConnection.close();
+        this.statConnection = null;
+      }
       this.stats = {
         time: [],
         cpu_percent: [],
@@ -452,7 +465,9 @@ export default {
       this.readAppStats(appName)
     ]);
   },
-  beforeDestroy() {
+  // Vue 3 renamed beforeDestroy to beforeUnmount — the old hook is silently
+  // never called, leaking the EventSource connections on navigation.
+  beforeUnmount() {
     this.closeLogs();
     this.closeStats();
   }

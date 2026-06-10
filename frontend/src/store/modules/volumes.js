@@ -104,22 +104,6 @@ const actions = {
         router.push({ name: "Volumes" });
       });
   },
-  updateVolume({ commit }, id) {
-    commit("setLoading", true);
-    const url = `/api/resources/volumes/${id}/pull`;
-    axios
-      .get(url)
-      .then(response => {
-        const volume = response.data;
-        commit("setVolume", volume);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
-  },
   deleteVolume({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/volumes/${id}`;

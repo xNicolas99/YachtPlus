@@ -8,7 +8,7 @@ YachtPlus is a self-hosted container management UI for Docker and Docker Compose
 
 | Layer | Stack |
 |---|---|
-| Frontend | Vue 3.4, Vite 5, Vuetify 3, Pinia + Vuex 4, vee-validate v4 |
+| Frontend | Vue 3.4, Vite 7, Vitest 4, Vuetify 3, Pinia + Vuex 4, vee-validate v4 |
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2, aiodocker, APScheduler |
 | Auth | JWT in HttpOnly cookies, mandatory 2FA (TOTP), bcrypt password hashing, slowapi rate limiting |
 | Storage | SQLite by default (`/config/yacht.db`), Postgres/MySQL supported via `DATABASE_URL` |
@@ -60,7 +60,8 @@ WebSocket exec sessions (container terminal) reuse the same cookie: `backend/api
 | Trusted-host | `backend/api/main.py` (`TrustedHostMiddleware`) | Enforces `ALLOWED_HOSTS`. Default: `localhost,127.0.0.1,[::1]`. Override with `YACHT_ALLOWED_HOSTS=…`. |
 | CORS | `CORSMiddleware`, `settings.CORS_ORIGINS` | Defaults to localhost variants; override with `YACHT_CORS_ORIGINS=…`. |
 | HTML sanitisation | `frontend/src/main.js` | `$sanitize` uses DOMPurify with an explicit allowlist (`b,i,em,strong,a,p,br,ul,ol,li,code,pre`, only `http(s)`/`mailto:` URLs). |
-| Brute-force protection | `backend/api/routers/users.py` | `slowapi` rate limit `5/minute` on `/login` and `/login_cookie`, plus IP-restriction + `LoginAttempt` table for fail2ban-style blocking. |
+| Brute-force protection | `backend/api/routers/users.py` | `slowapi` rate limit `5/minute` on `/login` and `/login_cookie`, plus IP-restriction + `LoginAttempt` table for fail2ban-style blocking. Public-IP logins are blocked by default (`YACHT_BLOCK_PUBLIC_IP_LOGIN=false` to allow). |
+| State-changing routes use POST | `routers/apps.py`, `routers/compose.py` | Container/compose actions (start/stop/delete/update) are POST; the legacy GET aliases are deprecated and will be removed. |
 | Secret key | `backend/api/settings.py:8-39` | Reads `SECRET_KEY` env first, otherwise persists to `$SECRET_KEY_FILE` (default `/config/.secret_key`). **Refuses to start** if it can't be loaded or written — no ephemeral per-process fallback. |
 | 2FA enforcement | `backend/api/routers/setup/setup.py:165-169` | `/finalize` rejects accounts without 2FA. |
 | Setup-pending token | `setup.py:144` | 15-minute lifetime, blocked by `auth_check_setup_pending` once setup is complete (prevents stale-token replay). |
@@ -170,6 +171,7 @@ remove the proxy service and replace
 | `DOCKER_HOST` | `unix:///var/run/docker.sock` | Used by both `aiodocker` and the `docker` SDK. |
 | `DOCKER_GID` | autodetected | Set to host's docker socket GID if you hit permission errors (`stat -c '%g' /var/run/docker.sock`). |
 | `DISABLE_AUTH` | `False` | **Dev only.** Skips all auth checks. Never set this in production. |
+| `YACHT_BLOCK_PUBLIC_IP_LOGIN` | `true` | Rejects logins from non-private (public) client IPs. Set to `false` for VPS / public-internet deployments — rate limiting and fail2ban counters still apply. |
 
 ---
 
@@ -225,7 +227,7 @@ cd frontend
 npx vitest run
 ```
 
-Current state: **213 backend tests + 9 frontend tests, all green.**
+Current state: **544 backend tests + 21 frontend tests, all green.**
 
 ---
 
@@ -254,7 +256,7 @@ backend/
     db/                      # SQLAlchemy models, CRUD, alembic migrations
     services/                # Background jobs (watchtower poll, audit retention)
   alembic/                   # Database migrations
-  tests/                     # pytest suite (213 tests)
+  tests/                     # pytest suite (544 tests)
   requirements.txt           # Production deps
 frontend/
   src/
