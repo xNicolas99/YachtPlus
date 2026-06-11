@@ -9,7 +9,11 @@ from aiodocker.exceptions import DockerError
 import logging
 import jwt
 import json
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 import shlex
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
@@ -17,7 +21,7 @@ from api.db.models.users import User
 from api.utils.audit import log_activity
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 router = APIRouter()
 

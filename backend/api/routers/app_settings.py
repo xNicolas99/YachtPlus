@@ -17,12 +17,16 @@ from api.db.database import engine
 from api.actions import resources
 from api.actions.apps import _update_self, check_self_update
 
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 
 from api.auth.jwt import get_auth_wrapper
 
 
-settings = Settings()
+
 
 router = APIRouter()
 
@@ -113,7 +117,7 @@ def import_settings(
     return scrud.import_settings(db=db, upload=upload)
 
 
-@router.get(
+@router.post(
     "/prune/{resource}",
 )
 def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
@@ -121,7 +125,7 @@ def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_aut
     return resources.prune_resources(resource)
 
 
-@router.get(
+@router.post(
     "/update",
 )
 def update_self(
@@ -136,7 +140,7 @@ def update_self(
     return _update_self(background_tasks)
 
 
-@router.get(
+@router.post(
     "/check/update",
 )
 def _check_self_update(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):

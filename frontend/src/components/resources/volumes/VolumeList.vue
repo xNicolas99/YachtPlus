@@ -291,7 +291,7 @@ export default {
         // Same route the Images and Networks pages hit. The backend
         // forwards to docker's /volumes/prune. Returns {Volumes Pruned: […]}
         // (capitalised key from the daemon).
-        const { data } = await axios.get("/settings/prune/volumes");
+        const { data } = await axios.post("/settings/prune/volumes");
         const action = data ? Object.keys(data)[0] : null;
         const deleted = action && Array.isArray(data[action]) ? data[action].length : 0;
         this.$store.commit("snackbar/setMessage", `${deleted} volumes pruned.`);

@@ -2,11 +2,13 @@ import aiodocker
 from fastapi import HTTPException
 import asyncio
 import logging
-from api.settings import Settings
+from api.settings import get_settings
+
+
 from api.utils.error_handler import safe_http_status
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 ### IMAGES ###
 

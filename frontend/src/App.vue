@@ -155,6 +155,11 @@ export default {
       this.startActivityTracking();
     }
   },
+  beforeUnmount() {
+    if (this.inactivityTimer) clearInterval(this.inactivityTimer);
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    this.stopActivityTracking();
+  },
   mounted() {
     // Basic theme restoration
     const dark_theme = localStorage.getItem("dark_theme");

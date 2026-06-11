@@ -188,7 +188,7 @@ def edit_template_content(
     )
 
 
-@router.get(
+@router.post(
     "/{id}/refresh",
     response_model=schemas.TemplateRead,
 )

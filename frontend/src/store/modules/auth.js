@@ -79,11 +79,11 @@ const actions = {
       commit(AUTH_REQUEST);
       const url = "/auth/logout";
       axios
-        .get(url, {}, { withCredentials: true })
+        .post(url, {}, { withCredentials: true })
         .then(resp => {
           let rurl = "/auth/logout/refresh";
           axios
-            .get(
+            .post(
               rurl,
               {},
               {

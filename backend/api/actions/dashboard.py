@@ -3,9 +3,13 @@ import asyncio
 import logging
 import psutil
 from api.utils.compose import find_yml_files
-from api.settings import Settings
+from api.settings import get_settings
 
-settings = Settings()
+settings = get_settings()
+
+
+
+
 logger = logging.getLogger(__name__)
 
 async def get_dashboard_stats():

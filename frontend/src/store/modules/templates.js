@@ -132,7 +132,7 @@ const actions = {
     commit("setLoading", true);
     const url = `/templates/${id}/refresh`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const template = response.data;
         commit("setTemplate", template);

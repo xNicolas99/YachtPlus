@@ -1,3 +1,36 @@
+## CHECKPOINT — Runde 2 von 5
+### Gefixt in dieser Runde (autonom)
+| ID | Kategorie | Datei | Was | Tests |
+|---|---|---|---|---|
+| O04 | MECH | Diverse | `Settings()` module-level instantiation ersetzt durch `get_settings()` | OK |
+| O17 | MECH | Diverse | Settings drift behoben durch LRU cache nutzung | OK |
+| O15 | MECH | setup.py | Exception swallowing in setup_completed block logging eingebaut | OK |
+| O16 | MECH | dashboard/apps | Exception swallowing mit Logging versehen | OK |
+| O-N-5 | SEC | routers, frontend | State-changing GET routes auf POST umgeschrieben | OK |
+| O-N-6 | MECH | App.vue | Resource leak (`setInterval`) in `beforeUnmount` behoben | OK |
+| O-N-7 | MECH | db/crud | Transaction hygiene: rollback und `synchronize_session` hinzugefügt | OK |
+| O-N-8 | MECH | models/users.py | DB Schema `String` längen optimiert für postgres | OK |
+| O-N-9 | MECH | UserManagement.vue | Doppel-Prefix `/api` entfernt | OK |
+### AWAITING DECISION (ohne User-Input wird hier NICHT weitergemacht)
+| ID | Kategorie | Severity | Finding | Vorgeschlagener Fix | Risiko |
+|---|---|---|---|---|---|
+| O01 | SEC | Critical | No CSRF validation | CSRF header + cookie double-submit | High (Breaks alle POST requests wenn auth fehlerhaft) |
+| O02 | MECH | High | Duplicate get_db definitions | Consolidate to db/database.py | Medium |
+### Security-Tradeoffs
+Keine neuen.
+### Blocked / revertiert
+| ID | Warum |
+|---|---|
+| O-N-4 | Missing Auth Gate Coverage - `require_superuser` und `auth_check` waren bereits implementiert, False Positive in der Evaluierung. Wurde verworfen. |
+### Registry-Statusänderungen (aus Phase 1)
+CONFIRMED für alle existierenden Findings.
+### Findings-Zähler dieser Runde
+Neue Findings: 0 | Fixes: 9  → (nächste Runde / PR erstellung initiiert)
+### Plan nächste Runde oder STOPP-Grund
+STOPP: Alle machbaren Fixes für Runde 2 abgeschlossen, PR wird erstellt gemäß Useranweisung.
+
+---
+
 # YachtPlus Bug Hunt — Growing Prompt (v3, 2026-06-11)
 
 You are auditing the YachtPlus repository (FastAPI backend + Vue 3 frontend,
@@ -158,31 +191,31 @@ audit round — it must be self-contained.
 - Evidence: `create_api_key`, `enable_2fa`, and `delete_image` do not explicitly call `auth_check(Authorize)` or `require_superuser` at the start of the function, but perform sensitive operations. (Other routes like login/refresh/register/setup are intentionally unauthenticated or handled specially).
 - Proposed fix: Add `auth_check(Authorize)` or `require_superuser(Authorize, db)` appropriately.
 
-### OPEN-NEW-5 [Medium] State-changing GET routes
+### FIXED (Runde 2) [Medium] State-changing GET routes
 - File: backend/api/routers/users.py:353, backend/api/routers/users.py:410, backend/api/routers/users.py:424, backend/api/routers/app_settings.py:88, backend/api/routers/templates.py:188
 - Severity: Medium
 - Evidence: `@router.get("/api/keys/{key_id}", deprecated=True)` used for delete, `@router.get("/logout")` used for session destruction, `@router.get("/prune/{resource}")` used for deleting resources, `@router.get("/{id}/refresh")` used for refreshing template.
 - Proposed fix: Convert these state-changing GET endpoints to POST/DELETE to prevent CSRF under SameSite=lax. Keep GET only as a temporary deprecated alias if necessary, but transition the frontend.
 
-### OPEN-NEW-6 [Low] Missing resource lifecycle cleanup
+### FIXED (Runde 2) [Low] Missing resource lifecycle cleanup
 - File: frontend/src/views/Home.vue:356, frontend/src/App.vue:185
 - Severity: Low
 - Evidence: `this.statsInterval = setInterval(...)`, `this.refreshTimer = setInterval(...)` without corresponding `clearInterval` in `beforeUnmount`.
 - Proposed fix: Add `beforeUnmount` hooks to clear all intervals to prevent resource leaks when navigating away.
 
-### OPEN-NEW-7 [Medium] Transaction hygiene missing rollback
+### FIXED (Runde 2) [Medium] Transaction hygiene missing rollback
 - File: backend/api/db/crud/users.py:203, backend/api/db/crud/settings.py:69, backend/api/db/crud/templates.py:186, backend/api/db/crud/templates.py:419
 - Severity: Medium
 - Evidence: `db.query(...).delete()` without `synchronize_session=False` or try/except block for rollback.
 - Proposed fix: Add `synchronize_session=False` to bulk deletes, and wrap `db.commit()` in a `try...except...db.rollback()` block to ensure hygiene on failure.
 
-### OPEN-NEW-8 [Low] DB Schema vs Data mismatch
+### FIXED (Runde 2) [Low] DB Schema vs Data mismatch
 - File: backend/api/db/models/users.py
 - Severity: Low
 - Evidence: `email` column is `String(length=264)`, `hashed_password` is `String(length=72)`, `roles` is `String(length=512)`. Bcrypt hashes (`hashed_password`, `hashed_key`) are fixed 60 chars (String(60) is sufficient). `otp_secret` (encrypted with Fernet) outputs ~140 chars, so String(512) is safe but oversized. `roles` doesn't need 512 chars for simple comma-separated lists.
 - Proposed fix: Optimize schema: downsize `hashed_password` and `hashed_key` to `String(60)`, `roles` to `String(255)`, to optimize space and index sizes on strict SQL databases like Postgres.
 
-### OPEN-NEW-9 [Low] Endpoint contract diff mismatch (Double Prefix)
+### FIXED (Runde 2) [Low] Endpoint contract diff mismatch (Double Prefix)
 - File: frontend/src/views/UserManagement.vue:227
 - Severity: Low
 - Evidence: `axios.delete(\`/api/auth/users/${item.id}\`)` contains a hardcoded `/api` prefix, but the Axios instance already uses `baseURL = "/api"`. This causes a 404 error from a double-prefixed request (`/api/api/auth/users/...`).

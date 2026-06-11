@@ -1,7 +1,9 @@
-from ..settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
 from ..db.database import SessionLocal
 
-settings = Settings()
+
 
 
 def get_db():

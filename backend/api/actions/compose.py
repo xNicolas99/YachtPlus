@@ -13,11 +13,13 @@ import asyncio
 import functools
 import logging
 
-from api.settings import Settings
+from api.settings import get_settings
+
+
 from api.utils.compose import find_yml_files, validate_compose_project_name, validate_app_name
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 """
 Helper for running blocking I/O in thread pool

@@ -34,10 +34,14 @@ import aiostream
 from functools import lru_cache
 import logging
 import aiofiles
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 async def get_running_apps():
     apps_list = []
@@ -340,7 +344,7 @@ async def deploy_app(template: DeployForm):
             status_code=getattr(exc, "status", 500) or 500,
             detail=getattr(exc, "message", None) or "Docker error",
         )
-    except Exception:
+    except Exception as e:
         # Don't echo the raw exception message to the client (could leak
         # paths or config); log it loudly and return a sanitized 500.
         logger.exception("Unexpected error deploying %s", template.name)
@@ -348,7 +352,7 @@ async def deploy_app(template: DeployForm):
 
     try:
         logs = await launch.log(stdout=True, stderr=True)
-    except Exception:
+    except Exception as e:
         # A deploy that succeeded but whose log fetch failed should NOT
         # be a 500 — the container is already running. Return an empty
         # log body so the frontend can confirm success.
@@ -413,7 +417,7 @@ def _launch_app_sync(
                 running_app.remove(force=True)
             except Exception as e:
                 logger.warning(f"Failed to remove existing container {_id} during edit: {e}")
-        except Exception:
+        except Exception as e:
             # Container might not exist, which is fine
             pass
 
@@ -709,7 +713,7 @@ async def process_app_stats(line, app_name):
         cpu_percent, cpu_system, cpu_total = await calculate_cpu_percent2(
             line, cpu_total, cpu_system
         )
-    except Exception:
+    except Exception as e:
         # calculate_cpu_percent is a fallback
         cpu_percent = await calculate_cpu_percent(line)
 

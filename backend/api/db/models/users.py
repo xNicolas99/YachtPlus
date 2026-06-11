@@ -11,7 +11,7 @@ class User(Base):
     username = Column(
         "email", String(length=264), unique=True, index=True, nullable=False
     )
-    hashed_password = Column(String(length=72), nullable=False)
+    hashed_password = Column(String(length=60), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
 
@@ -29,7 +29,7 @@ class User(Base):
     perm_restart = Column(Boolean, default=False)
     perm_delete = Column(Boolean, default=False)
     # roles field can be kept for future or generic roles like "admin" (which is is_superuser)
-    roles = Column(String(length=512), default="", nullable=True)
+    roles = Column(String(length=255), default="", nullable=True)
 
     keys = relationship("APIKEY", backref="user_key", cascade="all, delete-orphan")
 
@@ -39,7 +39,7 @@ class APIKEY(Base):
     id = Column(Integer, primary_key=True, index=True)
     key_name = Column(String, index=True, nullable=False)
     jti = Column(String, unique=True, index=True, nullable=False)
-    hashed_key = Column(String(length=72), unique=True, index=False, nullable=False)
+    hashed_key = Column(String(length=60), unique=True, index=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(
         DateTime,

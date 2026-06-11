@@ -23,9 +23,13 @@ import logging
 import os
 import secrets
 
-from api.settings import Settings
+from api.settings import get_settings
 
-settings = Settings()
+settings = get_settings()
+
+
+
+
 logger = logging.getLogger(__name__)
 
 V2_PREFIX = "v2:"

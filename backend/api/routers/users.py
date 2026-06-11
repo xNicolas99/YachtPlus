@@ -7,7 +7,11 @@ import logging
 from api.db.crud.users import verify_password
 from api.utils.auth import get_db
 from api.auth.auth import auth_check
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 from api.db.crud import users as crud
 from api.db.models import users as models
 from api.db.schemas import users as schemas
@@ -18,7 +22,7 @@ from slowapi import Limiter
 from api.utils.security import rate_limit_key
 
 router = APIRouter()
-settings = Settings()
+
 logger = logging.getLogger(__name__)
 
 # Initialize limiter (ensure it matches the one in main.py).
@@ -401,7 +405,7 @@ def update_user(
     return crud.update_user(db=db, user=user, current_user=current_user)
 
 
-@router.get("/logout")
+@router.post("/logout")
 def logout(
     request: Request,
     response: Response,
@@ -421,7 +425,7 @@ def logout(
     return {"msg": "Logout Successful"}
 
 
-@router.get("/logout/refresh")
+@router.post("/logout/refresh")
 def logout_refresh(
     request: Request,
     response: Response,

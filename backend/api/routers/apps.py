@@ -7,7 +7,11 @@ from api.db.crud import templates as template_crud
 from api.db.database import SessionLocal
 from sqlalchemy.orm import Session
 import api.actions.apps as actions
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 from api.auth.auth import auth_check, check_permission
 from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
 import api.db.crud.users as users_crud
@@ -99,7 +103,7 @@ def _require_superuser(Authorize, db: Session) -> None:
     if not user or not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
-settings = Settings()
+
 
 router = APIRouter()
 

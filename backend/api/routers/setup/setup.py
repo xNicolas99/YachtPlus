@@ -107,7 +107,7 @@ def mark_setup_completed(db: Session):
     try:
         from api.db.crud.templates import init_templates
         init_templates(db)
-    except Exception:
+    except Exception as e:
         logger.exception("Default template seeding failed; continuing setup.")
 
     # Legacy file (optional but good for backwards compatibility).
@@ -151,8 +151,9 @@ def bypass_setup(db: Session = Depends(get_db)):
     # DISABLE_AUTH=True. That env flag is already documented as dev-only
     # and gated everywhere else; reusing it here means an attacker can't
     # trigger this on a hardened production deploy.
-    from api.settings import Settings
-    if not Settings().DISABLE_AUTH:
+    from api.settings import get_settings
+
+    if not get_settings().DISABLE_AUTH:
         raise HTTPException(
             status_code=404,
             detail="Setup bypass is only available in dev mode (DISABLE_AUTH=True).",

@@ -4,12 +4,16 @@ import bcrypt
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 from fastapi.exceptions import HTTPException
 from datetime import datetime
 from api.auth.jwt import create_access_token
 
-settings = Settings()
+
 
 
 def get_user(db: Session, user_id: int):
@@ -200,8 +204,11 @@ def get_password_hash(password):
 
 def prune_blacklist(db: Session):
     expired_list = []
-    db.query(TokenBlacklist).filter(TokenBlacklist.expires < datetime.utcnow()).delete()
-    db.commit()
+    try:
+        db.query(TokenBlacklist).filter(TokenBlacklist.expires < datetime.utcnow()).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
     return
 
 

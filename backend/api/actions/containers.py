@@ -4,10 +4,12 @@ import asyncio
 from fastapi import HTTPException
 import logging
 from datetime import datetime
-from api.settings import Settings
+from api.settings import get_settings
+
+
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 # Cache stats for 5 seconds
 stats_cache = {}

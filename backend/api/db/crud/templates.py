@@ -416,9 +416,13 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
             )
             variables.append(template_variables)
 
-        db.query(models.TemplateVariables).delete()
-        db.add_all(variables)
-        db.commit()
+        try:
+            db.query(models.TemplateVariables).delete(synchronize_session=False)
+            db.add_all(variables)
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
         new_template_variables = db.query(models.TemplateVariables).all()
 

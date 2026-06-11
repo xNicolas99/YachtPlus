@@ -1,11 +1,13 @@
-from api.settings import Settings
+from api.settings import get_settings
+
+
 from fastapi import HTTPException, Depends, status
 from api.auth.jwt import get_auth_wrapper
 from sqlalchemy.orm import Session
 from api.db.database import SessionLocal
 from api.db.models.users import User
 
-settings = Settings()
+
 
 def get_db():
     db = SessionLocal()

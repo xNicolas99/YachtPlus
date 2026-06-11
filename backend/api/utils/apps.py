@@ -1,6 +1,10 @@
 import api.db.models.containers as models
 from api.db.database import SessionLocal
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 import api.db.schemas.apps as schemas
 
 import aiodocker
@@ -13,7 +17,7 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
 
 # ... (Existing code kept as is) ...
 

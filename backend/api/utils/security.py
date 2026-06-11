@@ -7,10 +7,12 @@ import smtplib
 from email.mime.text import MIMEText
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
-from api.settings import Settings
+from api.settings import get_settings
+
+_settings = get_settings()
 
 logger = logging.getLogger(__name__)
-_settings = Settings()
+
 
 def is_private_ip(ip: str) -> bool:
     # The literal here is the unspecified-address sentinel, NOT a bind

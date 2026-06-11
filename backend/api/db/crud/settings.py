@@ -3,10 +3,14 @@ from sqlalchemy.orm import Session
 from api.db.models import containers as models
 from api.db.models.settings import SecretKey
 from datetime import datetime
-from api.settings import Settings
+from api.settings import get_settings
+
+settings = get_settings()
+
+
 import json
 
-settings = Settings()
+
 
 
 def export_settings(db: Session):
@@ -66,13 +70,17 @@ def import_settings(db: Session, upload):
         _var_list.append(variable_model)
 
     # Remove Existing
-    db.query(models.TemplateVariables).delete()
-    db.query(models.Template).delete()
-    db.query(models.TemplateItem).delete()
+    try:
+        db.query(models.TemplateVariables).delete(synchronize_session=False)
+        db.query(models.Template).delete(synchronize_session=False)
+        db.query(models.TemplateItem).delete(synchronize_session=False)
 
-    # Add New
-    db.add_all(_template_list)
-    db.add_all(_var_list)
-    db.commit()
+        # Add New
+        db.add_all(_template_list)
+        db.add_all(_var_list)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     response = {"success": "Import Successful"}
     return response
