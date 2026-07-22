@@ -1,6 +1,7 @@
+from sqlalchemy.future import select
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
 from api.auth.jwt import get_auth_wrapper, create_access_token, revoke_token, get_current_user_token
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
 
@@ -37,38 +38,38 @@ _TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY
 
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
-def get_users(
+async def get_users(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
     # Ensure only superuser can list users (or define a new permission perm_manage_users)
     username = Authorize.get_jwt_subject()
-    user = crud.get_user_by_name(db, username)
+    user = await crud.get_user_by_name(db, username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return crud.get_users(db, skip=skip, limit=limit)
+    return await crud.get_users(db, skip=skip, limit=limit)
 
 @router.delete("/users/{user_id}")
-def delete_user(
+async def delete_user(
     user_id: int,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
-    user = crud.get_user_by_name(db, username)
+    user = await crud.get_user_by_name(db, username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    user_to_delete = crud.get_user(db, user_id)
+    user_to_delete = await crud.get_user(db, user_id)
     if not user_to_delete:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -79,37 +80,34 @@ def delete_user(
         )
 
     if user_to_delete.is_superuser:
-        remaining_admins = (
-            db.query(models.User)
-            .filter(models.User.is_superuser == True, models.User.id != user_to_delete.id)
-            .count()
-        )
+        res = await db.execute(select(models.User).filter(models.User.is_superuser == True, models.User.id != user_to_delete.id))
+        remaining_admins = len(res.scalars().all())
         if remaining_admins == 0:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot delete the last administrator.",
             )
 
-    db.delete(user_to_delete)
-    db.commit()
+    await db.delete(user_to_delete)
+    await db.commit()
     return {"message": "User deleted"}
 
 @router.put("/users/{user_id}", response_model=schemas.User)
-def update_user_admin(
+async def update_user_admin(
     user_id: int,
     user_update: schemas.UserUpdate,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
-    current_user = crud.get_user_by_name(db, username)
+    current_user = await crud.get_user_by_name(db, username)
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    db_user = crud.update_user_by_id(db, user_id, user_update)
+    db_user = await crud.update_user_by_id(db, user_id, user_update)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -117,14 +115,14 @@ def update_user_admin(
 
 
 @router.post("/create", response_model=schemas.User)
-def create_user(
+async def create_user(
     user: schemas.UserCreate,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
-    creator = crud.get_user_by_name(db, username)
+    creator = await crud.get_user_by_name(db, username)
     if not creator:
          raise HTTPException(status_code=401, detail="User not found or deleted")
     if not creator.is_superuser:
@@ -140,7 +138,7 @@ def create_user(
 def login(
     request: Request,
     user_data: schemas.UserLogin = Body(..., embed=False),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
@@ -220,7 +218,7 @@ def login_cookie(
     request: Request,
     response: Response,
     user_data: schemas.UserLogin = Body(..., embed=False),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Security Check
@@ -287,10 +285,10 @@ def login_cookie(
 
 @router.post("/refresh")
 @limiter.limit("20/minute")
-def refresh(
+async def refresh(
     request: Request,
     response: Response,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # The previous implementation just round-tripped the JWT subject into a
@@ -316,7 +314,7 @@ def refresh(
 
 
 @router.get("/api/keys", response_model=List[schemas.APIKEY])
-def get_api_keys(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+def get_api_keys(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
     current_user = Authorize.get_jwt_subject()
     if current_user is not None:
@@ -328,10 +326,10 @@ def get_api_keys(db: Session = Depends(get_db), Authorize: get_auth_wrapper = De
 
 @router.post("/api/keys/new", response_model=schemas.DisplayAPIKEY)
 @limiter.limit("5/minute")
-def create_api_key(
+async def create_api_key(
     request: Request,
     key: schemas.GenerateAPIKEY,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Rate-limited so a compromised session can't spam-mint API keys
@@ -352,8 +350,8 @@ def create_api_key(
 # frontend builds keep working — remove once clients are migrated.
 @router.delete("/api/keys/{key_id}")
 @router.get("/api/keys/{key_id}", deprecated=True)
-def delete_api_key(
-    key_id, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+async def delete_api_key(
+    key_id, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     auth_check(Authorize)
     username = Authorize.get_jwt_subject()
@@ -364,7 +362,7 @@ def delete_api_key(
 
 
 @router.get("/me", response_model=schemas.User)
-def get_user(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     auth_check(Authorize)
     auth_setting = str(settings.DISABLE_AUTH)
     if auth_setting.lower() == "true":
@@ -393,7 +391,7 @@ def get_user(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depend
 @router.post("/me", response_model=schemas.User)
 def update_user(
     user: schemas.UserUpdate, # Updated schema
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     auth_check(Authorize)
@@ -406,7 +404,7 @@ def logout(
     request: Request,
     response: Response,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # Blacklist the token's jti so a copy of the cookie/bearer that's been
     # captured elsewhere (browser session restored from disk, leaked from
@@ -426,7 +424,7 @@ def logout_refresh(
     request: Request,
     response: Response,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     token = get_current_user_token(request)
     if token:

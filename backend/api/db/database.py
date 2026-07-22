@@ -1,25 +1,38 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.orm import declarative_base
+from sqlalchemy.pool import StaticPool
 from api.settings import Settings
 
 settings = Settings()
 
-# Use check_same_thread=False for SQLite
-connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+# Translate DB URL for async drivers
+db_url = settings.DATABASE_URL
+if db_url.startswith("sqlite"):
+    db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+elif db_url.startswith("postgresql"):
+    db_url = db_url.replace("postgresql://", "postgresql+asyncpg://")
+elif db_url.startswith("mysql"):
+    db_url = db_url.replace("mysql://", "mysql+aiomysql://")
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args
+# SQLite needs StaticPool and specific connect_args for async testing
+connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
+poolclass = StaticPool if "sqlite" in db_url else None
+
+engine = create_async_engine(
+    db_url,
+    connect_args=connect_args,
+    poolclass=poolclass
 )
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+SessionLocal = async_sessionmaker(
+    bind=engine,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False
+)
 
 Base = declarative_base()
 
-# Dependency to be used in other routers
-def get_db():
-    db = SessionLocal()
-    try:
+async def get_db():
+    async with SessionLocal() as db:
         yield db
-    finally:
-        db.close()
