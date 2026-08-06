@@ -107,11 +107,13 @@ if [[ -z "$(git config user.email)" ]]; then
 fi
 
 # --- Stage everything -----------------------------------------------------
-# Stage all changes EXCEPT the local .env secret file. Even though it is
-# git-ignored, this is a belt-and-braces guard so a token can never be
-# committed even if .gitignore is edited or the file is force-added.
-echo "==> Staging all changes (excluding scripts/.env)..."
-git add -A -- . ':(exclude)scripts/.env' ':(exclude).env'
+# Stage all changes. scripts/.env is covered by .gitignore (and .env*), so a
+# plain `git add -A` silently skips it — no warning, no token committed.
+# (Avoid pathspec excludes here: adding a `:(exclude)` pathspec makes git
+# treat the tree as "explicitly requested" and then warn about the ignored
+# .env file, which is noisy and confusing.)
+echo "==> Staging all changes..."
+git add -A
 
 if git diff --cached --quiet; then
   echo "==> Nothing to commit — working tree is clean."
