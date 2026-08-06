@@ -83,6 +83,9 @@ frontend/
     utils/                 # Pure JS helpers + their vitest specs
   vite.config.js
   package.json
+scripts/
+  push-to-github.sh        # Push local work to GitHub with a PAT (see scripts/README.md)
+  README.md
 Dockerfile
 docker-compose.yml         # Minimal production example
 docker-compose.example.yml # Hardened example using a docker-socket-proxy

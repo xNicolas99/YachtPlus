@@ -16,14 +16,18 @@
 # Usage:
 #   ./scripts/push-to-github.sh [--repo OWNER/REPO] [--message "msg"] [--token TOKEN]
 #
-# The token can be supplied in three ways (first match wins):
+# The token can be supplied in four ways (first match wins):
 #   1. --token TOKEN
 #   2. $GITHUB_TOKEN environment variable
-#   3. interactive prompt (if stdin is a TTY)
+#   3. a .env file in this script's directory (GITHUB_TOKEN=...)
+#   4. interactive prompt (if stdin is a TTY)
 #
 # Examples:
 #   GITHUB_TOKEN=ghp_xxx ./scripts/push-to-github.sh
 #   ./scripts/push-to-github.sh --repo xNicolas99/YachtPlus --token ghp_xxx
+#   # with a .env file next to the script:
+#   echo 'GITHUB_TOKEN=ghp_xxx' > scripts/.env
+#   ./scripts/push-to-github.sh
 #
 # How to create a token (https://github.com/settings/tokens):
 #   - Fine-grained token, scope "Contents: Read and write" on the target repo,
@@ -35,6 +39,18 @@ set -euo pipefail
 REPO="${REPO:-xNicolas99/YachtPlus}"
 BRANCH="$(git branch --show-current)"
 DEFAULT_MSG="Async backend migration + frontend modernisation (lazy routes, Vuetify 3 cleanup, visibility-aware polling)"
+
+# --- Load .env (optional) -------------------------------------------------
+# If a .env file sits next to this script, source it so GITHUB_TOKEN (and
+# REPO) can be provided without typing them on the command line. The file
+# is git-ignored and never committed.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/.env" ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$SCRIPT_DIR/.env"
+  set +a
+fi
 
 # --- Parse args -----------------------------------------------------------
 TOKEN=""
@@ -61,7 +77,7 @@ if [[ -z "$TOKEN" ]]; then
     read -r -s -p "GitHub Personal Access Token: " TOKEN
     echo
   else
-    echo "ERROR: no token provided. Use --token, \$GITHUB_TOKEN, or run interactively." >&2
+    echo "ERROR: no token provided. Use --token, \$GITHUB_TOKEN, a scripts/.env file, or run interactively." >&2
     exit 1
   fi
 fi
@@ -76,9 +92,26 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   exit 1
 fi
 
+# --- Ensure a git identity exists -----------------------------------------
+# A fresh clone has no user.name/user.email, which makes `git commit` fail
+# with "unable to auto-detect email address". Derive one from the target
+# repo owner so the commit can be created without manual setup.
+if [[ -z "$(git config user.name)" ]]; then
+  OWNER="${REPO%%/*}"
+  git config user.name "$OWNER"
+  echo "==> Set local git user.name to '$OWNER'"
+fi
+if [[ -z "$(git config user.email)" ]]; then
+  git config user.email "${REPO%%/*}@users.noreply.github.com"
+  echo "==> Set local git user.email to '${REPO%%/*}@users.noreply.github.com'"
+fi
+
 # --- Stage everything -----------------------------------------------------
-echo "==> Staging all changes..."
-git add -A
+# Stage all changes EXCEPT the local .env secret file. Even though it is
+# git-ignored, this is a belt-and-braces guard so a token can never be
+# committed even if .gitignore is edited or the file is force-added.
+echo "==> Staging all changes (excluding scripts/.env)..."
+git add -A -- . ':(exclude)scripts/.env' ':(exclude).env'
 
 if git diff --cached --quiet; then
   echo "==> Nothing to commit — working tree is clean."
@@ -94,11 +127,24 @@ AUTH_URL="https://x-access-token:${TOKEN}@github.com/${REPO}.git"
 CLEAN_URL="https://github.com/${REPO}.git"
 
 echo "==> Pushing branch '${BRANCH}' to ${REPO} ..."
-git push "$AUTH_URL" "${BRANCH}:${BRANCH}"
+# Capture the push result so we can ALWAYS restore the clean remote URL,
+# even when the push fails (auth error, network, etc.). The token must
+# never linger in the remote config.
+PUSH_OK=0
+if git push "$AUTH_URL" "${BRANCH}:${BRANCH}"; then
+  PUSH_OK=1
+else
+  echo "ERROR: push failed (see output above)." >&2
+fi
 
 # Reset the remote to the token-free URL so the token never lingers in config.
 if git remote get-url origin >/dev/null 2>&1; then
   git remote set-url origin "$CLEAN_URL"
+fi
+
+if [[ "$PUSH_OK" -ne 1 ]]; then
+  echo "Remote origin reset to: $CLEAN_URL" >&2
+  exit 1
 fi
 
 echo

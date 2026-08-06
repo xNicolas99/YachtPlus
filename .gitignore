@@ -3,6 +3,11 @@ versions
 sql_app.db
 venv
 *.db
+
+# Secrets — never commit these
+scripts/.env
+.env
+.env.*
 node_modules
 config
 *.pyc
