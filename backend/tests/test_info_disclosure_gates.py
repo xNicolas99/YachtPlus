@@ -8,11 +8,8 @@ Sensitive endpoints that previously only ran auth_check are now gated:
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from fastapi import HTTPException
 
-from api.db.database import Base
 from api.db.models.users import User
 from api.routers.compose import get_support_bundle as compose_support_bundle
 from api.routers.apps import (
@@ -22,27 +19,14 @@ from api.routers.apps import (
 )
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    yield s
-    s.close()
-
-
 class MockAuth:
     def __init__(self, username):
         self.username = username
 
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return self.username
 
 
@@ -51,7 +35,7 @@ def enable_auth(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
-def _add(db, username, **fields):
+async def _add(db, username, **fields):
     defaults = dict(
         hashed_password="pw",
         is_active=True,
@@ -64,7 +48,7 @@ def _add(db, username, **fields):
     defaults.update(fields)
     u = User(username=username, **defaults)
     db.add(u)
-    db.commit()
+    await db.commit()
     return u
 
 
@@ -72,7 +56,7 @@ def _add(db, username, **fields):
 
 @pytest.mark.asyncio
 async def test_compose_support_rejects_non_superuser(db):
-    _add(db, "ops", perm_start=True, perm_stop=True, perm_restart=True, perm_delete=True)
+    await _add(db, "ops", perm_start=True, perm_stop=True, perm_restart=True, perm_delete=True)
     with pytest.raises(HTTPException) as exc:
         await compose_support_bundle("demo", Authorize=MockAuth("ops"), db=db)
     assert exc.value.status_code == 403
@@ -80,7 +64,7 @@ async def test_compose_support_rejects_non_superuser(db):
 
 @pytest.mark.asyncio
 async def test_compose_support_allows_superuser(db):
-    _add(db, "root", is_superuser=True)
+    await _add(db, "root", is_superuser=True)
     with patch(
         "api.routers.compose.generate_support_bundle",
         new=AsyncMock(return_value=b"ZIP"),
@@ -94,7 +78,7 @@ async def test_compose_support_allows_superuser(db):
 @pytest.mark.asyncio
 async def test_apps_support_rejects_perm_start_user(db):
     """Even perm_start isn't enough — support bundles include env vars."""
-    _add(db, "ops", perm_start=True)
+    await _add(db, "ops", perm_start=True)
     with pytest.raises(HTTPException) as exc:
         await apps_support_bundle("app", Authorize=MockAuth("ops"), db=db)
     assert exc.value.status_code == 403
@@ -102,7 +86,7 @@ async def test_apps_support_rejects_perm_start_user(db):
 
 @pytest.mark.asyncio
 async def test_apps_support_allows_superuser(db):
-    _add(db, "root", is_superuser=True)
+    await _add(db, "root", is_superuser=True)
     with patch(
         "api.routers.apps.actions.generate_support_bundle",
         new=AsyncMock(return_value=b"BUNDLE"),
@@ -115,7 +99,7 @@ async def test_apps_support_allows_superuser(db):
 
 @pytest.mark.asyncio
 async def test_apps_processes_rejects_user_without_perm_start(db):
-    _add(db, "noperm")
+    await _add(db, "noperm")
     with pytest.raises(HTTPException) as exc:
         await get_container_processes("app", Authorize=MockAuth("noperm"), db=db)
     assert exc.value.status_code == 403
@@ -123,7 +107,7 @@ async def test_apps_processes_rejects_user_without_perm_start(db):
 
 @pytest.mark.asyncio
 async def test_apps_processes_allows_perm_start(db):
-    _add(db, "ops", perm_start=True)
+    await _add(db, "ops", perm_start=True)
     with patch(
         "api.routers.apps.actions.get_app_processes",
         new=AsyncMock(return_value={"Titles": [], "Processes": []}),
@@ -136,7 +120,7 @@ async def test_apps_processes_allows_perm_start(db):
 
 @pytest.mark.asyncio
 async def test_apps_logs_rejects_user_without_perm_start(db):
-    _add(db, "noperm")
+    await _add(db, "noperm")
     request = MagicMock()
     with pytest.raises(HTTPException) as exc:
         await apps_logs("app", request, Authorize=MockAuth("noperm"), db=db)
@@ -145,7 +129,7 @@ async def test_apps_logs_rejects_user_without_perm_start(db):
 
 @pytest.mark.asyncio
 async def test_apps_logs_allows_perm_start(db):
-    _add(db, "ops", perm_start=True)
+    await _add(db, "ops", perm_start=True)
     request = MagicMock()
     with patch("api.routers.apps.actions.log_generator", return_value=MagicMock()):
         result = await apps_logs("app", request, Authorize=MockAuth("ops"), db=db)

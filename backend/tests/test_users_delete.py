@@ -1,19 +1,9 @@
 from sqlalchemy.future import select
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 from fastapi import HTTPException
 
-from api.db.database import Base
 from api.db.models.users import User
 from api.routers.users import delete_user
-
-
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
-
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -36,10 +26,10 @@ class MockAuth:
     def __init__(self, username):
         self.username = username
 
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return self.username
 
 

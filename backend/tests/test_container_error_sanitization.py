@@ -13,10 +13,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from aiodocker.exceptions import DockerError
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from api.db.database import Base
 from api.routers.containers import (
     start_container,
     stop_container,
@@ -25,30 +22,17 @@ from api.routers.containers import (
 )
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
 class MockAuth:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "admin"
 
 
 @pytest.fixture(autouse=True)
 def _force_auth_on(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
-
-
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    yield s
-    s.close()
 
 
 @pytest.fixture

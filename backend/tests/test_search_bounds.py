@@ -5,12 +5,11 @@ templates table) and walk away with the entire result set serialized to
 JSON. The fix puts a min_length/max_length on `q` and slices both result
 arrays to SEARCH_RESULT_LIMIT before returning.
 """
-import asyncio
 import pytest
+import pytest_asyncio
 from unittest.mock import patch, MagicMock
-from fastapi import HTTPException
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 
 from api.db.database import Base
 from api.routers import search as search_module
@@ -22,25 +21,34 @@ def _disable_search_limiter(monkeypatch):
     monkeypatch.setattr(_search_limiter, "enabled", False)
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_ASYNC_TEST_ENGINE = create_async_engine(
+    "sqlite+aiosqlite:///:memory:",
+    poolclass=StaticPool,
+)
+_ASYNC_TEST_SESSION = async_sessionmaker(
+    bind=_ASYNC_TEST_ENGINE,
+    class_=AsyncSession,
+    expire_on_commit=False,
+    autocommit=False,
+    autoflush=False,
+)
 
 
 class MockAuth:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "anyuser"
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    yield s
-    s.close()
+@pytest_asyncio.fixture
+async def db():
+    async with _ASYNC_TEST_ENGINE.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    async with _ASYNC_TEST_SESSION() as session:
+        yield session
 
 
 def test_search_result_limit_constant_is_sane():
@@ -68,7 +76,11 @@ async def test_search_caps_template_results(db, monkeypatch):
         return []
 
     monkeypatch.setattr(search_module.registries, "search_registry", fake_registry)
-    monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: overflow)
+
+    async def fake_match(_db, _q):
+        return overflow
+
+    monkeypatch.setattr(search_module, "match_templates", fake_match)
 
     result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     assert len(result["templates"]) == SEARCH_RESULT_LIMIT
@@ -82,7 +94,11 @@ async def test_search_caps_dockerhub_results(db, monkeypatch):
         return overflow
 
     monkeypatch.setattr(search_module.registries, "search_registry", fake_registry)
-    monkeypatch.setattr(search_module, "match_templates", lambda _db, _q: [])
+
+    async def fake_match(_db, _q):
+        return []
+
+    monkeypatch.setattr(search_module, "match_templates", fake_match)
 
     result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuth())
     assert len(result["dockerhub"]) == SEARCH_RESULT_LIMIT

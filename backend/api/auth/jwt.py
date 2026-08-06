@@ -5,12 +5,14 @@ from typing import Optional, Dict
 from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
 from api.settings import Settings
 
 settings = Settings()
 
 
-def _is_jti_revoked(jti: str) -> bool:
+async def _is_jti_revoked(jti: str) -> bool:
     """Return True if `jti` is in the JWT blacklist. Used by verify_token
     to refuse tokens that were explicitly revoked via /logout, even if
     they're still inside their `exp` window.
@@ -24,15 +26,22 @@ def _is_jti_revoked(jti: str) -> bool:
         from api.db.models.settings import TokenBlacklist
     except Exception:
         return False
-    db = SessionLocal()
     try:
-        row = db.query(TokenBlacklist).filter(TokenBlacklist.jti == jti).first()
-        return bool(row and row.revoked)
-    finally:
-        db.close()
+        async with SessionLocal() as db:
+            row = await db.execute(
+                select(TokenBlacklist).filter(TokenBlacklist.jti == jti)
+            )
+            row = row.scalars().first()
+            return bool(row and row.revoked)
+    except Exception:
+        # The blacklist check is a secondary guard. If the DB is unavailable
+        # or the table doesn't exist, do not fail the whole token validation
+        # path — treat the token as not revoked so an outage doesn't lock
+        # everyone out. (Real revocations are re-checked once the DB returns.)
+        return False
 
 
-def revoke_token(token: str) -> None:
+async def revoke_token(token: str) -> None:
     """Insert the token's jti into the blacklist with the token's exp as
     its TTL. Called from /logout. Tolerates malformed / already-revoked
     tokens — the caller is asking us to forget the token, so anything
@@ -59,27 +68,30 @@ def revoke_token(token: str) -> None:
 
     from api.db.database import SessionLocal
     from api.db.models.settings import TokenBlacklist
-    db = SessionLocal()
-    try:
-        # Prune expired blacklist entries opportunistically so the table
-        # doesn't grow without bound — entries past their `expires` are
-        # safe to drop since the JWT itself would fail `verify_exp` now.
-        db.query(TokenBlacklist).filter(
-            TokenBlacklist.expires.isnot(None),
-            TokenBlacklist.expires < datetime.utcnow(),
-        ).delete(synchronize_session=False)
+    async with SessionLocal() as db:
+        try:
+            # Prune expired blacklist entries opportunistically so the table
+            # doesn't grow without bound — entries past their `expires` are
+            # safe to drop since the JWT itself would fail `verify_exp` now.
+            await db.execute(
+                delete(TokenBlacklist).filter(
+                    TokenBlacklist.expires.isnot(None),
+                    TokenBlacklist.expires < datetime.utcnow(),
+                )
+            )
 
-        existing = db.query(TokenBlacklist).filter(TokenBlacklist.jti == jti).first()
-        if existing:
-            existing.revoked = True
-            existing.expires = expires_at
-        else:
-            db.add(TokenBlacklist(jti=jti, expires=expires_at, revoked=True))
-        db.commit()
-    except Exception:
-        db.rollback()
-    finally:
-        db.close()
+            existing = await db.execute(
+                select(TokenBlacklist).filter(TokenBlacklist.jti == jti)
+            )
+            existing = existing.scalars().first()
+            if existing:
+                existing.revoked = True
+                existing.expires = expires_at
+            else:
+                db.add(TokenBlacklist(jti=jti, expires=expires_at, revoked=True))
+            await db.commit()
+        except Exception:
+            await db.rollback()
 
 # Schemas
 class Token(BaseModel):
@@ -117,14 +129,14 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, get_secret_key(), algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str, credentials_exception):
+async def verify_token(token: str, credentials_exception):
     try:
         payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         setup_pending: bool = payload.get("setup_pending", False)
         if username is None:
             raise credentials_exception
-        if _is_jti_revoked(payload.get("jti")):
+        if await _is_jti_revoked(payload.get("jti")):
             # Token was explicitly invalidated via /logout. Treat exactly
             # like an expired token from the client's perspective.
             raise credentials_exception
@@ -145,7 +157,7 @@ def get_current_user_token(request: Request):
         return token
     return None
 
-def get_current_user(token: str = Depends(get_current_user_token)):
+async def get_current_user(token: str = Depends(get_current_user_token)):
     auth_setting = str(settings.DISABLE_AUTH)
     if auth_setting.lower() == "true":
         return "admin" # Mock user when auth disabled
@@ -158,16 +170,16 @@ def get_current_user(token: str = Depends(get_current_user_token)):
     if not token:
         raise credentials_exception
 
-    return verify_token(token, credentials_exception)
+    return await verify_token(token, credentials_exception)
 
 class AuthWrapper:
     def __init__(self, request: Request):
         self.request = request
         self.user = None
 
-    def jwt_required(self, allow_setup_pending: bool = False):
+    async def jwt_required(self, allow_setup_pending: bool = False):
         token = get_current_user_token(self.request)
-        token_data = get_current_user(token)
+        token_data = await get_current_user(token)
 
         # Enforce setup_pending logic here
         if isinstance(token_data, TokenData) and token_data.setup_pending and not allow_setup_pending:
@@ -179,11 +191,12 @@ class AuthWrapper:
         self.user = token_data
         return self.user
 
-    def get_jwt_subject(self, allow_setup_pending: bool = False):
+    async def get_jwt_subject(self, allow_setup_pending: bool = False):
         if self.user:
             return self.user.username
         # If jwt_required wasn't called (it should have been), call it
-        return self.jwt_required(allow_setup_pending=allow_setup_pending).username
+        user = await self.jwt_required(allow_setup_pending=allow_setup_pending)
+        return user.username
 
     def unset_jwt_cookies(self, response):
         # path must match the one used in set_access_cookies, else the

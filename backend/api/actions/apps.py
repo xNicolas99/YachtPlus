@@ -294,9 +294,10 @@ async def deploy_app(template: DeployForm):
     try:
         # Load TemplateVariables once and share across the three conv_* helpers
         # that need them. Previously each opened its own SessionLocal -> 3 DB
-        # roundtrips per deploy.
-        from api.utils.apps import _load_template_variables
-        t_variables = _load_template_variables()
+        # roundtrips per deploy. The sync DB read is isolated via to_thread so
+        # it never blocks the event loop.
+        from api.utils.apps import load_template_variables_async
+        t_variables = await load_template_variables_async()
 
         launch = await launch_app(
             template.name,

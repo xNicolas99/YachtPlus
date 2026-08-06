@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import PlainTextResponse
+from contextlib import asynccontextmanager
 import ipaddress
 import os
 
@@ -12,15 +13,27 @@ from api.routers import (
     app_settings, users, auth_2fa, audit, registries,
     containers, smtp, watchtower, search, setup
 )
-from api.db.database import engine, Base, SessionLocal
+from api.db.database import engine, Base
 from api.settings import get_settings
 
-Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="YachtPlus API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run DDL asynchronously on the async engine. `Base.metadata.create_all`
+    # must go through `engine.run_sync` for an AsyncEngine — a direct
+    # `bind=engine` call raises AttributeError ('AsyncEngine' has no
+    # '_run_ddl_visitor'). This is the async-migration fix that unblocks app
+    # import.
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(title="YachtPlus API", lifespan=lifespan)
 
 # --- ROBUST SETUP CHECK ---
-from api.routers.setup.setup import is_setup_completed
+from api.routers.setup.setup import is_setup_completed_async
+
 
 @app.middleware("http")
 async def check_setup_status(request: Request, call_next):
@@ -31,13 +44,12 @@ async def check_setup_status(request: Request, call_next):
         request.method == "OPTIONS"):
         return await call_next(request)
 
-    # Check setup status using the router's logic (DB + File)
-    # We use a fresh session for the check to ensure we get the latest DB state
-    db = SessionLocal()
-    try:
-        setup_complete = is_setup_completed(db)
-    finally:
-        db.close()
+    # Check setup status using the router's logic (DB + File). We use a fresh
+    # async session for the check to ensure we get the latest DB state. The
+    # async DB access never blocks the event loop.
+    from api.db.database import SessionLocal
+    async with SessionLocal() as db:
+        setup_complete = await is_setup_completed_async(db)
 
     if not setup_complete:
         # Allow access to setup endpoints

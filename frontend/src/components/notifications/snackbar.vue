@@ -1,17 +1,16 @@
 <template>
   <v-snackbar
-    :value="visible"
-    @input="clearSnack()"
+    v-model="visible"
     :color="color"
-    :bottom="bottom"
+    :location="location"
+    :timeout="timeout"
+    multi-line
   >
     {{ content }}
-    <template v-slot:action="{ attrs }">
+    <template v-slot:action>
       <v-btn
-        text
-        v-bind="attrs"
+        variant="text"
         :color="btnColor"
-        timeout="-1"
         @click="clearSnack()"
       >
         Close
@@ -24,7 +23,10 @@
 import { mapState, mapMutations } from "vuex";
 export default {
   data() {
-    return {};
+    return {
+      // Vuetify 3 snackbar timeout in ms. -1 disables auto-dismiss.
+      timeout: 4000
+    };
   },
   computed: {
     ...mapState("snackbar", [
@@ -33,7 +35,12 @@ export default {
       "color",
       "visible",
       "btnColor"
-    ])
+    ]),
+    // Vuetify 3 uses `location` (top/bottom/left/right) instead of the
+    // Vuetify 2 `bottom` boolean. Map the legacy store flag to a location.
+    location() {
+      return this.bottom ? "bottom" : "top";
+    }
   },
   methods: {
     ...mapMutations({

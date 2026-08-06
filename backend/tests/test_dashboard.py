@@ -16,12 +16,12 @@ from api.routers.dashboard import get_dashboard_stats
 
 
 class MockAuthValid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
 
 class MockAuthInvalid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 

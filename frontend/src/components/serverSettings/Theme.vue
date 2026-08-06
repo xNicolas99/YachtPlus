@@ -1,7 +1,7 @@
 <template>
   <div>
-    <v-card color="foreground">
-      <v-card-title class="primary font-weight-bold">
+    <v-card>
+      <v-card-title class="font-weight-bold">
         Theme Settings
       </v-card-title>
       <v-card-text>
@@ -10,9 +10,9 @@
           v-model="selectedPreset"
           :items="presetOptions"
           label="Select a Preset"
-          outlined
-          dense
-          @change="applyPreset"
+          variant="outlined"
+          density="compact"
+          @update:modelValue="applyPreset"
         ></v-select>
 
         <h2 class="mt-2">Customize Colors:</h2>
@@ -41,11 +41,11 @@
           </v-col>
         </v-row>
         <br />
-        <h2 class="mt-2">Logo:</h2>
+        <h2 class="mt-2">Dark Mode:</h2>
         <v-switch
-          @change="setDarkmode"
-          v-model="$vuetify.theme.dark"
-          :label="`Dark Theme: ${$vuetify.theme.dark.toString()}`"
+          @update:modelValue="setDarkmode"
+          v-model="isDark"
+          :label="`Dark Theme: ${isDark.toString()}`"
         />
       </v-card-text>
       <v-btn class="ml-2 mb-2" @click="setTheme" color="primary">set</v-btn>
@@ -80,36 +80,26 @@ export default {
       }
     };
   },
-  data() {
-    return {
-      selectedPreset: null,
-      primaryColor: null,
-      secondaryColor: null,
-      presets: {
-        Ocean: {
-          primary: "#0EA5E9",
-          secondary: "#1E293B"
-        },
-        Forest: {
-          primary: "#2E7D32",
-          secondary: "#E8F5E9"
-        },
-        Sunset: {
-          primary: "#F4511E",
-          secondary: "#FCE4EC"
-        }
+  computed: {
+    presetOptions() {
+      return Object.keys(this.presets);
+    },
+    // Vuetify 3 exposes the current theme name as a ref. Bind the switch
+    // to a computed that reads/writes it cleanly (replaces the broken
+    // `$vuetify.theme.dark` Vuetify-2 API).
+    isDark: {
+      get() {
+        return this.$vuetify.theme.global.name.value === "dark";
+      },
+      set(val) {
+        this.$vuetify.theme.global.name.value = val ? "dark" : "light";
       }
-    };
+    }
   },
   mounted() {
     const currentTheme = this.$vuetify.theme.global.current;
     this.primaryColor = currentTheme.colors.primary;
     this.secondaryColor = currentTheme.colors.secondary;
-  },
-  computed: {
-    presetOptions() {
-      return Object.keys(this.presets);
-    }
   },
   methods: {
     applyPreset() {
@@ -123,14 +113,14 @@ export default {
       // Save to localStorage
       localStorage.setItem("theme_primary", this.primaryColor);
       localStorage.setItem("theme_secondary", this.secondaryColor);
-      localStorage.setItem("dark_theme", this.$vuetify.theme.global.name.value === "dark");
+      localStorage.setItem("dark_theme", this.isDark);
 
-      // Update Runtime
+      // Update Runtime — Vuetify 3 theme colors are refs.
       const themes = ['light', 'dark'];
       themes.forEach(t => {
-        if (this.$vuetify.theme.themes[t]) {
-           this.$vuetify.theme.themes[t].colors.primary = this.primaryColor;
-           this.$vuetify.theme.themes[t].colors.secondary = this.secondaryColor;
+        if (this.$vuetify.theme.themes.value[t]) {
+          this.$vuetify.theme.themes.value[t].colors.primary = this.primaryColor;
+          this.$vuetify.theme.themes.value[t].colors.secondary = this.secondaryColor;
         }
       });
 
@@ -139,8 +129,8 @@ export default {
       this.$vuetify.theme.global.current.colors.secondary = this.secondaryColor;
     },
     setDarkmode() {
-      // Vuetify 3 toggle
-      localStorage.setItem("dark_theme", this.$vuetify.theme.global.name.value === "dark");
+      // Vuetify 3 toggle — persist the resolved theme name.
+      localStorage.setItem("dark_theme", this.isDark);
     },
     resetTheme() {
       localStorage.removeItem("theme_primary");

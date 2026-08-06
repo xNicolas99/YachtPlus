@@ -1,8 +1,10 @@
 import pytest
+import pytest_asyncio
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
+from sqlalchemy import select, func
 
 from api.db.database import Base
 from api.db.models.settings import SMTPSettings
@@ -16,39 +18,37 @@ from api.routers.smtp import (
     get_db,
 )
 
-# Aliased to avoid pytest treating it as a test class (it has a non-pytest __init__).
 EmailPayload = _TestEmailSchema
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base.metadata.create_all(bind=engine)
+engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False, autocommit=False, autoflush=False)
 
 
 class MockAuthValid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "admin"
 
 
 class MockAuthInvalid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+    async def get_jwt_subject(self, allow_setup_pending=False):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    session = SessionLocal()
-    # SMTP routes are now superuser-gated. Seed the admin user that
-    # MockAuthValid.get_jwt_subject() returns so require_superuser
-    # resolves to a real, privileged account.
-    session.add(User(username="admin", hashed_password="pw", is_superuser=True))
-    session.commit()
-    yield session
-    session.close()
+@pytest_asyncio.fixture
+async def db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    async with SessionLocal() as session:
+        session.add(User(username="admin", hashed_password="pw", is_superuser=True))
+        await session.commit()
+        yield session
 
 
 @pytest.fixture
@@ -56,23 +56,26 @@ def mock_settings_auth_enabled(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
-def test_get_db_dependency_yields_and_closes():
+@pytest.mark.asyncio
+async def test_get_db_dependency_yields_and_closes():
     db_gen = get_db()
-    session = next(db_gen)
-    assert isinstance(session, Session)
-    with pytest.raises(StopIteration):
-        next(db_gen)
+    session = await db_gen.asend(None)
+    assert isinstance(session, AsyncSession)
+    with pytest.raises(StopAsyncIteration):
+        await db_gen.asend(None)
 
 
-def test_get_smtp_settings_returns_defaults_when_empty(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_get_smtp_settings_returns_defaults_when_empty(db, mock_settings_auth_enabled):
     auth = MockAuthValid()
-    result = get_smtp_settings(db=db, Authorize=auth)
+    result = await get_smtp_settings(db=db, Authorize=auth)
     assert result.server == ""
     assert result.port == 587
     assert result.sender_email == "admin@example.com"
 
 
-def test_get_smtp_settings_returns_stored(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_get_smtp_settings_returns_stored(db, mock_settings_auth_enabled):
     db.add(SMTPSettings(
         server="smtp.example.com",
         port=465,
@@ -81,9 +84,9 @@ def test_get_smtp_settings_returns_stored(db, mock_settings_auth_enabled):
         sender_email="from@example.com",
         use_tls=False,
     ))
-    db.commit()
+    await db.commit()
     auth = MockAuthValid()
-    result = get_smtp_settings(db=db, Authorize=auth)
+    result = await get_smtp_settings(db=db, Authorize=auth)
     assert result.server == "smtp.example.com"
     assert result.port == 465
     assert result.username == "user"
@@ -91,14 +94,16 @@ def test_get_smtp_settings_returns_stored(db, mock_settings_auth_enabled):
     assert result.use_tls is False
 
 
-def test_get_smtp_settings_unauthorized(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_get_smtp_settings_unauthorized(db, mock_settings_auth_enabled):
     auth = MockAuthInvalid()
     with pytest.raises(HTTPException) as exc:
-        get_smtp_settings(db=db, Authorize=auth)
+        await get_smtp_settings(db=db, Authorize=auth)
     assert exc.value.status_code == 401
 
 
-def test_update_smtp_settings_creates_new(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_update_smtp_settings_creates_new(db, mock_settings_auth_enabled):
     payload = SMTPSettingsSchema(
         server="smtp.new.com",
         port=587,
@@ -108,16 +113,18 @@ def test_update_smtp_settings_creates_new(db, mock_settings_auth_enabled):
         use_tls=True,
     )
     auth = MockAuthValid()
-    result = update_smtp_settings(payload, db=db, Authorize=auth)
+    result = await update_smtp_settings(payload, db=db, Authorize=auth)
     assert result.server == "smtp.new.com"
-    assert db.query(SMTPSettings).count() == 1
+    count_result = await db.execute(select(func.count()).select_from(SMTPSettings))
+    assert count_result.scalar() == 1
 
 
-def test_update_smtp_settings_updates_existing(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_update_smtp_settings_updates_existing(db, mock_settings_auth_enabled):
     db.add(SMTPSettings(
         server="old.com", port=25, sender_email="old@old.com", use_tls=False
     ))
-    db.commit()
+    await db.commit()
     payload = SMTPSettingsSchema(
         server="new.com",
         port=465,
@@ -125,33 +132,37 @@ def test_update_smtp_settings_updates_existing(db, mock_settings_auth_enabled):
         use_tls=True,
     )
     auth = MockAuthValid()
-    result = update_smtp_settings(payload, db=db, Authorize=auth)
+    result = await update_smtp_settings(payload, db=db, Authorize=auth)
     assert result.server == "new.com"
     assert result.port == 465
     assert result.use_tls is True
-    assert db.query(SMTPSettings).count() == 1
+    count_result = await db.execute(select(func.count()).select_from(SMTPSettings))
+    assert count_result.scalar() == 1
 
 
-def test_update_smtp_settings_unauthorized(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_update_smtp_settings_unauthorized(db, mock_settings_auth_enabled):
     auth = MockAuthInvalid()
     payload = SMTPSettingsSchema(
         server="x", port=1, sender_email="a@b.com", use_tls=True
     )
     with pytest.raises(HTTPException) as exc:
-        update_smtp_settings(payload, db=db, Authorize=auth)
+        await update_smtp_settings(payload, db=db, Authorize=auth)
     assert exc.value.status_code == 401
 
 
-def test_send_test_email_no_settings_raises_400(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_send_test_email_no_settings_raises_400(db, mock_settings_auth_enabled):
     auth = MockAuthValid()
     payload = EmailPayload(recipient="to@example.com")
     with pytest.raises(HTTPException) as exc:
-        send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(payload, db=db, Authorize=auth)
     assert exc.value.status_code == 400
     assert "SMTP settings not configured" in exc.value.detail
 
 
-def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_enabled):
     db.add(SMTPSettings(
         server="smtp.example.com",
         port=587,
@@ -160,7 +171,7 @@ def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_enabled
         sender_email="from@example.com",
         use_tls=True,
     ))
-    db.commit()
+    await db.commit()
 
     auth = MockAuthValid()
     payload = EmailPayload(recipient="to@example.com")
@@ -169,7 +180,7 @@ def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_enabled
         server = MagicMock()
         smtp_cls.return_value = server
 
-        result = send_test_email(payload, db=db, Authorize=auth)
+        result = await send_test_email(payload, db=db, Authorize=auth)
 
     smtp_cls.assert_called_once_with("smtp.example.com", 587)
     server.starttls.assert_called_once()
@@ -182,7 +193,8 @@ def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_enabled
     assert result == {"message": "Test email sent successfully"}
 
 
-def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth_enabled):
     db.add(SMTPSettings(
         server="smtp.example.com",
         port=25,
@@ -191,7 +203,7 @@ def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth_enabl
         sender_email="from@example.com",
         use_tls=False,
     ))
-    db.commit()
+    await db.commit()
 
     auth = MockAuthValid()
     payload = EmailPayload(recipient="to@example.com")
@@ -200,7 +212,7 @@ def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth_enabl
         server = MagicMock()
         smtp_cls.return_value = server
 
-        send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(payload, db=db, Authorize=auth)
 
     server.starttls.assert_not_called()
     server.login.assert_not_called()
@@ -208,29 +220,31 @@ def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth_enabl
     server.quit.assert_called_once()
 
 
-def test_send_test_email_smtp_failure_returns_500(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_send_test_email_smtp_failure_returns_500(db, mock_settings_auth_enabled):
     db.add(SMTPSettings(
         server="smtp.example.com",
         port=587,
         sender_email="from@example.com",
         use_tls=True,
     ))
-    db.commit()
+    await db.commit()
 
     auth = MockAuthValid()
     payload = EmailPayload(recipient="to@example.com")
 
     with patch("api.routers.smtp.smtplib.SMTP", side_effect=OSError("connection refused")):
         with pytest.raises(HTTPException) as exc:
-            send_test_email(payload, db=db, Authorize=auth)
+            await send_test_email(payload, db=db, Authorize=auth)
 
     assert exc.value.status_code == 500
     assert "connection refused" in exc.value.detail
 
 
-def test_send_test_email_unauthorized(db, mock_settings_auth_enabled):
+@pytest.mark.asyncio
+async def test_send_test_email_unauthorized(db, mock_settings_auth_enabled):
     auth = MockAuthInvalid()
     payload = EmailPayload(recipient="to@example.com")
     with pytest.raises(HTTPException) as exc:
-        send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(payload, db=db, Authorize=auth)
     assert exc.value.status_code == 401

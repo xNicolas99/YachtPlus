@@ -540,24 +540,15 @@ def test_format_bytes_invalid_type():
 
 from api.routers.apps import get_db
 
-def test_get_db():
-    with patch('api.routers.apps.SessionLocal') as mock_session_local:
-        mock_session = MagicMock()
-        mock_session_local.return_value = mock_session
-
-        generator = get_db()
-        db = next(generator)
-
-        assert db == mock_session
-        mock_session_local.assert_called_once()
-        mock_session.close.assert_not_called()
-
-        try:
-            next(generator)
-        except StopIteration:
-            pass
-
-        mock_session.close.assert_called_once()
+@pytest.mark.asyncio
+async def test_get_db():
+    from api.utils.auth import get_db as async_get_db
+    # apps.py now uses the async get_db dependency (async generator).
+    generator = async_get_db()
+    db = await anext(generator)
+    assert db is not None
+    with pytest.raises(StopAsyncIteration):
+        await anext(generator)
 
 from api.routers.apps import index
 

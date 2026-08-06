@@ -4,6 +4,7 @@ from api.auth.jwt import get_auth_wrapper, create_access_token, revoke_token, ge
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
+import asyncio
 
 from api.db.crud.users import verify_password
 from api.utils.auth import get_db
@@ -44,9 +45,9 @@ async def get_users(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     # Ensure only superuser can list users (or define a new permission perm_manage_users)
-    username = Authorize.get_jwt_subject()
+    username = await Authorize.get_jwt_subject()
     user = await crud.get_user_by_name(db, username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
@@ -61,8 +62,8 @@ async def delete_user(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     user = await crud.get_user_by_name(db, username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
@@ -99,8 +100,8 @@ async def update_user_admin(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     current_user = await crud.get_user_by_name(db, username)
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
@@ -120,22 +121,22 @@ async def create_user(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
 ):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     creator = await crud.get_user_by_name(db, username)
     if not creator:
          raise HTTPException(status_code=401, detail="User not found or deleted")
     if not creator.is_superuser:
          raise HTTPException(status_code=403, detail="Not authorized to create users")
 
-    db_user = crud.get_user_by_name(db, username=user.username)
+    db_user = await crud.get_user_by_name(db, username=user.username)
     if db_user:
         raise HTTPException(status_code=400, detail="Username already in use")
-    return crud.create_user(db=db, user=user)
+    return await crud.create_user(db=db, user=user)
 
 @router.post("/login")
 @limiter.limit("5/minute")
-def login(
+async def login(
     request: Request,
     user_data: schemas.UserLogin = Body(..., embed=False),
     db: AsyncSession = Depends(get_db),
@@ -145,25 +146,24 @@ def login(
     if not user_data.username:
         raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
-    client_ip = check_ip_restriction(request, db, user_data.username)
+    client_ip = await check_ip_restriction(request, db, user_data.username)
 
     # Defensive check for casefold
     username_query = user_data.username
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    _user = (
-        db.query(models.User)
-        .filter(models.User.username == username_query)
-        .first()
+    result = await db.execute(
+        select(models.User).filter(models.User.username == username_query)
     )
+    _user = result.scalars().first()
 
     hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
-    is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
+    is_valid_password = await crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:
         if not _user.is_active:
-            record_login_attempt(db, client_ip, user_data.username, False)
+            await record_login_attempt(db, client_ip, user_data.username, False)
             logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
             raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
 
@@ -190,16 +190,16 @@ def login(
                     raise
                 except Exception as e:
                     logger.error(f"2FA Verify Error: {e}")
-                    record_login_attempt(db, client_ip, user_data.username, False)
+                    await record_login_attempt(db, client_ip, user_data.username, False)
                     logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                     raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
                 if not code_ok:
-                    record_login_attempt(db, client_ip, user_data.username, False)
+                    await record_login_attempt(db, client_ip, user_data.username, False)
                     logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                     raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
         # Success
-        record_login_attempt(db, client_ip, user_data.username, True)
+        await record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
 
         return {
@@ -208,13 +208,13 @@ def login(
             "access_token": access_token,
         }
     else:
-        record_login_attempt(db, client_ip, user_data.username, False)
+        await record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
 @router.post("/login_cookie")
 @limiter.limit("5/minute")
-def login_cookie(
+async def login_cookie(
     request: Request,
     response: Response,
     user_data: schemas.UserLogin = Body(..., embed=False),
@@ -225,25 +225,24 @@ def login_cookie(
     if not user_data.username:
         raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
-    client_ip = check_ip_restriction(request, db, user_data.username)
+    client_ip = await check_ip_restriction(request, db, user_data.username)
 
     # Defensive check for casefold
     username_query = user_data.username
     if hasattr(username_query, 'casefold'):
         username_query = username_query.casefold()
 
-    _user = (
-        db.query(models.User)
-        .filter(models.User.username == username_query)
-        .first()
+    result = await db.execute(
+        select(models.User).filter(models.User.username == username_query)
     )
+    _user = result.scalars().first()
 
     hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
-    is_valid_password = crud.verify_password(user_data.password, hash_to_verify)
+    is_valid_password = await crud.verify_password(user_data.password, hash_to_verify)
 
     if _user is not None and is_valid_password:
         if not _user.is_active:
-            record_login_attempt(db, client_ip, user_data.username, False)
+            await record_login_attempt(db, client_ip, user_data.username, False)
             logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
             raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
 
@@ -259,15 +258,15 @@ def login_cookie(
                  raise
              except Exception as e:
                  logger.error(f"2FA Verify Error: {e}")
-                 record_login_attempt(db, client_ip, user_data.username, False)
+                 await record_login_attempt(db, client_ip, user_data.username, False)
                  logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
                  raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
              if not code_ok:
-                 record_login_attempt(db, client_ip, user_data.username, False)
+                 await record_login_attempt(db, client_ip, user_data.username, False)
                  logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
                  raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
-        record_login_attempt(db, client_ip, user_data.username, True)
+        await record_login_attempt(db, client_ip, user_data.username, True)
         access_token = create_access_token(data={"sub": _user.username})
         Authorize.set_access_cookies(access_token, response)
         # Token lives only in the HttpOnly cookie. Echoing it in the body
@@ -278,7 +277,7 @@ def login_cookie(
             "username": _user.username,
         }
     else:
-        record_login_attempt(db, client_ip, user_data.username, False)
+        await record_login_attempt(db, client_ip, user_data.username, False)
         logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
         raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
 
@@ -296,12 +295,12 @@ async def refresh(
     # been deactivated or deleted could keep refreshing until the original
     # token's `exp` ran out — defeating the point of /refresh as a way to
     # extend a session under continued admin control.
-    auth_check(Authorize)
-    current_user = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    current_user = await Authorize.get_jwt_subject()
     if not current_user:
         raise HTTPException(status_code=401, detail="Not logged in.")
 
-    user = crud.get_user_by_name(db=db, username=current_user)
+    user = await crud.get_user_by_name(db=db, username=current_user)
     if not user or not user.is_active:
         # Clear the cookie so the client stops sending a token we just
         # rejected; this also lets the frontend redirect to /login.
@@ -314,14 +313,14 @@ async def refresh(
 
 
 @router.get("/api/keys", response_model=List[schemas.APIKEY])
-def get_api_keys(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    current_user = Authorize.get_jwt_subject()
+async def get_api_keys(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    current_user = await Authorize.get_jwt_subject()
     if current_user is not None:
-        user = crud.get_user_by_name(db=db, username=current_user)
+        user = await crud.get_user_by_name(db=db, username=current_user)
     else:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    return crud.get_keys(user, db)
+    return await crud.get_keys(user, db)
 
 
 @router.post("/api/keys/new", response_model=schemas.DisplayAPIKEY)
@@ -335,13 +334,13 @@ async def create_api_key(
     # Rate-limited so a compromised session can't spam-mint API keys
     # (each one is a long-lived credential — 10 year exp via create_key).
     name = key.key_name
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     if username is not None:
-        user = crud.get_user_by_name(db=db, username=username)
+        user = await crud.get_user_by_name(db=db, username=username)
     else:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    return crud.create_key(name, user, Authorize, db)
+    return await crud.create_key(name, user, Authorize, db)
 
 
 # DELETE is the correct verb for revoking an API key; the previous GET
@@ -353,17 +352,17 @@ async def create_api_key(
 async def delete_api_key(
     key_id, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
-    requester = crud.get_user_by_name(db=db, username=username) if username else None
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
+    requester = await crud.get_user_by_name(db=db, username=username) if username else None
     if not requester:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    return crud.blacklist_api_key(key_id, db, requesting_user=requester)
+    return await crud.blacklist_api_key(key_id, db, requesting_user=requester)
 
 
 @router.get("/me", response_model=schemas.User)
-def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+async def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
     auth_setting = str(settings.DISABLE_AUTH)
     if auth_setting.lower() == "true":
         # Previous code mutated the schemas.User CLASS object directly,
@@ -377,10 +376,10 @@ def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = D
             authDisabled=True,
         )
     else:
-        Authorize.jwt_required()
-        current_user_name = Authorize.get_jwt_subject()
+        await Authorize.jwt_required()
+        current_user_name = await Authorize.get_jwt_subject()
         if current_user_name is not None:
-            user = crud.get_user_by_name(db=db, username=current_user_name)
+            user = await crud.get_user_by_name(db=db, username=current_user_name)
             if not user:
                 raise HTTPException(status_code=401, detail="User not found or deleted.")
             return user
@@ -389,18 +388,18 @@ def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = D
 
 
 @router.post("/me", response_model=schemas.User)
-def update_user(
+async def update_user(
     user: schemas.UserUpdate, # Updated schema
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    auth_check(Authorize)
-    current_user = Authorize.get_jwt_subject()
-    return crud.update_user(db=db, user=user, current_user=current_user)
+    await auth_check(Authorize)
+    current_user = await Authorize.get_jwt_subject()
+    return await crud.update_user(db=db, user=user, current_user=current_user)
 
 
 @router.get("/logout")
-def logout(
+async def logout(
     request: Request,
     response: Response,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -414,13 +413,13 @@ def logout(
     # effectively a frontend-only cosmetic clear.
     token = get_current_user_token(request)
     if token:
-        revoke_token(token)
+        await revoke_token(token)
     Authorize.unset_jwt_cookies(response)
     return {"msg": "Logout Successful"}
 
 
 @router.get("/logout/refresh")
-def logout_refresh(
+async def logout_refresh(
     request: Request,
     response: Response,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -428,6 +427,6 @@ def logout_refresh(
 ):
     token = get_current_user_token(request)
     if token:
-        revoke_token(token)
+        await revoke_token(token)
     Authorize.unset_jwt_cookies(response)
     return {"msg": "Logout Successful"}

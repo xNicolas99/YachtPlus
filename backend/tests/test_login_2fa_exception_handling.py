@@ -10,10 +10,11 @@ the genuine decrypt/parse errors are funneled to the generic 400 path.
 """
 import pyotp
 import pytest
-from unittest.mock import patch, MagicMock
+import pytest_asyncio
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi import HTTPException
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 
 from api.db.database import Base
 from api.db.models.users import User
@@ -23,15 +24,15 @@ from api.routers.users import login, login_cookie, limiter as _users_limiter
 from api.db.schemas.users import UserLogin
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 
 class MockAuth:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return None
 
     def set_access_cookies(self, *a, **kw):
@@ -49,50 +50,51 @@ def _stub_security(monkeypatch):
     # which want a real request/db combination; stub them so the tests
     # focus on the exception-handling branch.
     monkeypatch.setattr(
-        "api.routers.users.check_ip_restriction", lambda *a, **kw: "127.0.0.1"
+        "api.routers.users.check_ip_restriction", AsyncMock(return_value="127.0.0.1")
     )
     monkeypatch.setattr(
-        "api.routers.users.record_login_attempt", lambda *a, **kw: None
+        "api.routers.users.record_login_attempt", AsyncMock(return_value=None)
     )
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    yield s
-    s.close()
+@pytest_asyncio.fixture
+async def db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    async with SessionLocal() as s:
+        yield s
 
 
-def _seed_2fa_user(db, password="rightpw"):
+async def _seed_2fa_user(db, password="rightpw"):
     secret = pyotp.random_base32()
     user = User(
         username="alice",
-        hashed_password=get_password_hash(password),
+        hashed_password=await get_password_hash(password),
         is_active=True,
         is_2fa_enabled=True,
         otp_secret=encrypt(secret),
     )
     db.add(user)
-    db.commit()
+    await db.commit()
     return secret
 
 
-def test_wrong_2fa_code_returns_400_without_swallowing_into_2fa_error(db):
+@pytest.mark.asyncio
+async def test_wrong_2fa_code_returns_400_without_swallowing_into_2fa_error(db):
     """A wrong code must surface as the "Invalid 2FA code" branch.
     Previously this code path was masked by the catch-all `except Exception`
     that converted it into a generic "2FA Error" log line — making it
     impossible to alert on real crypto corruption separately from users
     fat-fingering their code.
     """
-    _seed_2fa_user(db)
+    await _seed_2fa_user(db)
     request = MagicMock()
     payload = UserLogin(username="alice", password="rightpw", otp_token="000000")
 
     with patch("api.routers.users.logger") as mock_logger:
         with pytest.raises(HTTPException) as exc:
-            login(request=request, user_data=payload, db=db, Authorize=MockAuth())
+            await login(request=request, user_data=payload, db=db, Authorize=MockAuth())
     assert exc.value.status_code == 400
     # The "Invalid 2FA code" warning must fire — the "2FA Error" warning
     # must NOT (that path is now reserved for real exceptions).
@@ -103,21 +105,22 @@ def test_wrong_2fa_code_returns_400_without_swallowing_into_2fa_error(db):
     assert not any("Reason: 2FA Error" in m for m in warning_messages)
 
 
-def test_decrypt_failure_still_maps_to_generic_400(db):
+@pytest.mark.asyncio
+async def test_decrypt_failure_still_maps_to_generic_400(db):
     """If the stored OTP secret has been corrupted (key rotation, DB
     restore from a different env, etc.), decrypt() raises and we want
     the 400 path — but logged via the "2FA Error" branch, not the
     "Invalid 2FA code" one. This makes the two scenarios alertable
     separately in production.
     """
-    _seed_2fa_user(db)
+    await _seed_2fa_user(db)
     request = MagicMock()
     payload = UserLogin(username="alice", password="rightpw", otp_token="123456")
 
     with patch("api.routers.users.decrypt", side_effect=ValueError("bad key")), \
          patch("api.routers.users.logger") as mock_logger:
         with pytest.raises(HTTPException) as exc:
-            login(request=request, user_data=payload, db=db, Authorize=MockAuth())
+            await login(request=request, user_data=payload, db=db, Authorize=MockAuth())
     assert exc.value.status_code == 400
     warning_messages = [
         c.args[0] for c in mock_logger.warning.call_args_list if c.args
@@ -126,28 +129,30 @@ def test_decrypt_failure_still_maps_to_generic_400(db):
     assert not any("Invalid 2FA code" in m for m in warning_messages)
 
 
-def test_correct_2fa_code_logs_in_successfully(db):
+@pytest.mark.asyncio
+async def test_correct_2fa_code_logs_in_successfully(db):
     """End-to-end happy path through the corrected branch."""
-    secret = _seed_2fa_user(db)
+    secret = await _seed_2fa_user(db)
     request = MagicMock()
     payload = UserLogin(
         username="alice",
         password="rightpw",
         otp_token=pyotp.TOTP(secret).now(),
     )
-    result = login(request=request, user_data=payload, db=db, Authorize=MockAuth())
+    result = await login(request=request, user_data=payload, db=db, Authorize=MockAuth())
     assert result["login"] == "successful"
     assert result["username"] == "alice"
 
 
-def test_login_cookie_same_separation(db):
+@pytest.mark.asyncio
+async def test_login_cookie_same_separation(db):
     """login_cookie shared the bug; assert the matching fix is in place."""
-    _seed_2fa_user(db)
+    await _seed_2fa_user(db)
     request = MagicMock()
     response = MagicMock()
     payload = UserLogin(username="alice", password="rightpw", otp_token="000000")
     with pytest.raises(HTTPException) as exc:
-        login_cookie(
+        await login_cookie(
             request=request, response=response, user_data=payload,
             db=db, Authorize=MockAuth(),
         )

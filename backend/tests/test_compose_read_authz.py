@@ -10,9 +10,10 @@ The fix gates the listing behind perm_start and the detail behind
 superuser (matching the support-bundle endpoint).
 """
 import pytest
+import pytest_asyncio
 from fastapi import HTTPException
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 from unittest.mock import patch
 
 from api.db.database import Base
@@ -20,18 +21,18 @@ from api.db.models.users import User
 from api.routers.compose import get_projects, get_project
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 
 class MockAuth:
     def __init__(self, username):
         self.username = username
 
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return self.username
 
 
@@ -40,17 +41,17 @@ def _force_auth_on(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    s.add(User(username="bob", hashed_password="pw", is_superuser=False))
-    s.add(User(username="ops", hashed_password="pw", is_superuser=False, perm_start=True))
-    s.add(User(username="root", hashed_password="pw", is_superuser=True))
-    s.commit()
-    yield s
-    s.close()
+@pytest_asyncio.fixture
+async def db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    async with SessionLocal() as s:
+        s.add(User(username="bob", hashed_password="pw", is_superuser=False))
+        s.add(User(username="ops", hashed_password="pw", is_superuser=False, perm_start=True))
+        s.add(User(username="root", hashed_password="pw", is_superuser=True))
+        await s.commit()
+        yield s
 
 
 @pytest.mark.asyncio

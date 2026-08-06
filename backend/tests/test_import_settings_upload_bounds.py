@@ -5,29 +5,26 @@ admin could mistakenly try) into uploading a multi-GB blob, OOM-ing the
 worker. The fix bounds the upload at 5 MiB, rejects non-JSON content
 types, and rejects non-JSON bodies up front so the CRUD layer never
 sees garbage.
+
+Async migration: the shared conftest `db` fixture now provides an
+AsyncSession, and the router + CRUD are async, so every test awaits the
+endpoints and uses the async MockAuth.
 """
 import io
 import json
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from api.db.database import Base
 from api.db.models.users import User
 from api.routers.app_settings import import_settings
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-
 class MockAuth:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "root"
 
 
@@ -36,15 +33,11 @@ def _force_auth_on(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    s = SessionLocal()
-    s.add(User(username="root", hashed_password="pw", is_superuser=True))
-    s.commit()
-    yield s
-    s.close()
+async def _seed_superuser(db):
+    """The shared conftest `db` fixture starts empty; give it a superuser so
+    require_superuser can resolve 'root'."""
+    db.add(User(username="root", hashed_password="pw", is_superuser=True))
+    await db.commit()
 
 
 def _upload(data: bytes, content_type: str = "application/json") -> UploadFile:
@@ -54,39 +47,49 @@ def _upload(data: bytes, content_type: str = "application/json") -> UploadFile:
     return up
 
 
-def test_rejects_oversize_upload(db):
+@pytest.mark.asyncio
+async def test_rejects_oversize_upload(db):
+    await _seed_superuser(db)
     payload = b"a" * (5 * 1024 * 1024 + 1)
     with pytest.raises(HTTPException) as exc:
-        import_settings(db=db, upload=_upload(payload), Authorize=MockAuth())
+        await import_settings(db=db, upload=_upload(payload), Authorize=MockAuth())
     assert exc.value.status_code == 413
 
 
-def test_rejects_non_json_content_type(db):
+@pytest.mark.asyncio
+async def test_rejects_non_json_content_type(db):
+    await _seed_superuser(db)
     with pytest.raises(HTTPException) as exc:
-        import_settings(
+        await import_settings(
             db=db, upload=_upload(b"{}", content_type="application/zip"),
             Authorize=MockAuth(),
         )
     assert exc.value.status_code == 415
 
 
-def test_rejects_invalid_utf8(db):
+@pytest.mark.asyncio
+async def test_rejects_invalid_utf8(db):
+    await _seed_superuser(db)
     with pytest.raises(HTTPException) as exc:
-        import_settings(db=db, upload=_upload(b"\xff\xfe\xfd"), Authorize=MockAuth())
+        await import_settings(db=db, upload=_upload(b"\xff\xfe\xfd"), Authorize=MockAuth())
     # Either the UTF-8 or the JSON check catches this — both are 400.
     assert exc.value.status_code == 400
 
 
-def test_rejects_malformed_json(db):
+@pytest.mark.asyncio
+async def test_rejects_malformed_json(db):
+    await _seed_superuser(db)
     with pytest.raises(HTTPException) as exc:
-        import_settings(db=db, upload=_upload(b"not json"), Authorize=MockAuth())
+        await import_settings(db=db, upload=_upload(b"not json"), Authorize=MockAuth())
     assert exc.value.status_code == 400
 
 
-def test_accepts_well_formed_json(db):
+@pytest.mark.asyncio
+async def test_accepts_well_formed_json(db):
+    await _seed_superuser(db)
     payload = json.dumps({"templates": [], "variables": []}).encode("utf-8")
-    with patch("api.routers.app_settings.scrud.import_settings", return_value={"ok": True}) as inner:
-        result = import_settings(db=db, upload=_upload(payload), Authorize=MockAuth())
+    with patch("api.routers.app_settings.scrud.import_settings", new=AsyncMock(return_value={"ok": True})) as inner:
+        result = await import_settings(db=db, upload=_upload(payload), Authorize=MockAuth())
     assert result == {"ok": True}
     # The CRUD layer should see the validated bytes via the re-wrapped stream.
     inner.assert_called_once()

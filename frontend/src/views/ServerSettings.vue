@@ -1,47 +1,46 @@
 <template lang="html">
-  <v-card color="foreground" class="d-flex mx-auto page">
+  <v-card class="d-flex mx-auto page">
     <v-container fluid class="component">
       <!-- <Nav> was referenced but never imported (Vuetify 2 leftover);
            sidebar is the global nav in Vuetify 3 layout. -->
-      <v-card color="foreground" tile>
+      <v-card tile>
         <v-row>
           <v-col class="flex-grow-1 flex-shrink-0">
             <div>
               <v-tabs
                 v-model="SettingsTab"
-                background-color="tabs"
                 mobile-breakpoint="sm"
               >
                 <v-tab class="text-left" @click="$router.go(-1)">
-                  <v-icon left class="mr-1">mdi-arrow-left-bold-outline</v-icon>
+                  <v-icon start class="mr-1">mdi-arrow-left-bold-outline</v-icon>
                   Back
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-information-outline</v-icon>Info
+                  <v-icon start class="mr-1">mdi-information-outline</v-icon>Info
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-format-color-fill</v-icon>Theme
+                  <v-icon start class="mr-1">mdi-format-color-fill</v-icon>Theme
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-view-list-outline</v-icon
+                  <v-icon start class="mr-1">mdi-view-list-outline</v-icon
                   >Template Variables
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-trash-can-outline</v-icon>
+                  <v-icon start class="mr-1">mdi-trash-can-outline</v-icon>
                   Prune
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-update</v-icon>
+                  <v-icon start class="mr-1">mdi-update</v-icon>
                   Update
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-email</v-icon>SMTP
+                  <v-icon start class="mr-1">mdi-email</v-icon>SMTP
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-shield-lock</v-icon>Security
+                  <v-icon start class="mr-1">mdi-shield-lock</v-icon>Security
                 </v-tab>
                 <v-tab class="text-left">
-                  <v-icon left class="mr-1">mdi-history</v-icon>Audit Logs
+                  <v-icon start class="mr-1">mdi-history</v-icon>Audit Logs
                 </v-tab>
               </v-tabs>
               <!-- Vuetify 3 replaced v-tabs-items / v-tab-item with

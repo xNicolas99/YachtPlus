@@ -1,153 +1,100 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import store from "../store";
 
-// Templates
-import Home from "../views/Home.vue";
-import Login from "../views/auth/Login.vue";
-import Setup from "../views/auth/Setup.vue";
-
-// Templates
-import Templates from "../views/Templates.vue";
-import TemplatesShow from "../components/templates/TemplatesDetails.vue";
-import TemplatesForm from "../components/templates/TemplatesForm.vue";
-import TemplatesList from "../components/templates/TemplatesList.vue";
-
-// Apps
-import Applications from "../views/Applications.vue";
-import AppContent from "../components/applications/ApplicationDetailsComponents/AppContent.vue";
-import AppProcesses from "../components/applications/ApplicationDetailsComponents/AppProcesses.vue";
-import AppLogs from "../components/applications/ApplicationDetailsComponents/AppLogs.vue";
-import AppStats from "../components/applications/ApplicationDetailsComponents/AppStats.vue";
-import ApplicationDetails from "../components/applications/ApplicationDetails.vue";
-import ApplicationsList from "../components/applications/ApplicationsList.vue";
-import ApplicationsForm from "../components/applications/ApplicationsForm.vue";
-import ApplicationDeployFromTemplate from "../components/applications/ApplicationDeployFromTemplate.vue";
-
-// Project
-import Project from "../views/Project.vue";
-import ProjectList from "../components/compose/ProjectList.vue";
-import ProjectDetails from "../components/compose/ProjectDetails.vue";
-import ProjectEditor from "../components/compose/ProjectEditor.vue";
-
-// Resources
-import Resources from "../views/Resources.vue";
-// Images
-import ImageList from "../components/resources/images/ImageList.vue";
-import ImageDetails from "../components/resources/images/ImageDetails.vue";
-// Volumes
-import VolumeList from "../components/resources/volumes/VolumeList.vue";
-import VolumeDetails from "../components/resources/volumes/VolumeDetails.vue";
-// Networks
-import NetworkList from "../components/resources/networks/NetworkList.vue";
-import NetworkDetails from "../components/resources/networks/NetworkDetails.vue";
-import NetworkForm from "../components/resources/networks/NetworkForm.vue";
-
-// User Settings
-import UserSettings from "../views/UserSettings.vue";
-import ChangePasswordForm from "../components/userSettings/ChangePasswordForm.vue";
-import UserInfo from "../components/userSettings/UserInfo.vue";
-
-// Server Settings
-// import ServerSettingsNav from "../components/serverSettings/ServerSettingsNav.vue"
-import ServerSettings from "../views/ServerSettings.vue";
-import ServerInfo from "../components/serverSettings/ServerInfo.vue";
-import ServerVariables from "../components/serverSettings/ServerVariables.vue";
-import Prune from "../components/serverSettings/Prune.vue";
-import ServerUpdate from "../components/serverSettings/ServerUpdate.vue";
-import Theme from "../components/serverSettings/Theme.vue";
-import AuditLogs from "../components/serverSettings/AuditLogs.vue";
-import UserManagement from "../views/UserManagement.vue";
+// Lazy-loaded route components. Each `() => import(...)` becomes its own
+// chunk, so the initial bundle only ships the shell + the first view
+// instead of every page up front. This is the single biggest win for
+// perceived startup time on a self-hosted UI.
 
 const routes = [
   {
     path: "/",
     name: "Home",
-    component: Home
+    component: () => import("../views/Home.vue")
   },
   {
     path: "/login",
     name: "Login",
-    component: Login
+    component: () => import("../views/auth/Login.vue")
   },
   {
     path: "/setup",
     name: "Setup",
-    component: Setup
+    component: () => import("../views/auth/Setup.vue")
   },
   {
     path: "/templates",
-    // name: "Templates",
-    component: Templates,
+    component: () => import("../views/Templates.vue"),
     children: [
       {
         path: "",
         name: "View Templates",
-        component: TemplatesList // perhaps rename to TemplatesIndex
+        component: () => import("../components/templates/TemplatesList.vue")
       },
       {
         path: "new",
         name: "New Template",
-        component: TemplatesForm // perhaps rename to TemplatesCreate
+        component: () => import("../components/templates/TemplatesForm.vue")
       },
       {
         path: ":templateId",
         name: "Template Details",
-        component: TemplatesShow // perhaps rename to TemplateDetails
+        component: () => import("../components/templates/TemplatesDetails.vue")
       }
     ]
   },
   {
     path: "/apps",
-    component: Applications,
+    component: () => import("../views/Applications.vue"),
     children: [
       {
         name: "Deploy",
         path: "deploy/:appId",
-        component: ApplicationsForm
+        component: () => import("../components/applications/ApplicationsForm.vue")
       },
       {
         name: "Edit",
         path: "edit/:appName",
-        component: ApplicationsForm
+        component: () => import("../components/applications/ApplicationsForm.vue")
       },
       {
         name: "Deploy from Template",
         path: "templates",
-        component: ApplicationDeployFromTemplate
+        component: () => import("../components/applications/ApplicationDeployFromTemplate.vue")
       },
       {
         name: "View Applications",
         path: "/",
-        component: ApplicationsList
+        component: () => import("../components/applications/ApplicationsList.vue")
       },
       {
         name: "Add Application",
         path: "deploy",
-        component: ApplicationsForm
+        component: () => import("../components/applications/ApplicationsForm.vue")
       },
       {
         path: ":appName",
-        component: ApplicationDetails,
+        component: () => import("../components/applications/ApplicationDetails.vue"),
         children: [
           {
             name: "Processes",
             path: "top",
-            component: AppProcesses
+            component: () => import("../components/applications/ApplicationDetailsComponents/AppProcesses.vue")
           },
           {
             name: "Info",
             path: "info",
-            component: AppContent
+            component: () => import("../components/applications/ApplicationDetailsComponents/AppContent.vue")
           },
           {
             name: "Logs",
             path: "logs",
-            component: AppLogs
+            component: () => import("../components/applications/ApplicationDetailsComponents/AppLogs.vue")
           },
           {
             name: "Stats",
             path: "stats",
-            component: AppStats
+            component: () => import("../components/applications/ApplicationDetailsComponents/AppStats.vue")
           }
         ]
       }
@@ -155,120 +102,120 @@ const routes = [
   },
   {
     path: "/projects",
-    component: Project,
+    component: () => import("../views/Project.vue"),
     children: [
       {
         name: "View Projects",
         path: "/",
-        component: ProjectList
+        component: () => import("../components/compose/ProjectList.vue")
       },
       {
         name: "Edit Project",
         path: ":projectName/edit",
-        component: ProjectEditor
+        component: () => import("../components/compose/ProjectEditor.vue")
       },
       {
         name: "Project Details",
         path: ":projectName",
-        component: ProjectDetails
+        component: () => import("../components/compose/ProjectDetails.vue")
       }
     ]
   },
   {
     path: "/user",
-    component: UserSettings,
+    component: () => import("../views/UserSettings.vue"),
     children: [
       {
         name: "User Info",
         path: "info",
-        component: UserInfo
+        component: () => import("../components/userSettings/UserInfo.vue")
       },
       {
         name: "Change Password",
         path: "changePassword",
-        component: ChangePasswordForm
+        component: () => import("../components/userSettings/ChangePasswordForm.vue")
       }
     ]
   },
   {
     path: "/users",
-    component: UserManagement,
+    component: () => import("../views/UserManagement.vue"),
     name: "User Management"
   },
   {
     path: "/settings",
-    component: ServerSettings,
+    component: () => import("../views/ServerSettings.vue"),
     children: [
       {
         name: "Server Info",
         path: "info",
-        component: ServerInfo
+        component: () => import("../components/serverSettings/ServerInfo.vue")
       },
       {
         name: "Theme",
         path: "theme",
-        component: Theme
+        component: () => import("../components/serverSettings/Theme.vue")
       },
       {
         name: "Template Variables",
         path: "templateVariables",
-        component: ServerVariables
+        component: () => import("../components/serverSettings/ServerVariables.vue")
       },
       {
         name: "Audit Logs",
         path: "audit",
-        component: AuditLogs
+        component: () => import("../components/serverSettings/AuditLogs.vue")
       },
       {
         name: "Prune",
         path: "prune",
-        component: Prune
+        component: () => import("../components/serverSettings/Prune.vue")
       },
       {
         name: "Update YachtPlus",
         path: "update",
-        component: ServerUpdate
+        component: () => import("../components/serverSettings/ServerUpdate.vue")
       }
     ]
   },
   {
     path: "/resources",
-    component: Resources,
+    component: () => import("../views/Resources.vue"),
     children: [
       {
         name: "Images",
         path: "images",
-        component: ImageList
+        component: () => import("../components/resources/images/ImageList.vue")
       },
       {
         path: "images/:imageid",
         name: "Image Details",
-        component: ImageDetails
+        component: () => import("../components/resources/images/ImageDetails.vue")
       },
       {
         name: "Volumes",
         path: "volumes",
-        component: VolumeList
+        component: () => import("../components/resources/volumes/VolumeList.vue")
       },
       {
         path: "volumes/:volumeName",
         name: "Volume Details",
-        component: VolumeDetails
+        component: () => import("../components/resources/volumes/VolumeDetails.vue")
       },
       {
         name: "Networks",
         path: "networks",
-        component: NetworkList
+        component: () => import("../components/resources/networks/NetworkList.vue")
       },
       {
         path: "networks/new",
         name: "New Network",
-        component: NetworkForm
+        component: () => import("../components/resources/networks/NetworkForm.vue")
       },
       {
         path: "networks/:networkid",
         name: "Network Details",
-        component: NetworkDetails
+        component: () => import("../components/resources/networks/NetworkDetails.vue")
       }
     ]
   }

@@ -5,9 +5,10 @@ perm_start/perm_stop/perm_restart/perm_delete could trigger destructive
 actions through it. These tests pin the permission gates in place.
 """
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, patch
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 from fastapi import HTTPException
 
 from api.db.database import Base
@@ -15,27 +16,27 @@ from api.db.models.users import User
 from api.routers.compose import compose_project_action as get_compose_action, compose_app_action_route as get_compose_app_action
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
-    session = SessionLocal()
-    yield session
-    session.close()
+@pytest_asyncio.fixture
+async def db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
+    async with SessionLocal() as session:
+        yield session
 
 
 class MockAuth:
     def __init__(self, username):
         self.username = username
 
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return self.username
 
 
@@ -44,7 +45,7 @@ def enable_auth(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
-def _add(db, username, **perms):
+async def _add(db, username, **perms):
     defaults = dict(
         hashed_password="pw",
         is_active=True,
@@ -57,14 +58,14 @@ def _add(db, username, **perms):
     defaults.update(perms)
     user = User(username=username, **defaults)
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    await db.commit()
+    await db.refresh(user)
     return user
 
 
 @pytest.mark.asyncio
 async def test_compose_start_requires_perm_start(db):
-    _add(db, "noperm")
+    await _add(db, "noperm")
 
     with pytest.raises(HTTPException) as exc:
         await get_compose_action(
@@ -78,7 +79,7 @@ async def test_compose_start_requires_perm_start(db):
 
 @pytest.mark.asyncio
 async def test_compose_start_succeeds_with_perm_start(db):
-    _add(db, "starter", perm_start=True)
+    await _add(db, "starter", perm_start=True)
 
     with patch(
         "api.routers.compose.compose_action",
@@ -97,7 +98,7 @@ async def test_compose_start_succeeds_with_perm_start(db):
 
 @pytest.mark.asyncio
 async def test_compose_stop_requires_perm_stop(db):
-    _add(db, "starter_only", perm_start=True)
+    await _add(db, "starter_only", perm_start=True)
 
     with pytest.raises(HTTPException) as exc:
         await get_compose_action(
@@ -111,7 +112,7 @@ async def test_compose_stop_requires_perm_stop(db):
 
 @pytest.mark.asyncio
 async def test_compose_delete_requires_perm_delete(db):
-    _add(db, "no_delete", perm_start=True, perm_stop=True, perm_restart=True)
+    await _add(db, "no_delete", perm_start=True, perm_stop=True, perm_restart=True)
 
     with pytest.raises(HTTPException) as exc:
         await get_compose_action(
@@ -125,7 +126,7 @@ async def test_compose_delete_requires_perm_delete(db):
 
 @pytest.mark.asyncio
 async def test_compose_delete_with_perm_delete(db):
-    _add(db, "deleter", perm_delete=True)
+    await _add(db, "deleter", perm_delete=True)
 
     with patch(
         "api.routers.compose.delete_compose",
@@ -144,7 +145,7 @@ async def test_compose_delete_with_perm_delete(db):
 @pytest.mark.asyncio
 async def test_compose_pull_does_not_require_action_perm(db):
     """`pull` only fetches images; no run-state mutation, so no perm gate."""
-    _add(db, "puller")
+    await _add(db, "puller")
 
     with patch(
         "api.routers.compose.compose_action",
@@ -161,7 +162,7 @@ async def test_compose_pull_does_not_require_action_perm(db):
 
 @pytest.mark.asyncio
 async def test_compose_invalid_action_returns_400(db):
-    _add(db, "anyone", perm_start=True, perm_stop=True, perm_restart=True, perm_delete=True)
+    await _add(db, "anyone", perm_start=True, perm_stop=True, perm_restart=True, perm_delete=True)
 
     with pytest.raises(HTTPException) as exc:
         await get_compose_action(
@@ -175,7 +176,7 @@ async def test_compose_invalid_action_returns_400(db):
 
 @pytest.mark.asyncio
 async def test_compose_app_action_requires_matching_perm(db):
-    _add(db, "starter", perm_start=True)
+    await _add(db, "starter", perm_start=True)
 
     # `rm` requires perm_delete, which `starter` lacks.
     with pytest.raises(HTTPException) as exc:
@@ -191,7 +192,7 @@ async def test_compose_app_action_requires_matching_perm(db):
 
 @pytest.mark.asyncio
 async def test_compose_app_action_passes_through_when_authorised(db):
-    _add(db, "ops", perm_restart=True)
+    await _add(db, "ops", perm_restart=True)
 
     with patch(
         "api.routers.compose.compose_app_action",
@@ -210,7 +211,7 @@ async def test_compose_app_action_passes_through_when_authorised(db):
 
 @pytest.mark.asyncio
 async def test_superuser_bypasses_perm_check(db):
-    _add(db, "root", is_superuser=True)
+    await _add(db, "root", is_superuser=True)
 
     with patch(
         "api.routers.compose.delete_compose",

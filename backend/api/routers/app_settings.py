@@ -3,7 +3,7 @@ from typing import List
 import io
 import json
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.utils.auth import get_db
 from api.auth.auth import auth_check, require_superuser
@@ -11,8 +11,6 @@ from api.auth.auth import auth_check, require_superuser
 from api.db.crud import templates as crud
 from api.db.crud import settings as scrud
 from api.db.schemas import templates as schemas
-from api.db.models import containers
-from api.db.database import engine
 
 from api.actions import resources
 from api.actions.apps import _update_self, check_self_update
@@ -32,50 +30,50 @@ router = APIRouter()
     response_model=List[schemas.TemplateVariables],
     operation_id="authorize",
 )
-def read_template_variables(
-    db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+async def read_template_variables(
+    db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    return crud.read_template_variables(db=db)
+    await auth_check(Authorize)
+    return await crud.read_template_variables(db=db)
 
 
 @router.post(
     "/variables",
     response_model=List[schemas.TemplateVariables],
 )
-def set_template_variables(
+async def set_template_variables(
     new_variables: List[schemas.TemplateVariables],
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Template variables substitute into every deploy — a non-admin who can
     # overwrite ${REGISTRY} or ${DOMAIN} can redirect future deploys to a
     # registry/host they control. Gate behind superuser.
-    require_superuser(Authorize, db)
-    return crud.set_template_variables(new_variables=new_variables, db=db)
+    await require_superuser(Authorize, db)
+    return await crud.set_template_variables(new_variables=new_variables, db=db)
 
 
 @router.get(
     "/export",
     response_model=schemas.Import_Export,
 )
-def export_settings(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    return scrud.export_settings(db=db)
+async def export_settings(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    return await scrud.export_settings(db=db)
 
 
 @router.post(
     "/export",
 )
-def import_settings(
-    db: Session = Depends(get_db),
+async def import_settings(
+    db: AsyncSession = Depends(get_db),
     upload: UploadFile = File(...),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Settings import overwrites the whole settings table from an uploaded
     # JSON blob; any authenticated user could otherwise wipe the config of
     # the entire instance. Gate behind superuser.
-    require_superuser(Authorize, db)
+    await require_superuser(Authorize, db)
 
     # Bound the upload BEFORE handing it to the CRUD layer:
     #  - content_type: reject anything that doesn't claim to be JSON so a
@@ -91,7 +89,8 @@ def import_settings(
     if ctype and ctype not in allowed_content_types:
         raise HTTPException(status_code=415, detail="Settings import must be application/json")
 
-    raw = upload.file.read(MAX_IMPORT_BYTES + 1)
+    import asyncio
+    raw = await asyncio.to_thread(upload.file.read, MAX_IMPORT_BYTES + 1)
     if len(raw) > MAX_IMPORT_BYTES:
         raise HTTPException(
             status_code=413,
@@ -110,35 +109,35 @@ def import_settings(
     # call sees the same bytes we just validated (the original stream was
     # consumed by .read above).
     upload.file = io.BytesIO(raw)
-    return scrud.import_settings(db=db, upload=upload)
+    return await scrud.import_settings(db=db, upload=upload)
 
 
 @router.get(
     "/prune/{resource}",
 )
-def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    return resources.prune_resources(resource)
+async def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    return await resources.prune_resources(resource)
 
 
 @router.get(
     "/update",
 )
-def update_self(
+async def update_self(
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Pulls + restarts the YachtPlus container itself. A non-admin able to
     # trigger this could force a denial-of-service via repeated restarts or
     # interrupt admin work mid-deploy. Restrict to superusers.
-    require_superuser(Authorize, db)
-    return _update_self(background_tasks)
+    await require_superuser(Authorize, db)
+    return await _update_self(background_tasks)
 
 
 @router.get(
     "/check/update",
 )
-def _check_self_update(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    return check_self_update()
+async def _check_self_update(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    return await check_self_update()

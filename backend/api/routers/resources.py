@@ -1,6 +1,6 @@
 from __future__ import annotations
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.jwt import get_auth_wrapper
 
 from api.actions import resources
@@ -16,7 +16,7 @@ router = APIRouter()
     "/images/",
 )
 async def get_images(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_images()
 
 
@@ -24,7 +24,7 @@ async def get_images(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     "/images/",
 )
 async def write_image(image: ImageWrite, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.write_image(image.image)
 
 
@@ -32,7 +32,7 @@ async def write_image(image: ImageWrite, Authorize: get_auth_wrapper = Depends(g
     "/images/{image_id}",
 )
 async def get_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_image(image_id)
 
 
@@ -40,7 +40,7 @@ async def get_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wra
     "/images/{image_id}/pull",
 )
 async def pull_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.update_image(image_id)
 
 
@@ -49,13 +49,13 @@ async def pull_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wr
 )
 async def delete_image(
     image_id,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Image deletion is destructive and shared across the whole host; a
     # non-admin pulling the rug out under another user's deploy is a real
     # availability issue. Gate behind superuser.
-    require_superuser(Authorize, db)
+    await require_superuser(Authorize, db)
     return await resources.delete_image(image_id)
 
 
@@ -64,7 +64,7 @@ async def delete_image(
     "/volumes/",
 )
 async def get_volumes(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_volumes()
 
 
@@ -72,7 +72,7 @@ async def get_volumes(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     "/volumes/",
 )
 async def write_volume(name: VolumeWrite, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.write_volume(name.name)
 
 
@@ -80,7 +80,7 @@ async def write_volume(name: VolumeWrite, Authorize: get_auth_wrapper = Depends(
     "/volumes/{volume_name}",
 )
 async def get_volume(volume_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_volume(volume_name)
 
 
@@ -89,12 +89,12 @@ async def get_volume(volume_name, Authorize: get_auth_wrapper = Depends(get_auth
 )
 async def delete_volume(
     volume_name,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     # Volume deletion permanently destroys data — without a superuser gate
     # any logged-in operator could wipe another team's persistent state.
-    require_superuser(Authorize, db)
+    await require_superuser(Authorize, db)
     return await resources.delete_volume(volume_name)
 
 
@@ -103,7 +103,7 @@ async def delete_volume(
     "/networks/",
 )
 async def get_networks(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_networks()
 
 
@@ -111,7 +111,7 @@ async def get_networks(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     "/networks/",
 )
 async def write_network(form: NetworkWrite, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.write_network(form)
 
 
@@ -119,7 +119,7 @@ async def write_network(form: NetworkWrite, Authorize: get_auth_wrapper = Depend
     "/networks/{network_name}",
 )
 async def get_network(network_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.get_network(network_name)
 
 
@@ -127,5 +127,5 @@ async def get_network(network_name, Authorize: get_auth_wrapper = Depends(get_au
     "/networks/{network_name}",
 )
 async def delete_network(network_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await resources.delete_network(network_name)

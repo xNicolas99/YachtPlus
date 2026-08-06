@@ -2,14 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from typing import Dict, List, Any
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.utils.auth import get_db
 from slowapi import Limiter
 from api.utils.security import rate_limit_key
 
 import api.utils.registries as registries
 from api.db.crud.templates import match_templates
-from fastapi.concurrency import run_in_threadpool
 
 import asyncio
 
@@ -36,21 +35,21 @@ SEARCH_RESULT_LIMIT = 100
 async def search(
     request: Request,
     q: str = Query(..., min_length=1, max_length=SEARCH_QUERY_MAX_LEN),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """
     Unified search endpoint.
     Searches DockerHub and Templates (and potentially others).
     """
-    auth_check(Authorize)
+    await auth_check(Authorize)
 
     task_dockerhub = asyncio.create_task(registries.search_registry("dockerhub", q))
 
     # Await control back to the event loop just in case
     await asyncio.sleep(0)
 
-    template_results_orm = await run_in_threadpool(match_templates, db, q)
+    template_results_orm = await match_templates(db, q)
 
     dockerhub_results = await task_dockerhub
 

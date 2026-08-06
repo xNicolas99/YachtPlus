@@ -28,7 +28,19 @@ export default defineConfig({
   build: {
     commonjsOptions: {
       transformMixedEsModules: true,
-    }
+    },
+    rollupOptions: {
+      output: {
+        // Split heavy vendor libs into their own cacheable chunks so the
+        // initial bundle stays small and unchanged vendors are re-used
+        // across deploys (long-lived HTTP cache).
+        manualChunks: {
+          'vue-vendor': ['vue', 'vue-router', 'vuex', 'pinia'],
+          'vuetify': ['vuetify'],
+          'axios': ['axios'],
+        },
+      },
+    },
   },
   define: {
     'process.env': {}

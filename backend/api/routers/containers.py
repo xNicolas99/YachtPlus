@@ -11,22 +11,18 @@ import jwt
 import json
 from api.settings import Settings
 import shlex
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from api.utils.auth import get_db
 from api.db.database import SessionLocal
 from api.db.models.users import User
 from api.utils.audit import log_activity
+import asyncio
 
 logger = logging.getLogger(__name__)
 settings = Settings()
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 # Only these shell paths can be invoked through the exec WebSocket. Anything
@@ -71,7 +67,7 @@ async def get_all_container_stats(
     """
     Get stats for all running containers (Optimized & Cached)
     """
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.get_all_stats()
 
 @router.get("/")
@@ -81,7 +77,7 @@ async def get_containers(
     """
     List all containers
     """
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.get_containers()
 
 @router.get("/{container_id}/logs")
@@ -96,7 +92,7 @@ async def get_container_logs(
     """
     Streams container logs using Docker API
     """
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return EventSourceResponse(
         actions.get_logs_generator(container_id, tail, follow, timestamps)
     )
@@ -109,7 +105,7 @@ async def get_container_stats(
     """
     Returns current CPU/RAM usage
     """
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.get_stats(container_id)
 
 @router.get("/{container_id}/stats/stream")
@@ -119,24 +115,24 @@ async def stream_container_stats(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """Echtzeit-Stream für CPU/RAM Metriken via SSE"""
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return EventSourceResponse(actions.stream_stats_generator(request, container_id))
 
 @router.post("/{container_id}/start")
 async def start_container(
     container_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    user = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    user = await Authorize.get_jwt_subject()
 
     # Perform action
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.start()
-        log_activity(db, user=user, action="start", resource=container_id)
+        await asyncio.to_thread(log_activity, db, user, "start", container_id)
         return {"message": "Container started"}
     except DockerError as e:
         # Map docker daemon errors to their proper HTTP status (404 for
@@ -155,17 +151,17 @@ async def start_container(
 @router.post("/{container_id}/stop")
 async def stop_container(
     container_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    user = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.stop()
-        log_activity(db, user=user, action="stop", resource=container_id)
+        await asyncio.to_thread(log_activity, db, user, "stop", container_id)
         return {"message": "Container stopped"}
     except DockerError as e:
         logger.error("Error stopping container %s: %s", container_id, e)
@@ -180,17 +176,17 @@ async def stop_container(
 @router.post("/{container_id}/restart")
 async def restart_container(
     container_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    user = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.restart()
-        log_activity(db, user=user, action="restart", resource=container_id)
+        await asyncio.to_thread(log_activity, db, user, "restart", container_id)
         return {"message": "Container restarted"}
     except DockerError as e:
         logger.error("Error restarting container %s: %s", container_id, e)
@@ -205,18 +201,18 @@ async def restart_container(
 @router.delete("/{container_id}")
 async def delete_container(
     container_id: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     container_id = _validate_container_id(container_id)
-    user = Authorize.get_jwt_subject()
+    user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.delete(force=True)
-        log_activity(db, user=user, action="delete", resource=container_id)
+        await asyncio.to_thread(log_activity, db, user, "delete", container_id)
         return {"message": "Container deleted"}
     except DockerError as e:
         # 404 for "no such container" is the right answer — the previous
@@ -296,9 +292,10 @@ async def container_exec(
 
         auth_db = SessionLocal()
         try:
-            user = auth_db.query(User).filter_by(username=username).first()
+            result = await auth_db.execute(select(User).filter(User.username == username))
+            user = result.scalars().first()
         finally:
-            auth_db.close()
+            await auth_db.close()
 
         if not user or not user.is_active:
             logger.warning("WebSocket exec rejected: inactive or unknown user %r", username)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.jwt import get_auth_wrapper
 
 from api.actions.compose import (
@@ -17,12 +17,12 @@ from api.db.schemas import compose as schemas
 import api.db.crud.users as users_crud
 
 
-def _require_superuser(Authorize, db: Session) -> None:
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+async def _require_superuser(Authorize, db: AsyncSession) -> None:
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     if not username:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    user = users_crud.get_user_by_name(db=db, username=username)
+    user = await users_crud.get_user_by_name(db=db, username=username)
     if not user or not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
@@ -44,23 +44,23 @@ _ACTION_PERMISSIONS = {
 }
 
 
-def _require_action_permission(action: str, Authorize, db):
+async def _require_action_permission(action: str, Authorize, db: AsyncSession):
     perm = _ACTION_PERMISSIONS.get(action)
     if perm:
-        check_permission(perm, Authorize, db)
+        await check_permission(perm, Authorize, db)
 
 
 @router.get("/")
 async def get_projects(
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # The listing exposes project names + paths; gate behind perm_start
     # so a read-only-account user can't enumerate stack layouts. (perm_start
     # is the lowest "operator" privilege already required to do anything
     # with a project.)
-    auth_check(Authorize)
-    check_permission("perm_start", Authorize, db)
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await get_compose_projects()
 
 
@@ -68,13 +68,13 @@ async def get_projects(
 async def get_project(
     project_name,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # Project detail returns the raw compose YAML which routinely contains
     # secrets (DB passwords, API keys, OIDC client secrets) as `environment`
     # values. Restrict to superusers — perm_start operators can run actions
     # but should not get a free dump of every stack's secrets.
-    _require_superuser(Authorize, db)
+    await _require_superuser(Authorize, db)
     return await get_compose(project_name)
 
 
@@ -90,12 +90,12 @@ async def compose_project_action(
     project_name,
     action,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     if action not in ["up", "down", "start", "stop", "restart", "create", "delete", "pull"]:
         raise HTTPException(status_code=400, detail="Invalid action")
-    _require_action_permission(action, Authorize, db)
+    await _require_action_permission(action, Authorize, db)
     if action == "delete":
         return await delete_compose(project_name)
     else:
@@ -107,12 +107,12 @@ async def write_compose_project(
     project_name,
     compose: schemas.ComposeWrite,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     # Editing a compose file changes how the stack runs on next deploy,
     # so gate it behind the same permission used for restarts.
-    check_permission("perm_restart", Authorize, db)
+    await check_permission("perm_restart", Authorize, db)
     return await write_compose(compose=compose)
 
 
@@ -123,12 +123,12 @@ async def compose_app_action_route(
     action,
     app,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     if action not in ["up", "down", "start", "stop", "restart", "create", "rm", "pull"]:
         raise HTTPException(status_code=400, detail="Invalid action")
-    _require_action_permission(action, Authorize, db)
+    await _require_action_permission(action, Authorize, db)
     return await compose_app_action(project_name, action, app)
 
 
@@ -136,9 +136,9 @@ async def compose_app_action_route(
 async def get_support_bundle(
     project_name,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # Support bundles include compose files, env values, and stack-wide
     # config that often contains secrets. Restrict to superusers.
-    _require_superuser(Authorize, db)
+    await _require_superuser(Authorize, db)
     return await generate_support_bundle(project_name)

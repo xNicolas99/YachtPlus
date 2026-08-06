@@ -4,14 +4,13 @@ from pydantic import BaseModel
 from typing import List, Optional, Any
 import json
 import io
+import asyncio
 
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 import api.db.crud.templates as crud
 import api.db.crud.users as users_crud
 import api.db.schemas.templates as schemas
-from api.db.models.containers import Base
-from api.db.database import engine
 from api.utils.auth import get_db
 from api.auth.auth import auth_check
 
@@ -26,16 +25,16 @@ _TEMPLATE_PAYLOAD_MAX_BYTES = 5 * 1024 * 1024
 router = APIRouter()
 
 
-def _require_superuser(Authorize, db: Session) -> None:
+async def _require_superuser(Authorize, db: AsyncSession) -> None:
     """Template add/delete/refresh fetches arbitrary URLs and mutates the
     template library, which is shared across all users — gate behind
     superuser like the user-management endpoints do.
     """
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     if not username:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    user = users_crud.get_user_by_name(db=db, username=username)
+    user = await users_crud.get_user_by_name(db=db, username=username)
     if not user:
         raise HTTPException(status_code=401, detail="User not found.")
     if not user.is_superuser:
@@ -46,9 +45,9 @@ def _require_superuser(Authorize, db: Session) -> None:
     "/",
     response_model=List[schemas.TemplateRead],
 )
-def index(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    templates = crud.get_templates(db=db)
+async def index(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    templates = await crud.get_templates(db=db)
     return templates
 
 
@@ -56,22 +55,22 @@ def index(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(g
     "/match",
     response_model=List[schemas.TemplateItem],
 )
-def match(
+async def match(
     query: str,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    return crud.match_templates(db=db, query=query)
+    await auth_check(Authorize)
+    return await crud.match_templates(db=db, query=query)
 
 
 @router.get(
     "/{id}",
     response_model=schemas.TemplateItems,
 )
-def show(id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
-    template = crud.get_template_by_id(db=db, id=id)
+async def show(id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    template = await crud.get_template_by_id(db=db, id=id)
     return template
 
 
@@ -79,35 +78,22 @@ def show(id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = D
     "/{id}",
     response_model=schemas.TemplateRead,
 )
-def delete(id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    _require_superuser(Authorize, db)
-    return crud.delete_template(db=db, template_id=id)
+async def delete(id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await _require_superuser(Authorize, db)
+    return await crud.delete_template(db=db, template_id=id)
 
 
 @router.post("/", response_model=schemas.TemplateRead)
-def add_template(
+async def add_template(
     template: schemas.TemplateBase,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _require_superuser(Authorize, db)
-    existing_template = crud.get_template(db=db, url=template.url)
+    await _require_superuser(Authorize, db)
+    existing_template = await crud.get_template(db=db, url=template.url)
     if existing_template:
         raise HTTPException(status_code=400, detail="Template already in Database.")
-    return crud.add_template(db=db, template=template)
-
-
-# -- Local / manual / upload routes -----------------------------------------
-#
-# Three ways to get a catalog into YachtPlus that DON'T involve a remote
-# JSON feed:
-#   1. POST /api/templates/upload  — multipart file upload
-#   2. POST /api/templates/manual  — paste JSON content + title in the UI
-#   3. PUT  /api/templates/{id}/content — edit an existing local catalog
-#
-# All three reuse add_template_from_payload / replace_template_items, which
-# store the catalog under a synthetic `local://<uuid>.json` URL. /refresh
-# is a no-op for those (handled in crud.refresh_template).
+    return await crud.add_template(db=db, template=template)
 
 
 class ManualTemplateBody(BaseModel):
@@ -144,7 +130,7 @@ def _parse_uploaded_json(raw: bytes):
 
 
 @router.post("/upload", response_model=schemas.TemplateRead)
-def upload_template(
+async def upload_template(
     # `title` MUST be annotated as a query param. Without the explicit
     # Query(...) tag FastAPI, on a route that has `File(...)`, treats
     # every other primitive param as Form data — and the frontend sends
@@ -152,38 +138,38 @@ def upload_template(
     # ran. From the user's POV the Upload dialog "did nothing".
     title: str = Query(..., min_length=1, max_length=255),
     upload: UploadFile = File(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _require_superuser(Authorize, db)
+    await _require_superuser(Authorize, db)
     ctype = (upload.content_type or "").lower().split(";")[0].strip()
     if ctype and ctype not in ("application/json", "text/json", "application/octet-stream", "text/plain"):
         raise HTTPException(status_code=415, detail="Upload must be application/json")
 
-    raw = upload.file.read(_TEMPLATE_PAYLOAD_MAX_BYTES + 1)
+    raw = await asyncio.to_thread(upload.file.read, _TEMPLATE_PAYLOAD_MAX_BYTES + 1)
     payload = _parse_uploaded_json(raw)
-    return crud.add_template_from_payload(db=db, title=title, payload=payload)
+    return await crud.add_template_from_payload(db=db, title=title, payload=payload)
 
 
 @router.post("/manual", response_model=schemas.TemplateRead)
-def create_manual_template(
+async def create_manual_template(
     body: ManualTemplateBody,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _require_superuser(Authorize, db)
-    return crud.add_template_from_payload(db=db, title=body.title, payload=body.content)
+    await _require_superuser(Authorize, db)
+    return await crud.add_template_from_payload(db=db, title=body.title, payload=body.content)
 
 
 @router.put("/{id}/content", response_model=schemas.TemplateRead)
-def edit_template_content(
+async def edit_template_content(
     id: int,
     body: EditTemplateBody,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _require_superuser(Authorize, db)
-    return crud.replace_template_items(
+    await _require_superuser(Authorize, db)
+    return await crud.replace_template_items(
         db=db, template_id=id, payload=body.content, title=body.title,
     )
 
@@ -192,19 +178,19 @@ def edit_template_content(
     "/{id}/refresh",
     response_model=schemas.TemplateRead,
 )
-def refresh_template(
-    id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+async def refresh_template(
+    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    _require_superuser(Authorize, db)
-    return crud.refresh_template(db=db, template_id=id)
+    await _require_superuser(Authorize, db)
+    return await crud.refresh_template(db=db, template_id=id)
 
 
 @router.get(
     "/app/{id}",
     response_model=schemas.TemplateItem,
 )
-def read_app_template(
-    id: int, db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+async def read_app_template(
+    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    return crud.read_app_template(db=db, app_id=id)
+    await auth_check(Authorize)
+    return await crud.read_app_template(db=db, app_id=id)

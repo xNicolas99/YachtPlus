@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from api.auth.auth import get_auth_wrapper
 from api.actions import dashboard as dashboard_actions
 import shutil
+import asyncio
 
 router = APIRouter()
 
@@ -16,13 +17,14 @@ async def get_dashboard_stats(Authorize: get_auth_wrapper = Depends(get_auth_wra
     Wire the proper aggregating action that returns the full shape, and
     layer disk_usage on top (the action only computes CPU + RAM).
     """
-    Authorize.jwt_required()
+    await Authorize.jwt_required()
     stats = await dashboard_actions.get_dashboard_stats()
 
     # Enrich `resources` with disk info; never let a stat failure break
-    # the KPI strip.
+    # the KPI strip. shutil.disk_usage is a blocking syscall — run it in
+    # a thread so it never blocks the event loop.
     try:
-        disk = shutil.disk_usage("/")
+        disk = await asyncio.to_thread(shutil.disk_usage, "/")
         resources = dict(stats.get("resources") or {})
         resources.update({
             "disk": round((disk.used / disk.total) * 100, 1) if disk.total else 0,

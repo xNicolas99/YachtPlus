@@ -7,7 +7,8 @@ from fastapi import HTTPException
 from api.db.crud import templates as crud
 
 
-def test_fetch_template_payload_passes_timeout():
+@pytest.mark.asyncio
+async def test_fetch_template_payload_passes_timeout():
     fake_opener = MagicMock()
     fake_response = MagicMock()
     fake_response.__enter__.return_value = fake_response
@@ -17,13 +18,14 @@ def test_fetch_template_payload_passes_timeout():
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener), \
          patch.object(crud, "json") as fake_json:
         fake_json.load.return_value = {"title": "x", "platform": "linux"}
-        crud._fetch_template_payload("http://example.test/feed.json")
+        await crud._fetch_template_payload("http://example.test/feed.json")
 
     call_args = fake_opener.open.call_args
     assert call_args.kwargs.get("timeout") == crud.TEMPLATE_FETCH_TIMEOUT_S
 
 
-def test_fetch_template_payload_rejects_unknown_extension():
+@pytest.mark.asyncio
+async def test_fetch_template_payload_rejects_unknown_extension():
     fake_opener = MagicMock()
     fake_response = MagicMock()
     fake_response.__enter__.return_value = fake_response
@@ -32,13 +34,14 @@ def test_fetch_template_payload_rejects_unknown_extension():
 
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener):
         with pytest.raises(HTTPException) as exc:
-            crud._fetch_template_payload("http://example.test/feed.txt")
+            await crud._fetch_template_payload("http://example.test/feed.txt")
 
     assert exc.value.status_code == 422
     assert "Invalid filetype" in exc.value.detail
 
 
-def test_fetch_template_payload_yaml():
+@pytest.mark.asyncio
+async def test_fetch_template_payload_yaml():
     fake_opener = MagicMock()
     fake_response = MagicMock()
     fake_response.__enter__.return_value = fake_response
@@ -47,7 +50,7 @@ def test_fetch_template_payload_yaml():
 
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener), \
          patch.object(crud.yaml, "load", return_value={"k": "v"}) as fake_yaml_load:
-        result = crud._fetch_template_payload("http://example.test/feed.yaml")
+        result = await crud._fetch_template_payload("http://example.test/feed.yaml")
 
     fake_yaml_load.assert_called_once()
     assert result == {"k": "v"}

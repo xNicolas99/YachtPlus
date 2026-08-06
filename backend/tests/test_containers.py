@@ -28,18 +28,18 @@ class MockAuthValid:
     def __init__(self, user="admin"):
         self.user = user
 
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return self.user
 
 
 class MockAuthInvalid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -70,12 +70,14 @@ def mock_docker_host(monkeypatch):
         pass
 
 
-def test_get_db_dependency_yields_and_closes():
+@pytest.mark.asyncio
+async def test_get_db_dependency_yields_and_closes():
+    from sqlalchemy.ext.asyncio import AsyncSession
     db_gen = get_db()
-    session = next(db_gen)
-    assert isinstance(session, Session)
-    with pytest.raises(StopIteration):
-        next(db_gen)
+    session = await anext(db_gen)
+    assert isinstance(session, AsyncSession)
+    with pytest.raises(StopAsyncIteration):
+        await anext(db_gen)
 
 
 @pytest.mark.asyncio
@@ -193,7 +195,7 @@ async def test_start_container_logs_activity_and_returns_message(db, mock_auth_e
 
     assert result == {"message": "Container started"}
     container.start.assert_awaited_once()
-    log.assert_called_once_with(db, user="u1", action="start", resource="abc")
+    log.assert_called_once_with(db, "u1", "start", "abc")
     docker_instance.close.assert_awaited_once()
 
 
@@ -223,7 +225,7 @@ async def test_stop_container_logs_activity(db, mock_auth_enabled, mock_docker_h
 
     assert result == {"message": "Container stopped"}
     container.stop.assert_awaited_once()
-    log.assert_called_once_with(db, user="u2", action="stop", resource="xyz")
+    log.assert_called_once_with(db, "u2", "stop", "xyz")
 
 
 @pytest.mark.asyncio
@@ -246,7 +248,7 @@ async def test_restart_container_success(db, mock_auth_enabled, mock_docker_host
 
     assert result == {"message": "Container restarted"}
     container.restart.assert_awaited_once()
-    log.assert_called_once_with(db, user="u3", action="restart", resource="c1")
+    log.assert_called_once_with(db, "u3", "restart", "c1")
 
 
 @pytest.mark.asyncio
@@ -269,7 +271,7 @@ async def test_delete_container_success(db, mock_auth_enabled, mock_docker_host)
 
     assert result == {"message": "Container deleted"}
     container.delete.assert_awaited_once_with(force=True)
-    log.assert_called_once_with(db, user="u4", action="delete", resource="dead")
+    log.assert_called_once_with(db, "u4", "delete", "dead")
 
 
 @pytest.mark.asyncio

@@ -7,25 +7,23 @@
     @keydown.esc="close"
   >
     <v-card class="d-flex flex-column" style="height: 100vh;">
-      <v-toolbar dark color="primary" dense flex>
+      <v-toolbar color="primary" density="compact">
         <v-toolbar-title>{{ containerName }} - Logs</v-toolbar-title>
         <v-spacer></v-spacer>
 
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="toggleFollow" v-bind="attrs" v-on="on" :aria-label="following ? 'Pause Auto-scroll' : 'Resume Auto-scroll'">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="toggleFollow" v-bind="props" :aria-label="following ? 'Pause Auto-scroll' : 'Resume Auto-scroll'">
               <v-icon>{{ following ? "mdi-pause" : "mdi-play" }}</v-icon>
             </v-btn>
           </template>
-          <span>{{
-            following ? "Pause Auto-scroll" : "Resume Auto-scroll"
-          }}</span>
+          <span>{{ following ? "Pause Auto-scroll" : "Resume Auto-scroll" }}</span>
         </v-tooltip>
 
-        <v-menu offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn text v-bind="attrs" v-on="on" class="ml-2">
-              {{ tailLines }} Lines <v-icon right>mdi-menu-down</v-icon>
+        <v-menu>
+          <template v-slot:activator="{ props }">
+            <v-btn variant="text" v-bind="props" class="ml-2">
+              {{ tailLines }} Lines <v-icon end>mdi-menu-down</v-icon>
             </v-btn>
           </template>
           <v-list>
@@ -39,13 +37,12 @@
           </v-list>
         </v-menu>
 
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
             <v-btn
               icon
               @click="toggleTimestamps"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="props"
               :color="timestamps ? 'secondary' : ''"
             >
               <v-icon>mdi-clock-outline</v-icon>
@@ -54,9 +51,9 @@
           <span>Toggle Timestamps</span>
         </v-tooltip>
 
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="downloadLogs" v-bind="attrs" v-on="on" aria-label="Download Logs">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="downloadLogs" v-bind="props" aria-label="Download Logs">
               <v-icon>mdi-download</v-icon>
             </v-btn>
           </template>
@@ -73,9 +70,8 @@
             prepend-inner-icon="mdi-magnify"
             label="Search logs..."
             hide-details
-            dense
-            outlined
-            dark
+            density="compact"
+            variant="outlined"
             class="mr-2"
           ></v-text-field>
         </div>
@@ -94,7 +90,7 @@
           <div v-else-if="logs.length === 0" class="grey--text">
             Waiting for logs...
           </div>
-          <div v-for="(line, index) in filteredLogs" :key="index">
+          <div v-for="(line, index) in filteredLogs" :key="`${index}-${line.length}-${line.slice(0, 24)}`">
             {{ line }}
           </div>
         </div>

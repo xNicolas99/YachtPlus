@@ -271,7 +271,9 @@ export default {
       this.pollAll();
 
       this.statsInterval = setInterval(() => {
-        if (this.polling) {
+        // Only poll while the tab is actually visible. Polling in a
+        // background tab wastes requests and CPU for data nobody sees.
+        if (this.polling && !document.hidden) {
           this.pollAll();
         }
       }, this.pollingInterval);
@@ -378,10 +380,22 @@ export default {
       this.loading = false;
     }
     this.startStatsPolling();
+
+    // When the tab becomes visible again, refresh immediately instead of
+    // waiting for the next interval tick — the data is stale by then.
+    this._onVisibility = () => {
+      if (!document.hidden && this.polling) {
+        this.pollAll();
+      }
+    };
+    document.addEventListener("visibilitychange", this._onVisibility);
   },
   beforeUnmount() {
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
+    }
+    if (this._onVisibility) {
+      document.removeEventListener("visibilitychange", this._onVisibility);
     }
   }
 };

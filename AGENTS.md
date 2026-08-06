@@ -34,11 +34,11 @@ monorepo tooling — they are independent Node and Python projects.
 
 | Layer | Tech |
 |---|---|
-| Frontend | Vue 3.4 + Vite 5 + Vuetify 3, Vuex 4 for state, Pinia bootstrap present but no Pinia store currently, vue-router 4, vee-validate v4, axios |
-| Backend | Python 3.11, FastAPI, SQLAlchemy 2.x, aiodocker, APScheduler, slowapi (rate limit), bcrypt, PyJWT, pyotp |
-| DB | SQLite default (`sqlite:////config/yacht.db`); Postgres / MySQL via `DATABASE_URL` |
+| Frontend | Vue 3.4 + Vite 7 + Vuetify 3, Vuex 4 for state + Pinia 3 mounted (active), vue-router 4, vee-validate v4, axios. Routes are lazy-loaded (code-split); vendor libs split via `manualChunks` in `vite.config.js`. |
+| Backend | Python 3.11, FastAPI, SQLAlchemy 2.x (async engine), aiodocker, APScheduler, slowapi (rate limit), bcrypt, PyJWT, pyotp |
+| DB | SQLite default (`sqlite:////config/yacht.db`, via `sqlite+aiosqlite`); Postgres via `postgresql+asyncpg`; MySQL via `mysql+aiomysql` — all driven by `DATABASE_URL` |
 | Build/Deploy | Multi-stage `Dockerfile` (Node build → Python runtime + nginx); `docker-compose.yml`; GitHub Actions in `.github/workflows/` (`docker-image.yml`, `ghcr.yml`) |
-| Test | pytest (backend, 338 tests), vitest (frontend, 16 tests), Playwright dev-dep present but no active suite |
+| Test | pytest (backend, 499 tests, all green), vitest (frontend, 21 tests, all green), no Playwright |
 
 ---
 
@@ -108,17 +108,17 @@ Browser ── HTTPS ──► nginx (port 8080)
                         ├─► /api/*  ─► gunicorn ─► FastAPI app (api.main:app)
                         │                              │
                         │   Middleware chain (top→down):
-                        │     1. check_setup_status   → 428 if setup not finalized
+                        │     1. check_setup_status   → 428 if setup not finalized (async DB)
                         │     2. CORSMiddleware        → uses settings.CORS_ORIGINS
-                        │     3. TrustedHostMiddleware → uses settings.ALLOWED_HOSTS
+                        │     3. _trusted_host_middleware (custom) → uses settings.ALLOWED_HOSTS
                         │     4. add_security_headers  → CSP, etc.
                         │                              │
                         │                              ▼
                         │   Router → Endpoint
                         │     - Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-                        │     - auth_check(Authorize)              # data routes
-                        │       OR auth_check_setup_pending(Authorize, db)  # setup/2FA
-                        │     - check_permission("perm_x", Authorize, db)  # for fine-grained
+                        │     - await auth_check(Authorize)              # data routes
+                        │       OR await auth_check_setup_pending(Authorize, db)  # setup/2FA
+                        │     - await check_permission("perm_x", Authorize, db)  # fine-grained
                         │     - business call → actions/* or db/crud/*
                         │
                         └─► /     ─► static SPA (frontend/dist via nginx)
@@ -126,6 +126,14 @@ Browser ── HTTPS ──► nginx (port 8080)
 
 Same-origin model: SPA and API share the host, so the HttpOnly auth cookie
 flows automatically. The frontend never sees the raw JWT.
+
+**Async model:** the whole backend is async. `api.db.database.SessionLocal` is
+an `async_sessionmaker` (AsyncSession). All CRUD + router handlers are
+`async def` and use `await db.execute(select(...))`. Blocking I/O (SMTP,
+psutil, subprocess, template fetches, sync Docker SDK) is isolated via
+`asyncio.to_thread` / `run_in_thread`. The app's DDL runs in the `lifespan`
+hook via `await engine.run_sync(Base.metadata.create_all)` — never sync
+`Base.metadata.create_all(bind=engine)` (would crash on the AsyncEngine).
 
 ---
 
@@ -168,10 +176,15 @@ the cookie is cleared so the SPA's interceptor falls through to the
 - **Public** (login, status, healthcheck): no auth dep. Add to the middleware
   whitelist if needed.
 - **Setup-time** (2FA generate/enable, finalize): use
-  `auth_check_setup_pending(Authorize, db)`.
-- **Normal data routes:** call `auth_check(Authorize)` first thing in the
-  handler. Optionally follow with `check_permission("perm_x", Authorize, db)`
+  `await auth_check_setup_pending(Authorize, db)`.
+- **Normal data routes:** call `await auth_check(Authorize)` first thing in the
+  handler. Optionally follow with `await check_permission("perm_x", Authorize, db)`
   for non-superuser access control.
+
+> **Note:** since the async migration, `auth_check`, `auth_check_setup_pending`,
+> `check_permission`, `require_superuser`, `Authorize.jwt_required()` and
+> `Authorize.get_jwt_subject()` are all **async** and must be awaited. Never
+> call them without `await` from an `async def` handler.
 
 ### User model permissions (in `db/models/users.py`)
 
@@ -217,7 +230,7 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
 |---|---|---|
 | HttpOnly auth cookie | `api/auth/jwt.py: set_access_cookies` | JS cannot read the token. |
 | CSP | `api/main.py` `add_security_headers` | `script-src 'self' 'unsafe-inline'`. **No `unsafe-eval`** — keep it that way. |
-| Trusted-host | `api/main.py` `TrustedHostMiddleware` | Reads `settings.ALLOWED_HOSTS`. Override with `YACHT_ALLOWED_HOSTS=…`. |
+| Trusted-host | `api/main.py` `_trusted_host_middleware` (custom, not Starlette's) | Reads `settings.ALLOWED_HOSTS`. Override with `YACHT_ALLOWED_HOSTS=…`. Rejects non-matching Host headers with 400. |
 | CORS allowlist | `api/main.py` `CORSMiddleware` | Reads `settings.CORS_ORIGINS`. Override with `YACHT_CORS_ORIGINS=…`. Startup fails fast if list contains `*` (incompatible with `allow_credentials=True`) or an entry without a scheme. |
 | HTML sanitisation | `frontend/src/main.js` `$sanitize` | DOMPurify with explicit allowlist; covers all `v-html` sites. |
 | Per-IP login limit | `api/routers/users.py` `@limiter.limit("5/minute")` | slowapi on login + refresh + key-creation. |
@@ -256,6 +269,81 @@ fan out across N containers (see `actions/apps.py: all_stat_generator`), open
 one `async with aiodocker.Docker(...)` and pass it to per-container helpers.
 Do not open one client per container in a loop.
 
+### Async conventions (post-migration — follow these for new code)
+
+The backend is fully async (SQLAlchemy `AsyncSession`, `async def` handlers).
+Blocking / CPU-bound work must never run directly on the event loop:
+
+- **DB:** always `await db.execute(select(...))`, `await db.commit()`,
+  `await db.refresh(...)`, `await db.rollback()` on an `AsyncSession`. No
+  `db.query(...)`, no sync `db.commit()`. Type-hint dependencies as
+  `db: AsyncSession`.
+- **bcrypt / hashing:** `get_password_hash` / `verify_password` in
+  `db/crud/users.py` are async and internally run bcrypt via
+  `asyncio.to_thread` — always `await` them.
+- **SMTP:** `routers/smtp.py` `send_test_email` runs the blocking send in a
+  sync helper via `asyncio.to_thread`; `security.py` `send_security_alert`
+  does the same. Never `smtplib` directly in an `async def`.
+- **psutil / system stats:** `actions/dashboard.py` runs `psutil.cpu_percent()`
+  and `psutil.virtual_memory()` via `asyncio.to_thread`; the dashboard router
+  wraps `shutil.disk_usage` via `asyncio.to_thread`.
+- **subprocess / compose:** `actions/compose.py` keeps the sync
+  `_compose_action_sync` / `_compose_app_action_sync` helpers and runs them via
+  `await run_in_thread(...)` (array-form `subprocess.run`, no `shell=True`).
+- **Template fetches (SSRF):** `db/crud/templates.py` `_fetch_template_payload`
+  is async and runs the urllib fetch in `_fetch_template_payload_sync` via
+  `asyncio.to_thread`. The SSRF guards (`validate_url`, `SafeRedirectHandler`,
+  `_SSRFGuardedHTTP*`) stay sync and run inside the thread — do not remove
+  them.
+- **QR code (2FA):** `routers/auth_2fa.py` runs qrcode generation in
+  `_generate_qr_code_sync` via `asyncio.to_thread`.
+- **Docker sync SDK:** wrap any `get_sync_docker_client()` calls in
+  `asyncio.to_thread` / `run_in_thread`.
+- **App start:** DDL happens in the `lifespan` hook
+  (`await engine.run_sync(Base.metadata.create_all)`). Never call
+  `Base.metadata.create_all(bind=engine)` on the async engine directly.
+
+**Rule of thumb:** if a helper does blocking I/O or CPU-heavy crypto and is
+called from an `async def`, it must be isolated (async library or
+`asyncio.to_thread`). Pure formatting/validation helpers stay sync.
+
+### Rules for new routes, services and DB access (post-migration)
+
+1. **New routers / endpoints:** define `async def` handlers. Gate with
+   `await auth_check(Authorize)` (data routes) or
+   `await auth_check_setup_pending(Authorize, db)` (setup), and
+   `await check_permission(...)` / `await require_superuser(...)` where needed.
+2. **DB access:** use the async `get_db` dependency from `api.utils.auth`
+   (yields `AsyncSession`). Write queries with `select(...)` +
+   `await db.execute(...)` + `.scalars()/.first()/.all()`. Commit/refresh/
+   rollback must be awaited. Never `db.query(...)`.
+3. **New CRUD functions:** make them `async def` taking `db: AsyncSession`.
+   Keep pure helpers (formatting, validation) sync.
+4. **New external I/O** (SMTP, HTTP, subprocess, files, sync Docker SDK,
+   psutil): never call blocking libs directly in an `async def`. Either use a
+   native async library (aiodocker, httpx.AsyncClient, aiofiles, aiosqlite)
+   or isolate via `asyncio.to_thread` / `run_in_thread`. Document the choice.
+5. **CPU-heavy crypto** (bcrypt, PBKDF2) in request handlers: isolate via
+   `asyncio.to_thread` — never hash/verify synchronously in the event loop.
+6. **New services / background jobs:** APScheduler runs sync code in its own
+   thread (see `services/watchtower.py`), so a sync function is fine there;
+   it must not be called directly from an async handler.
+
+### Known intentionally-sync exceptions (documented)
+
+- `api/utils/audit.py` `log_activity` is sync (`db.add`/`db.commit`); async
+  routers call it via `asyncio.to_thread`. Kept sync to avoid threading
+  concerns in the audit path.
+- `api/actions/compose.py` `_compose_*_sync` / `_get_compose_sync` are sync
+  (subprocess + YAML) and are always invoked via `await run_in_thread(...)`.
+- `api/db/crud/templates.py` `_fetch_template_payload_sync` /
+  `_refresh_fetch_sync` are sync urllib fetches wrapped in
+  `asyncio.to_thread` (keeps the connect-time SSRF re-validation intact).
+- `services/watchtower.py` runs sync in the APScheduler thread by design.
+- Template URL validation helpers (`validate_url`, `is_private_ip`,
+  `_check_address_safe`) are sync CPU/DNS logic used inside the thread-bound
+  fetch — do not convert them.
+
 ---
 
 ## 8. Conventions
@@ -269,6 +357,33 @@ Do not open one client per container in a loop.
 | DB table | snake_case singular | `user`, `template_item` |
 | Env var | UPPER_SNAKE_CASE | `DATABASE_URL`, `YACHT_ALLOWED_HOSTS` |
 | Frontend import alias | `@/...` → `frontend/src/...` | `import x from "@/utils/imageLogos"` |
+
+### Frontend conventions (post-modernisation)
+
+- **Lazy-loaded routes.** Every route component in `router/index.js` is
+  `() => import(...)` so each page ships as its own chunk. When you add a
+  route, keep it lazy — never add a static top-level import for a view.
+- **Vendor code-splitting.** `vite.config.js` `build.rollupOptions.output.manualChunks`
+  splits `vue-vendor`, `vuetify` and `axios` into cacheable chunks. Keep this
+  list in sync if you add a heavy dependency.
+- **Global snackbar.** `App.vue` mounts `components/notifications/snackbar.vue`
+  once. Views push feedback via the `snackbar` Vuex module (`setErr`/`setSuccess`/
+  `setMessage`) instead of `console.log`. The component uses Vuetify 3 `v-model`
+  + `location` (not the Vuetify 2 `:value`/`:bottom`).
+- **Theme.** `components/serverSettings/Theme.vue` uses the Vuetify 3 `useTheme`
+  refs (`$vuetify.theme.global.name.value`). Persists `dark_theme`,
+  `theme_primary`, `theme_secondary` in `localStorage`. `App.vue` restores the
+  theme on mount.
+- **Dashboard polling.** `views/Home.vue` polls only while the tab is visible
+  (`document.hidden` guard) and refreshes immediately on `visibilitychange`.
+  Keep this pattern for any new auto-refresh view.
+- **Vuetify 3 syntax.** Use `v-model`, `location`, `density`, `variant`,
+  `v-icon start/end`, `v-tooltip location` — not the Vuetify 2 `:value`,
+  `bottom`, `dense`, `outlined`, `dark`, `v-icon left/right`, `v-tooltip bottom`
+  forms. `v-tabs-items`/`v-tab-item` are `v-window`/`v-window-item` in v3.
+- **Activity tracking.** `App.vue` `startActivityTracking()` is idempotent
+  (guarded by `_activityTrackingStarted`) so listeners are never double-
+  registered.
 
 **Comments:** the codebase has a lot of historical inline commentary (decisions,
 abandoned approaches, ASCII trace logs). When you touch a function, prune the
@@ -316,15 +431,16 @@ cd frontend
 npx vitest run
 ```
 
-Current baseline: **338 backend + 16 frontend tests, all green.**
+Current baseline: **499 backend + 21 frontend tests, all green.**
 `backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
 *before* `Settings` is evaluated — needed because `TrustedHostMiddleware`
 would otherwise reject TestClient's default `Host: testserver`.
 
-`tests/test_cors.py` and `tests/test_setup.py` are excluded from the
-default run via `--ignore=` because they try to open `/config/yacht.db`
-at collection time, which doesn't exist outside the Docker image. Fix
-them or set `DATABASE_URL` if you need them.
+`backend/tests/conftest.py` also provides shared async `db` / `db_session`
+fixtures (in-memory `sqlite+aiosqlite`, `StaticPool`). After the async
+migration, every test that touches the DB uses an `AsyncSession`;
+`MockAuth`-style classes in tests have `async def jwt_required()` /
+`async def get_jwt_subject()`.
 
 ---
 
@@ -352,7 +468,7 @@ them or set `DATABASE_URL` if you need them.
 | `DATABASE_URL` | `sqlite:////config/yacht.db` | SQLAlchemy URL. |
 | `YACHT_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | TrustedHostMiddleware list. |
 | `YACHT_CORS_ORIGINS` | localhost variants | CORS origin list. Startup fails fast if it contains `*` or an entry without scheme. |
-| `YACHT_TRUSTED_PROXIES` | (empty) | Comma-separated IPs / CIDRs whose `X-Real-IP` / `X-Forwarded-For` headers we honour. Default empty → never trust them; client IP attribution uses the direct peer. Set to your reverse proxy's IP when running behind nginx / Traefik. |
+| `YACHT_TRUSTED_PROXIES` | `127.0.0.1,::1` | Comma-separated IPs / CIDRs whose `X-Real-IP` / `X-Forwarded-For` headers we honour. Default `["127.0.0.1", "::1"]` (loopback). Set to your reverse proxy's IP when running behind nginx / Traefik. |
 | `COMPOSE_DIR` | `/compose/` | Where compose project subdirectories live. Trailing slash is part of the contract — every call site does `settings.COMPOSE_DIR + name`. |
 | `DOCKER_HOST` | (unset → SDK default = `/var/run/docker.sock`) | Docker connection. Declared as `Optional[str]` on Settings; when set, **both** the async (`aiodocker`) and sync (`utils/docker_client`) paths honour it. |
 | `DOCKER_GID` | autodetect | Set if you hit socket permission errors. |
@@ -371,7 +487,7 @@ them or set `DATABASE_URL` if you need them.
 | Adding a query/path arg that becomes a subprocess token, exec command, or shell binary | Same | Whitelist at both router and action layer. Reject before any auth check if the value is suspicious — keeps token-probing attempts from getting any signal. The container-exec WS `shell` param is the canonical example. |
 | Touching the cookie name, `setup_pending`, or `is_active` semantics | Frontend depends on the exact strings/shape | grep both backend and frontend for the symbol before changing. |
 | Removing `unsafe-eval` from CSP is a non-goal — it's already removed. Adding it back is a no. | XSS surface | If a dep needs `unsafe-eval`, the dep is the problem. |
-| Adding `settings.X` reference for a new env var | Pydantic uses `extra='forbid'` | Declare `X` as a field on the `Settings` class in `api/settings.py`. Otherwise the read crashes with `AttributeError` at request time. `tests/test_settings_fields.py` pins the must-exist contract for the currently-declared fields. |
+| Adding `settings.X` reference for a new env var | Pydantic `Settings` uses `class Config: env_file=".env"` (no `extra` set) | Declare `X` as a field on the `Settings` class in `api/settings.py`. Otherwise the read crashes with `AttributeError` at request time. `tests/test_settings_fields.py` pins the must-exist contract for the currently-declared fields. |
 | Calling `docker.from_env()` | Bypasses `settings.DOCKER_HOST` | Always go through `api.utils.docker_client.get_sync_docker_client()` for the sync SDK. |
 | Trusting `X-Real-IP` / `X-Forwarded-For` outside `_resolve_client_ip` | IP-spoofing for rate-limit evasion | Don't. There's one entry point and it requires the peer to be in `settings.TRUSTED_PROXIES`. |
 | Logging shell input/output, terminal frames, JWTs, or DB rows containing secrets | Sensitive data in logs | Log lengths, ids, or sanitised summaries — never the raw bytes. Semgrep's log-leak rule is configured to flag this. |
@@ -384,9 +500,10 @@ them or set `DATABASE_URL` if you need them.
   `SECRET_KEY_FILE` for local dev or the app refuses to start.
 - **`uvloop` doesn't build on Windows.** Filter it out of `requirements.txt`
   for local Windows dev. The Docker image is Linux so it's fine there.
-- **Two setup flag sources:** `is_setup_completed(db)` checks both the
-  `SetupStatus` table *and* the legacy `/config/.setup_completed` file. If
-  you reset state, kill both.
+- **Two setup flag sources:** `is_setup_completed_async(db)` (async) checks
+  both the `SetupStatus` table *and* the legacy `/config/.setup_completed`
+  file. The sync `is_setup_completed(db)` wrapper still exists for pure-sync
+  callers. If you reset state, kill both.
 - **The `User.is_active` flag** is the "setup finalized" gate. New admins
   are created with `is_active=False`; `finalize_setup` flips it. Don't
   short-circuit this in tests by directly creating active users for the
@@ -398,10 +515,14 @@ them or set `DATABASE_URL` if you need them.
 - **TestClient sends `Host: testserver`.** Already handled by
   `tests/conftest.py`, but if you spin up a separate test harness, add
   `testserver` to allowed hosts.
-- **`settings.X` for an unknown field crashes.** Pydantic v2 + `extra='forbid'`
-  means *only declared fields* exist. If a previous patch added a code
-  reference but forgot the field declaration, the line bombs at runtime
-  with `AttributeError` instead of e.g. returning `None`. Add the field.
+- **`settings.X` for an unknown field crashes.** Pydantic v2 `Settings` uses
+  `class Config: env_file=".env"` (no `extra` guard). A code reference to an
+  undeclared field still bombs at runtime with `AttributeError`. Add the
+  field to `api/settings.py`.
+- **Async tests use `AsyncSession`.** After the async migration, every DB
+  test uses an async in-memory engine; `MockAuth`-style test classes have
+  `async def jwt_required()` / `async def get_jwt_subject()`. Never call an
+  async router/CRUD/`auth_check` without `await` in tests.
 - **Push policy.** This repo pushes directly to `master`; PRs are only used
   when the harness blocks the direct push (typically: destructive ops,
   unfamiliar branches). Don't open PRs by default — see the memory file

@@ -1,10 +1,12 @@
 import ipaddress
 import logging
 from fastapi import Request, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
+import asyncio
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
 from api.settings import Settings
@@ -25,17 +27,10 @@ def is_private_ip(ip: str) -> bool:
     except ValueError:
         return False # Invalid IP, treat as public/unsafe
 
-def send_security_alert(db: Session, ip_address: str, reason: str, username: str = None):
-    settings = db.query(SMTPSettings).first()
-    if not settings:
-        logger.warning("SMTP settings not found, cannot send security alert.")
-        return
 
-    admin_user = db.query(User).filter(User.username == settings.sender_email).first() # Fallback to sender email if admin email not stored explicitly
-    # Better: Use the ADMIN_EMAIL from env or find superuser
-    admin = db.query(User).filter(User.is_superuser == True).first()
-    recipient = admin.username if admin else settings.sender_email
-
+def _send_security_alert_sync(settings_row, ip_address: str, reason: str, username: str = None):
+    """Synchronous SMTP send, run in a thread to avoid blocking the loop."""
+    recipient = settings_row.sender_email
     subject = f"Security Alert: {reason}"
     body = f"""
     Security Alert for YachtPlus Server.
@@ -50,25 +45,37 @@ def send_security_alert(db: Session, ip_address: str, reason: str, username: str
 
     msg = MIMEText(body)
     msg['Subject'] = subject
-    msg['From'] = settings.sender_email
+    msg['From'] = settings_row.sender_email
     msg['To'] = recipient
 
     try:
-        if settings.use_tls:
-            server = smtplib.SMTP(settings.server, settings.port)
+        if settings_row.use_tls:
+            server = smtplib.SMTP(settings_row.server, settings_row.port)
             server.starttls()
         else:
-            server = smtplib.SMTP(settings.server, settings.port)
+            server = smtplib.SMTP(settings_row.server, settings_row.port)
 
-        if settings.username and settings.password:
-            server.login(settings.username, settings.password)
+        if settings_row.username and settings_row.password:
+            server.login(settings_row.username, settings_row.password)
 
-        server.sendmail(settings.sender_email, recipient, msg.as_string())
+        server.sendmail(settings_row.sender_email, recipient, msg.as_string())
         server.quit()
     except Exception as e:
         # Log the exception class but not its full text — smtplib errors can
         # embed the AUTH exchange, leaking credentials into container logs.
         logger.error("Failed to send security alert (%s)", type(e).__name__)
+
+
+async def send_security_alert(db: AsyncSession, ip_address: str, reason: str, username: str = None):
+    result = await db.execute(select(SMTPSettings).limit(1))
+    settings = result.scalars().first()
+    if not settings:
+        logger.warning("SMTP settings not found, cannot send security alert.")
+        return
+
+    # Run the blocking SMTP send off the event loop.
+    await asyncio.to_thread(_send_security_alert_sync, settings, ip_address, reason, username)
+
 
 def _is_trusted_proxy(client_ip: str) -> bool:
     """Return True when client_ip matches a configured TRUSTED_PROXIES entry.
@@ -141,17 +148,18 @@ def _resolve_client_ip(request: Request) -> str:
     return ips[-1]
 
 
-def _count_recent_failed_attempts(db: Session, client_ip: str, minutes: int = 15) -> int:
+async def _count_recent_failed_attempts(db: AsyncSession, client_ip: str, minutes: int = 15) -> int:
     time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
-    return (
-        db.query(LoginAttempt)
+    result = await db.execute(
+        select(func.count())
+        .select_from(LoginAttempt)
         .filter(
             LoginAttempt.ip_address == client_ip,
             LoginAttempt.success == False,
             LoginAttempt.timestamp >= time_threshold,
         )
-        .count()
     )
+    return result.scalar()
 
 
 # Username-scoped counters: needed because the per-IP fail2ban above only
@@ -162,43 +170,44 @@ _USERNAME_LOCKOUT_WINDOW_MIN = 30
 _USERNAME_LOCKOUT_THRESHOLD = 20
 
 
-def _count_recent_failed_attempts_for_username(
-    db: Session, username: str, minutes: int = _USERNAME_LOCKOUT_WINDOW_MIN,
+async def _count_recent_failed_attempts_for_username(
+    db: AsyncSession, username: str, minutes: int = _USERNAME_LOCKOUT_WINDOW_MIN,
 ) -> int:
     time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
-    return (
-        db.query(LoginAttempt)
+    result = await db.execute(
+        select(func.count())
+        .select_from(LoginAttempt)
         .filter(
             LoginAttempt.username == username,
             LoginAttempt.success == False,
             LoginAttempt.timestamp >= time_threshold,
         )
-        .count()
     )
+    return result.scalar()
 
 
-def check_ip_restriction(request: Request, db: Session, username: str = None):
+async def check_ip_restriction(request: Request, db: AsyncSession, username: str = None):
     client_ip = _resolve_client_ip(request)
 
     # Hard-blocking every public IP made hosted/VPS deployments impossible
     # to log into; the block is now opt-out via YACHT_BLOCK_PUBLIC_IP_LOGIN.
     # getattr fallback keeps older Settings stubs (tests, embedders) working.
     if getattr(_settings, "BLOCK_PUBLIC_IP_LOGIN", True) and not is_private_ip(client_ip):
-        send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
+        await send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied from public IP.",
         )
 
-    if _count_recent_failed_attempts(db, client_ip) >= 5:
-        send_security_alert(db, client_ip, "Too many failed login attempts (Fail2Ban)", username)
+    if await _count_recent_failed_attempts(db, client_ip) >= 5:
+        await send_security_alert(db, client_ip, "Too many failed login attempts (Fail2Ban)", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="IP blocked due to too many failed login attempts.",
         )
 
-    if username and _count_recent_failed_attempts_for_username(db, username) >= _USERNAME_LOCKOUT_THRESHOLD:
-        send_security_alert(
+    if username and await _count_recent_failed_attempts_for_username(db, username) >= _USERNAME_LOCKOUT_THRESHOLD:
+        await send_security_alert(
             db,
             client_ip,
             f"Account locked: {_USERNAME_LOCKOUT_THRESHOLD} failed logins for username in "
@@ -215,7 +224,7 @@ def check_ip_restriction(request: Request, db: Session, username: str = None):
 
     return client_ip
 
-def record_login_attempt(db: Session, ip_address: str, username: str, success: bool):
+async def record_login_attempt(db: AsyncSession, ip_address: str, username: str, success: bool):
     attempt = LoginAttempt(ip_address=ip_address, username=username, success=success)
     db.add(attempt)
-    db.commit()
+    await db.commit()

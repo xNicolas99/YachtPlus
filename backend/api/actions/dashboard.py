@@ -26,8 +26,8 @@ async def get_dashboard_stats():
 
     # System Resources
     try:
-        cpu_percent = psutil.cpu_percent()
-        mem = psutil.virtual_memory()
+        cpu_percent = await asyncio.to_thread(psutil.cpu_percent)
+        mem = await asyncio.to_thread(psutil.virtual_memory)
         resources = {
             "cpu": cpu_percent,
             "ram": mem.percent,

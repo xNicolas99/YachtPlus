@@ -14,15 +14,15 @@ def _disable_search_limiter(monkeypatch):
 
 
 class MockAuthValid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "admin"
 
 
 class MockAuthInvalid:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
@@ -60,12 +60,12 @@ async def test_search_returns_dockerhub_and_templates(mock_auth_enabled):
         new=AsyncMock(return_value=docker_results),
     ) as registry_mock, patch(
         "api.routers.search.match_templates",
-        return_value=template_orm,
+        new=AsyncMock(return_value=template_orm),
     ) as match_mock:
         result = await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
 
     registry_mock.assert_awaited_once_with("dockerhub", "nginx")
-    match_mock.assert_called_once_with(db, "nginx")
+    match_mock.assert_awaited_once_with(db, "nginx")
 
     assert result["dockerhub"] == docker_results
     assert len(result["templates"]) == 1
@@ -82,7 +82,7 @@ async def test_search_empty_query_results(mock_auth_enabled):
         new=AsyncMock(return_value=[]),
     ), patch(
         "api.routers.search.match_templates",
-        return_value=[],
+        new=AsyncMock(return_value=[]),
     ):
         result = await search(request=MagicMock(), q="zzz", db=db, Authorize=MockAuthValid())
 
@@ -108,7 +108,7 @@ async def test_search_template_orm_conversion(mock_auth_enabled):
         new=AsyncMock(return_value=[]),
     ), patch(
         "api.routers.search.match_templates",
-        return_value=template_orm,
+        new=AsyncMock(return_value=template_orm),
     ):
         result = await search(request=MagicMock(), q="plex", db=db, Authorize=MockAuthValid())
 
@@ -140,7 +140,7 @@ async def test_search_propagates_registry_failure(mock_auth_enabled):
         new=AsyncMock(side_effect=RuntimeError("registry down")),
     ), patch(
         "api.routers.search.match_templates",
-        return_value=[],
+        new=AsyncMock(return_value=[]),
     ):
         with pytest.raises(RuntimeError) as exc:
             await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
@@ -155,7 +155,7 @@ async def test_search_propagates_template_failure(mock_auth_enabled):
         new=AsyncMock(return_value=[]),
     ), patch(
         "api.routers.search.match_templates",
-        side_effect=RuntimeError("db boom"),
+        new=AsyncMock(side_effect=RuntimeError("db boom")),
     ):
         with pytest.raises(RuntimeError) as exc:
             await search(request=MagicMock(), q="nginx", db=db, Authorize=MockAuthValid())
@@ -163,26 +163,16 @@ async def test_search_propagates_template_failure(mock_auth_enabled):
 
 
 @pytest.mark.asyncio
-async def test_search_runs_template_match_in_threadpool(mock_auth_enabled):
-    """match_templates is sync, so the router uses run_in_threadpool.
-    Confirm via the threadpool wrapper that the call still flows through.
-    """
+async def test_search_await_match_templates(mock_auth_enabled):
+    """match_templates is async; the router awaits it directly."""
     db = MagicMock()
     with patch(
         "api.routers.search.registries.search_registry",
         new=AsyncMock(return_value=[]),
     ), patch(
-        "api.routers.search.run_in_threadpool",
-        new=AsyncMock(return_value=[]),
-    ) as run_in_threadpool_mock, patch(
         "api.routers.search.match_templates",
-        return_value=[],
+        new=AsyncMock(return_value=[]),
     ) as match_mock:
         await search(request=MagicMock(), q="abc", db=db, Authorize=MockAuthValid())
 
-    run_in_threadpool_mock.assert_awaited_once()
-    # The first positional argument is the sync function reference
-    args, _ = run_in_threadpool_mock.call_args
-    assert args[0] is match_mock
-    assert args[1] is db
-    assert args[2] == "abc"
+    match_mock.assert_awaited_once_with(db, "abc")

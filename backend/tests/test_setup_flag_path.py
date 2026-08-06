@@ -50,13 +50,18 @@ def test_mark_setup_completed_logs_write_failure(monkeypatch, caplog):
     (it used to be swallowed silently by `except: pass`).
     """
     mod = _reload_setup_module(monkeypatch, None)
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import AsyncMock, MagicMock, patch
 
-    db = MagicMock()
-    db.query().first.return_value = None
+    db = AsyncMock()
+    # mark_setup_completed is async and calls await db.execute(select(...)).
+    db.execute = AsyncMock(return_value=MagicMock())
+    db.execute.return_value.scalars.return_value.first.return_value = None
+    db.commit = AsyncMock()
+    db.add = MagicMock()
 
     with patch.object(mod.os, "makedirs", side_effect=Exception("read-only")), \
          caplog.at_level("WARNING", logger=mod.logger.name):
-        mod.mark_setup_completed(db)
+        import asyncio
+        asyncio.run(mod.mark_setup_completed(db))
 
     assert any("SETUP_FLAG_FILE" in record.message for record in caplog.records)

@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 from typing import Optional
-from api.db.database import SessionLocal
+import asyncio
+from api.utils.auth import get_db
 from api.db.models.users import User
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
@@ -16,35 +18,39 @@ import base64
 router = APIRouter()
 
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+def _generate_qr_code_sync(provisioning_uri: str) -> str:
+    """Synchronous QR code generation (CPU-bound). Runs in a thread."""
+    qr = qrcode.QRCode(box_size=10, border=4)
+    qr.add_data(provisioning_uri)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffered = io.BytesIO()
+    img.save(buffered, format="PNG")
+    return base64.b64encode(buffered.getvalue()).decode()
 
 
 @router.get("/generate")
-def generate_2fa_get(
-    db: Session = Depends(get_db),
+async def generate_2fa_get(
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """GET version of generate_2fa for consistency with frontend request"""
-    return generate_2fa_logic(db, Authorize)
+    return await generate_2fa_logic(db, Authorize)
 
 
 @router.post("/generate")
-def generate_2fa(
-    db: Session = Depends(get_db),
+async def generate_2fa(
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    return generate_2fa_logic(db, Authorize)
+    return await generate_2fa_logic(db, Authorize)
 
 
-def generate_2fa_logic(db: Session, Authorize: get_auth_wrapper):
-    auth_check_setup_pending(Authorize, db)
-    username = Authorize.get_jwt_subject(allow_setup_pending=True)
-    user = db.query(User).filter(User.username == username).first()
+async def generate_2fa_logic(db: AsyncSession, Authorize: get_auth_wrapper):
+    await auth_check_setup_pending(Authorize, db)
+    username = await Authorize.get_jwt_subject(allow_setup_pending=True)
+    result = await db.execute(select(User).filter(User.username == username))
+    user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -52,7 +58,7 @@ def generate_2fa_logic(db: Session, Authorize: get_auth_wrapper):
     secret = pyotp.random_base32()
     # Encrypt before storing
     user.otp_secret = encrypt(secret)
-    db.commit()
+    await db.commit()
 
     # Generate QR Code
     totp = pyotp.TOTP(secret)
@@ -60,15 +66,8 @@ def generate_2fa_logic(db: Session, Authorize: get_auth_wrapper):
         name=user.username, issuer_name="YachtPlus"
     )
 
-    # Use standard QR generation with better styling options if needed
-    qr = qrcode.QRCode(box_size=10, border=4)
-    qr.add_data(provisioning_uri)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-
-    buffered = io.BytesIO()
-    img.save(buffered, format="PNG")
-    img_str = base64.b64encode(buffered.getvalue()).decode()
+    # QR generation is CPU-bound; run it in a thread so we don't block the loop.
+    img_str = await asyncio.to_thread(_generate_qr_code_sync, provisioning_uri)
 
     # Return raw secret to user for manual entry if needed (stored encrypted)
     return {
@@ -84,9 +83,9 @@ class TwoFactorRequest(BaseModel):
 
 
 @router.post("/enable")
-def enable_2fa(
+async def enable_2fa(
     payload: TwoFactorRequest = Body(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     # Support both {code: "123456"} and {secret: "...", code: "123456"}
@@ -94,9 +93,10 @@ def enable_2fa(
     # However, we store the secret in DB encrypted already in generate step.
     # We should trust DB secret over frontend secret for security.
 
-    auth_check_setup_pending(Authorize, db)
-    username = Authorize.get_jwt_subject(allow_setup_pending=True)
-    user = db.query(User).filter(User.username == username).first()
+    await auth_check_setup_pending(Authorize, db)
+    username = await Authorize.get_jwt_subject(allow_setup_pending=True)
+    result = await db.execute(select(User).filter(User.username == username))
+    user = result.scalars().first()
 
     if not user or not user.otp_secret:
         raise HTTPException(status_code=400, detail="2FA setup not initiated")
@@ -109,7 +109,7 @@ def enable_2fa(
         totp = pyotp.TOTP(secret)
         if totp.verify(payload.code):
             user.is_2fa_enabled = True
-            db.commit()
+            await db.commit()
             return {"message": "2FA enabled successfully"}
         else:
             raise HTTPException(status_code=400, detail="Invalid code")
@@ -130,19 +130,20 @@ class Disable2FARequest(BaseModel):
 
 
 @router.post("/disable")
-def disable_2fa(
+async def disable_2fa(
     payload: Disable2FARequest = Body(...),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
-    user = db.query(User).filter(User.username == username).first()
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
+    result = await db.execute(select(User).filter(User.username == username))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if not verify_password(payload.password, user.hashed_password):
+    if not await verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Password incorrect")
 
     # If 2FA is currently enabled we additionally require a fresh TOTP
@@ -164,5 +165,5 @@ def disable_2fa(
 
     user.is_2fa_enabled = False
     user.otp_secret = None
-    db.commit()
+    await db.commit()
     return {"message": "2FA disabled successfully"}

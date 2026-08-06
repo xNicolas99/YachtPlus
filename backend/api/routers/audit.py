@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from api.db.database import SessionLocal
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from api.utils.auth import get_db
 from api.db.models.audit import AuditLog
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, require_superuser
@@ -9,13 +10,6 @@ from pydantic import BaseModel
 from datetime import datetime
 
 router = APIRouter()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 class AuditLogOut(BaseModel):
     id: int
@@ -29,9 +23,9 @@ class AuditLogOut(BaseModel):
         from_attributes = True
 
 @router.get("/", response_model=List[AuditLogOut])
-def get_audit_logs(
+async def get_audit_logs(
     limit: int = 100,
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """
@@ -40,11 +34,14 @@ def get_audit_logs(
     # Audit log leaks who did what to which container plus admin usernames;
     # gate behind superuser so a low-privileged operator can't enumerate
     # admin activity or use the log as a reconnaissance channel.
-    require_superuser(Authorize, db)
+    await require_superuser(Authorize, db)
     # Clamp limit so a hostile caller can't request the whole table.
     if limit < 1:
         limit = 1
     if limit > 1000:
         limit = 1000
-    logs = db.query(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit).all()
+    result = await db.execute(
+        select(AuditLog).order_by(AuditLog.timestamp.desc()).limit(limit)
+    )
+    logs = result.scalars().all()
     return logs

@@ -30,7 +30,11 @@
         </transition>
       </v-container>
     </v-main>
-    <div style="display:none;">Stub Snackbar</div>
+
+    <!-- Global snackbar for success/error feedback. Mounted once here so
+         every view can push notifications via the snackbar store module
+         instead of console.log. -->
+    <Snackbar />
   </v-app>
 </template>
 
@@ -38,13 +42,15 @@
 import { mapGetters, mapActions } from "vuex";
 import Sidebar from "./components/nav/Sidebar.vue";
 import Appbar from "./components/nav/Appbar.vue";
+import Snackbar from "./components/notifications/snackbar.vue";
 
 export default {
   name: "App",
 
   components: {
     Sidebar: Sidebar,
-    Appbar: Appbar
+    Appbar: Appbar,
+    Snackbar: Snackbar
   },
   data: () => ({
     // Initialize drawer to null (Vuetify handles responsive defaults)
@@ -102,6 +108,12 @@ export default {
       this.resetInactivityTimer();
     },
     startActivityTracking() {
+      // Idempotent: never register the same listeners twice. The old code
+      // called this from both `created()` and the `isLoggedIn` watcher, so
+      // a login flap could double-register listeners and leak them.
+      if (this._activityTrackingStarted) return;
+      this._activityTrackingStarted = true;
+
       window.addEventListener("mousemove", this.handleUserActivity);
       window.addEventListener("click", this.handleUserActivity);
       window.addEventListener("keypress", this.handleUserActivity);
@@ -127,6 +139,9 @@ export default {
       }, this.REFRESH_INTERVAL);
     },
     stopActivityTracking() {
+      if (!this._activityTrackingStarted) return;
+      this._activityTrackingStarted = false;
+
       window.removeEventListener("mousemove", this.handleUserActivity);
       window.removeEventListener("click", this.handleUserActivity);
       window.removeEventListener("keypress", this.handleUserActivity);
@@ -156,7 +171,8 @@ export default {
     }
   },
   mounted() {
-    // Basic theme restoration
+    // Basic theme restoration. The Vuetify 3 theme name is a ref; assign
+    // through `.value` when present, otherwise fall back to direct set.
     const dark_theme = localStorage.getItem("dark_theme");
     const targetTheme = dark_theme == "false" ? 'light' : 'dark';
 

@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 from api.db.database import get_db
-from api.auth.auth import get_auth_wrapper
+from api.auth.jwt import get_auth_wrapper
 from api.utils import registries as registry_utils
 
 router = APIRouter()
 
 @router.get("/")
-async def get_registries(db: Session = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    Authorize.jwt_required()
+async def get_registries(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await Authorize.jwt_required()
     # Returns a list of supported registries.
     # This replaces the missing registry_utils.get_registries(db)
     return [
@@ -23,7 +23,7 @@ async def search_registry(
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    Authorize.jwt_required()
+    await Authorize.jwt_required()
     # Swapped arguments to match utils definition: search_registry(registry, query)
     return await registry_utils.search_registry(registry, query)
 
@@ -41,7 +41,7 @@ async def popular_images(
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    Authorize.jwt_required()
+    await Authorize.jwt_required()
     return await registry_utils.get_popular_images(registry)
 
 
@@ -51,7 +51,7 @@ async def image_tags(
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    Authorize.jwt_required()
+    await Authorize.jwt_required()
     if not image or not image.strip():
         return []
     return await registry_utils.get_image_tags(registry, image.strip())
@@ -67,7 +67,7 @@ async def inspect_image(
     to pre-fill a notes field. Returns an empty dict if the registry
     couldn't be reached or the image is unknown — never a 500.
     """
-    Authorize.jwt_required()
+    await Authorize.jwt_required()
     if not image or not image.strip():
         return {}
     image = image.strip()

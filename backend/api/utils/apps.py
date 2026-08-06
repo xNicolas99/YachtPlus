@@ -79,11 +79,23 @@ def conv_portlabels2data(data):
 
 
 def _load_template_variables():
+    # Note: this is a synchronous fallback used by pure-sync call sites and
+    # tests. In async context use load_template_variables_async() instead.
     db = SessionLocal()
     try:
         return db.query(models.TemplateVariables).all()
     finally:
         db.close()
+
+
+async def load_template_variables_async():
+    """Async template-variable loader. Uses the AsyncSession (never blocks
+    the event loop). Prefer this over the sync fallback in async callers.
+    """
+    from sqlalchemy import select
+    async with SessionLocal() as db:
+        result = await db.execute(select(models.TemplateVariables))
+        return result.scalars().all()
 
 
 def conv_volumes2data(data, t_variables=None):

@@ -1,16 +1,16 @@
 <template>
-  <v-card color="foreground" class="d-flex mx-auto page">
+  <v-card class="d-flex mx-auto page">
     <v-container fluid class="component">
       <Nav class="mb-3" />
-      <v-card color="foreground" tile>
-        <v-toolbar color="primary" dark flat>
+      <v-card tile>
+        <v-toolbar color="primary" density="compact">
           <v-toolbar-title>User Management</v-toolbar-title>
           <v-spacer></v-spacer>
           <v-btn icon @click="loadUsers" aria-label="Refresh users" title="Refresh users">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
           <v-btn color="secondary" @click="openCreateDialog">
-            <v-icon left>mdi-plus</v-icon> Add User
+            <v-icon start>mdi-plus</v-icon> Add User
           </v-btn>
         </v-toolbar>
 
@@ -49,7 +49,7 @@
       <v-dialog v-model="dialog" max-width="600px">
         <v-card>
           <v-card-title>
-            <span class="headline">{{ formTitle }}</span>
+            <span class="text-h6">{{ formTitle }}</span>
           </v-card-title>
           <v-card-text>
             <v-container>
@@ -114,8 +114,8 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn color="blue darken-1" text @click="close">Cancel</v-btn>
-            <v-btn color="blue darken-1" text @click="save">Save</v-btn>
+            <v-btn color="primary" variant="text" @click="close">Cancel</v-btn>
+            <v-btn color="primary" variant="text" @click="save">Save</v-btn>
           </v-card-actions>
         </v-card>
       </v-dialog>

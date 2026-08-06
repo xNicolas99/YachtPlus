@@ -1,8 +1,9 @@
 import logging
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
+from sqlalchemy import select, delete, or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_
 
 from fastapi import HTTPException
 
@@ -18,6 +19,7 @@ import yaml
 import os
 import socket
 import ipaddress
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -146,28 +148,33 @@ def _build_safe_opener():
     )
 
 
-def get_templates(db: Session):
-    return db.query(models.Template).all()
+# --- Async DB helpers -------------------------------------------------------
+
+async def get_templates(db: AsyncSession):
+    result = await db.execute(select(models.Template))
+    return result.scalars().all()
 
 
-def get_template(db: Session, url: str):
-    return db.query(models.Template).filter(models.Template.url == url).first()
+async def get_template(db: AsyncSession, url: str):
+    result = await db.execute(select(models.Template).filter(models.Template.url == url))
+    return result.scalars().first()
 
 
-def get_template_by_id(db: Session, id: int):
-    return db.query(models.Template).filter(models.Template.id == id).first()
+async def get_template_by_id(db: AsyncSession, id: int):
+    result = await db.execute(select(models.Template).filter(models.Template.id == id))
+    return result.scalars().first()
 
 
-def get_template_items(db: Session, template_id: int):
-    return (
-        db.query(models.TemplateItem)
-        .filter(models.TemplateItem.template_id == template_id)
-        .all()
+async def get_template_items(db: AsyncSession, template_id: int):
+    result = await db.execute(
+        select(models.TemplateItem).filter(models.TemplateItem.template_id == template_id)
     )
+    return result.scalars().all()
 
-def match_templates(db: Session, query: str):
-    return (
-        db.query(models.TemplateItem)
+
+async def match_templates(db: AsyncSession, query: str):
+    result = await db.execute(
+        select(models.TemplateItem)
         .filter(
             or_(
                 models.TemplateItem.title.ilike(f"%{query}%"),
@@ -176,15 +183,17 @@ def match_templates(db: Session, query: str):
             )
         )
         .limit(20)
-        .all()
     )
+    return result.scalars().all()
 
-def delete_template(db: Session, template_id: int):
-    _template = (
-        db.query(models.Template).filter(models.Template.id == template_id).first()
+
+async def delete_template(db: AsyncSession, template_id: int):
+    result = await db.execute(
+        select(models.Template).filter(models.Template.id == template_id)
     )
-    db.delete(_template)
-    db.commit()
+    _template = result.scalars().first()
+    await db.delete(_template)
+    await db.commit()
     return _template
 
 
@@ -216,8 +225,14 @@ def _build_template_item(entry: dict) -> models.TemplateItem:
     )
 
 
-def _fetch_template_payload(url: str):
-    """Open the template feed and decode it as JSON or YAML."""
+def _fetch_template_payload_sync(url: str):
+    """Synchronous template feed fetch (runs in a thread).
+
+    Keeps the urllib-based SSRF guard (validate_url + connect-time
+    re-validation of every DNS resolution). This sync function is the only
+    place the blockable network I/O happens; it is invoked via
+    asyncio.to_thread so it never blocks the event loop.
+    """
     ext = os.path.splitext(urlparse(url).path)[1].rstrip()
     opener = _build_safe_opener()
     with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as file:
@@ -226,6 +241,11 @@ def _fetch_template_payload(url: str):
         if ext in (".json", "json"):
             return json.load(file)
     raise HTTPException(status_code=422, detail=f"Invalid filetype: {ext!r}")
+
+
+async def _fetch_template_payload(url: str):
+    """Async wrapper around the thread-bound fetch."""
+    return await asyncio.to_thread(_fetch_template_payload_sync, url)
 
 
 def _items_from_payload(payload) -> list[models.TemplateItem]:
@@ -237,12 +257,12 @@ def _items_from_payload(payload) -> list[models.TemplateItem]:
     raise HTTPException(status_code=422, detail="Unexpected template payload shape")
 
 
-def add_template(db: Session, template: models.Template):
+async def add_template(db: AsyncSession, template: models.Template):
     validate_url(template.url)
     _template = models.Template(title=template.title, url=template.url)
 
     try:
-        payload = _fetch_template_payload(template.url)
+        payload = await _fetch_template_payload(template.url)
         _template.items = _items_from_payload(payload)
     except HTTPException:
         raise
@@ -253,27 +273,43 @@ def add_template(db: Session, template: models.Template):
 
     try:
         db.add(_template)
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
-        existing_title = (
-            db.query(models.Template).filter(models.Template.title == template.title).first()
+        await db.rollback()
+        result = await db.execute(
+            select(models.Template).filter(models.Template.title == template.title)
         )
+        existing_title = result.scalars().first()
         if existing_title:
             raise HTTPException(
                 status_code=409, detail="Template with this title already exists."
             )
         # Title collision didn't fire -> URL collision; return the existing
         # row so the "Add Template" call is idempotent per URL.
-        return get_template(db=db, url=template.url)
+        return await get_template(db=db, url=template.url)
 
-    return get_template(db=db, url=template.url)
+    return await get_template(db=db, url=template.url)
 
 
-def refresh_template(db: Session, template_id: id):
-    template = (
-        db.query(models.Template).filter(models.Template.id == template_id).first()
+def _refresh_fetch_sync(url: str, ext: str):
+    """Synchronous refresh fetch (runs in a thread). Keeps SSRF guard."""
+    opener = _build_safe_opener()
+    with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as fp:
+        if ext.rstrip() in (".yml", ".yaml"):
+            return yaml.load(fp, Loader=yaml.SafeLoader)
+        elif ext.rstrip() in (".json"):
+            return json.load(fp)
+        else:
+            logger.warning("Refresh: invalid template filetype %r for url %s", ext, url)
+            raise HTTPException(status_code=422, detail="Invalid filetype")
+    return None
+
+
+async def refresh_template(db: AsyncSession, template_id: id):
+    result = await db.execute(
+        select(models.Template).filter(models.Template.id == template_id)
     )
+    template = result.scalars().first()
     if template is None:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -293,54 +329,15 @@ def refresh_template(db: Session, template_id: id):
 
     items = []
     try:
-        opener = _build_safe_opener()
-        with opener.open(template.url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as fp:
-            if ext.rstrip() in (".yml", ".yaml"):
-                loaded_file = yaml.load(fp, Loader=yaml.SafeLoader)
-            elif ext.rstrip() in (".json"):
-                loaded_file = json.load(fp)
-            else:
-                logger.warning("Refresh: invalid template filetype %r for url %s", ext, template.url)
-                raise HTTPException(status_code=422, detail="Invalid filetype")
-            if isinstance(loaded_file, list):
-                for entry in loaded_file:
+        loaded_file = await asyncio.to_thread(_refresh_fetch_sync, template.url, ext)
+        if isinstance(loaded_file, list):
+            for entry in loaded_file:
 
-                    if entry.get("ports"):
-                        ports = conv_ports2dict(entry.get("ports", []))
-                    sysctls = conv_sysctls2dict(entry.get("sysctls", []))
-
-                    item = models.TemplateItem(
-                        type=int(entry["type"]),
-                        title=entry["title"],
-                        platform=entry["platform"],
-                        description=entry.get("description", ""),
-                        name=entry.get("name", entry["title"].lower()),
-                        command=entry.get("command"),
-                        logo=entry.get("logo", ""),  # default logo here!
-                        image=entry.get("image", ""),
-                        notes=entry.get("note", ""),
-                        categories=entry.get("categories", ""),
-                        restart_policy=entry.get("restart_policy"),
-                        ports=ports,
-                        network_mode=entry.get("network_mode", ""),
-                        network=entry.get("network", ""),
-                        volumes=entry.get("volumes", []),
-                        env=entry.get("env", []),
-                        devices=entry.get("devices", []),
-                        labels=entry.get("labels", []),
-                        sysctls=sysctls,
-                        cap_add=entry.get("cap_add", []),
-                        cpus=entry.get("cpus"),
-                        mem_limit=entry.get("mem_limit"),
-                    )
-                    items.append(item)
-            elif isinstance(loaded_file, dict):
-                entry = loaded_file
-                ports = conv_ports2dict(entry.get("ports", []))
+                if entry.get("ports"):
+                    ports = conv_ports2dict(entry.get("ports", []))
                 sysctls = conv_sysctls2dict(entry.get("sysctls", []))
 
-                # Optional use classmethod from_dict
-                template_content = models.TemplateItem(
+                item = models.TemplateItem(
                     type=int(entry["type"]),
                     title=entry["title"],
                     platform=entry["platform"],
@@ -364,7 +361,38 @@ def refresh_template(db: Session, template_id: id):
                     cpus=entry.get("cpus"),
                     mem_limit=entry.get("mem_limit"),
                 )
-                items.append(template_content)
+                items.append(item)
+        elif isinstance(loaded_file, dict):
+            entry = loaded_file
+            ports = conv_ports2dict(entry.get("ports", []))
+            sysctls = conv_sysctls2dict(entry.get("sysctls", []))
+
+            # Optional use classmethod from_dict
+            template_content = models.TemplateItem(
+                type=int(entry["type"]),
+                title=entry["title"],
+                platform=entry["platform"],
+                description=entry.get("description", ""),
+                name=entry.get("name", entry["title"].lower()),
+                command=entry.get("command"),
+                logo=entry.get("logo", ""),  # default logo here!
+                image=entry.get("image", ""),
+                notes=entry.get("note", ""),
+                categories=entry.get("categories", ""),
+                restart_policy=entry.get("restart_policy"),
+                ports=ports,
+                network_mode=entry.get("network_mode", ""),
+                network=entry.get("network", ""),
+                volumes=entry.get("volumes", []),
+                env=entry.get("env", []),
+                devices=entry.get("devices", []),
+                labels=entry.get("labels", []),
+                sysctls=sysctls,
+                cap_add=entry.get("cap_add", []),
+                cpus=entry.get("cpus"),
+                mem_limit=entry.get("mem_limit"),
+            )
+            items.append(template_content)
     except Exception as exc:
         if hasattr(exc, "code") and exc.code == 404:
             raise HTTPException(status_code=exc.code, detail=exc.url)
@@ -377,10 +405,10 @@ def refresh_template(db: Session, template_id: id):
         template.items = items
 
         try:
-            db.commit()
+            await db.commit()
             logger.info('Template "%s" updated successfully.', template.title)
         except Exception as exc:
-            db.rollback()
+            await db.rollback()
             logger.error("Template commit failed (ERR_002) for %s: %s", template.title, exc)
             raise HTTPException(
                 status_code=exc.response.status_code, detail=exc.explanation
@@ -389,13 +417,12 @@ def refresh_template(db: Session, template_id: id):
     return template
 
 
-def read_app_template(db, app_id):
+async def read_app_template(db: AsyncSession, app_id):
     try:
-        template_item = (
-            db.query(models.TemplateItem)
-            .filter(models.TemplateItem.id == app_id)
-            .first()
+        result = await db.execute(
+            select(models.TemplateItem).filter(models.TemplateItem.id == app_id)
         )
+        template_item = result.scalars().first()
         return template_item
     except Exception as exc:
         raise HTTPException(
@@ -403,9 +430,10 @@ def read_app_template(db, app_id):
         )
 
 
-def set_template_variables(db: Session, new_variables: models.TemplateVariables):
+async def set_template_variables(db: AsyncSession, new_variables: models.TemplateVariables):
     try:
-        template_vars = db.query(models.TemplateVariables).all()
+        result = await db.execute(select(models.TemplateVariables))
+        template_vars = result.scalars().all()
 
         variables = []
         t_vars = new_variables
@@ -416,11 +444,12 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
             )
             variables.append(template_variables)
 
-        db.query(models.TemplateVariables).delete()
+        await db.execute(delete(models.TemplateVariables))
         db.add_all(variables)
-        db.commit()
+        await db.commit()
 
-        new_template_variables = db.query(models.TemplateVariables).all()
+        result = await db.execute(select(models.TemplateVariables))
+        new_template_variables = result.scalars().all()
 
         return new_template_variables
 
@@ -429,8 +458,10 @@ def set_template_variables(db: Session, new_variables: models.TemplateVariables)
         raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
 
 
-def read_template_variables(db: Session):
-    return db.query(models.TemplateVariables).all()
+async def read_template_variables(db: AsyncSession):
+    result = await db.execute(select(models.TemplateVariables))
+    return result.scalars().all()
+
 
 def _parse_default_template_urls(raw: str):
     """Parse the YACHT_DEFAULT_TEMPLATE_URLS setting into [(title, url), ...].
@@ -467,7 +498,7 @@ def _parse_default_template_urls(raw: str):
 _LOCAL_TEMPLATE_URL_PREFIX = "local://"
 
 
-def add_template_from_payload(db: Session, title: str, payload) -> models.Template:
+async def add_template_from_payload(db: AsyncSession, title: str, payload) -> models.Template:
     """Create a catalog from an in-memory payload (no HTTP fetch).
 
     Used by:
@@ -504,23 +535,24 @@ def add_template_from_payload(db: Session, title: str, payload) -> models.Templa
 
     try:
         db.add(_template)
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=409, detail="Template with this title already exists."
         )
 
-    return get_template(db=db, url=synthetic_url)
+    return await get_template(db=db, url=synthetic_url)
 
 
-def replace_template_items(db: Session, template_id: int, payload, title: str = None) -> models.Template:
+async def replace_template_items(db: AsyncSession, template_id: int, payload, title: str = None) -> models.Template:
     """Replace a catalog's items from a new in-memory payload. Used by the
     Edit dialog for `local://` templates (URL-based ones use /refresh).
     """
-    template = (
-        db.query(models.Template).filter(models.Template.id == template_id).first()
+    result = await db.execute(
+        select(models.Template).filter(models.Template.id == template_id)
     )
+    template = result.scalars().first()
     if template is None:
         raise HTTPException(status_code=404, detail="Template not found")
 
@@ -534,22 +566,28 @@ def replace_template_items(db: Session, template_id: int, payload, title: str = 
     # Wipe & rebuild the items list. cascade="all, delete-orphan" on
     # Template.items handles the actual row deletions on commit.
     template.items.clear()
-    db.flush()
+    await db.flush()
     template.items = items
     if title and title.strip():
         template.title = title.strip()
 
     try:
-        db.commit()
+        await db.commit()
     except IntegrityError:
-        db.rollback()
+        await db.rollback()
         raise HTTPException(
             status_code=409, detail="Template with this title already exists."
         )
     return template
 
 
-def _seed_bundled_catalogs(db: Session) -> None:
+def _seed_bundled_catalogs_sync(db_sync):
+    """Synchronous bundled-catalog seeding helper. Kept sync because it does
+    file I/O + DB writes via a sync session; callers run it via to_thread."""
+    raise NotImplementedError("Use async variant")
+
+
+async def _seed_bundled_catalogs(db: AsyncSession) -> None:
     """Scan BUILTIN_CATALOG_DIR for *.json and import each one as a
     catalog (titled from the filename stem). Idempotent: skips any title
     already present in the DB so re-running on a populated install is
@@ -571,22 +609,23 @@ def _seed_bundled_catalogs(db: Session) -> None:
     for path in sorted(_glob.glob(os.path.join(catalog_dir, "*.json"))):
         title = os.path.splitext(os.path.basename(path))[0]
         # Skip if a catalog by this exact title is already installed.
-        existing = (
-            db.query(models.Template).filter(models.Template.title == title).first()
+        result = await db.execute(
+            select(models.Template).filter(models.Template.title == title)
         )
+        existing = result.scalars().first()
         if existing is not None:
             logger.info("Bundled catalog already installed: %s", title)
             continue
         try:
             with open(path, "r", encoding="utf-8") as fp:
                 payload = json.load(fp)
-            add_template_from_payload(db, title, payload)
+            await add_template_from_payload(db, title, payload)
             logger.info("Loaded bundled catalog: %s (%s)", title, path)
         except Exception as e:
             logger.exception("Failed to load bundled catalog %s: %s", path, e)
 
 
-def init_templates(db: Session):
+async def init_templates_async(db: AsyncSession):
     """Idempotently install the community Docker-image catalogs configured
     via Settings.DEFAULT_TEMPLATE_URLS. Called from `mark_setup_completed`
     so a fresh install lands on a populated Templates page instead of an
@@ -605,7 +644,7 @@ def init_templates(db: Session):
     """
     # Bundled catalogs first (offline-safe) so they always land even if
     # the GitHub seed fetch fails immediately afterwards.
-    _seed_bundled_catalogs(db)
+    await _seed_bundled_catalogs(db)
 
     from api.settings import get_settings
 
@@ -618,12 +657,12 @@ def init_templates(db: Session):
     for title, url in defaults:
         # get_template(url=...) returns None when not installed; otherwise
         # we leave the existing row alone (operator may have customised it).
-        if get_template(db=db, url=url) is not None:
+        if await get_template(db=db, url=url) is not None:
             logger.info("Default template already installed: %s", title)
             continue
         try:
             template = models.Template(title=title, url=url)
-            add_template(db, template)
+            await add_template(db, template)
             logger.info("Added default template: %s (%s)", title, url)
         except Exception as e:
             # Non-fatal: setup-finalize must always succeed. Use logger.exception
@@ -631,3 +670,13 @@ def init_templates(db: Session):
             logger.exception(
                 "Failed to add default template %s (%s): %s", title, url, e,
             )
+
+
+# Backwards-compatible sync wrappers (used where no awaitable context is
+# available). Deprecated in favour of the async variants.
+def init_templates(db: Session):
+    raise NotImplementedError("Use init_templates_async(db) with an AsyncSession")
+
+
+def add_template_sync(db, template):
+    raise NotImplementedError("Use async add_template()")

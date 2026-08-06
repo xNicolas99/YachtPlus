@@ -15,10 +15,10 @@ from api.routers.registries import popular_images, image_tags, inspect_image
 
 
 class MockAuth:
-    def jwt_required(self, allow_setup_pending=False):
+    async def jwt_required(self, allow_setup_pending=False):
         return True
 
-    def get_jwt_subject(self, allow_setup_pending=False):
+    async def get_jwt_subject(self, allow_setup_pending=False):
         return "admin"
 
 

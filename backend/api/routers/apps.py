@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+import asyncio
 
 from api.db.schemas import apps as schemas
 from api.db.crud import templates as template_crud
-from api.db.database import SessionLocal
-from sqlalchemy.orm import Session
+from api.utils.auth import get_db
 import api.actions.apps as actions
 from api.settings import Settings
 from api.auth.auth import auth_check, check_permission
@@ -90,12 +91,12 @@ def _validate_deploy_template(template: "schemas.DeployForm") -> None:
             )
 
 
-def _require_superuser(Authorize, db: Session) -> None:
-    auth_check(Authorize)
-    username = Authorize.get_jwt_subject()
+async def _require_superuser(Authorize, db: AsyncSession) -> None:
+    await auth_check(Authorize)
+    username = await Authorize.get_jwt_subject()
     if not username:
         raise HTTPException(status_code=401, detail="Not logged in.")
-    user = users_crud.get_user_by_name(db=db, username=username)
+    user = await users_crud.get_user_by_name(db=db, username=username)
     if not user or not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
@@ -103,42 +104,35 @@ settings = Settings()
 
 router = APIRouter()
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
 
 @router.get("/")
 async def index(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.get_apps()
 
 
 @router.get("/{app_name}/updates")
 async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.check_app_update(app_name)
 
 
 @router.post("/{app_name}/update")
 @router.get("/{app_name}/update", deprecated=True)
-async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
-    auth_check(Authorize)
-    check_permission("perm_restart", Authorize, db) # Update is effectively a restart/recreate
+async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    await auth_check(Authorize)
+    await check_permission("perm_restart", Authorize, db) # Update is effectively a restart/recreate
     return await actions.app_update(app_name)
 
 @router.get("/stats")
 async def all_sse_stats(request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     stat_generator = actions.all_stat_generator(request)
     return EventSourceResponse(stat_generator)
 
 @router.get("/{app_name}")
 async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     return await actions.get_app(app_name=app_name)
 
 
@@ -146,13 +140,13 @@ async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(
 async def get_container_processes(
     app_name,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # /proc-derived process listings expose command lines (often containing
     # secrets passed via flags). Gate behind perm_start so only operators
     # who can already control the container can read them.
-    auth_check(Authorize)
-    check_permission("perm_start", Authorize, db)
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await actions.get_app_processes(app_name=app_name)
 
 
@@ -160,11 +154,11 @@ async def get_container_processes(
 async def get_support_bundle(
     app_name,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # Support bundles bundle env vars, config files and full container
     # inspect output — restrict to superusers.
-    _require_superuser(Authorize, db)
+    await _require_superuser(Authorize, db)
     return await actions.generate_support_bundle(app_name)
 
 
@@ -173,21 +167,21 @@ async def get_support_bundle(
 # top-level GET navigation). GET alias kept for one release for old clients.
 @router.post("/actions/{app_name}/{action}")
 @router.get("/actions/{app_name}/{action}", deprecated=True)
-async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
-    auth_check(Authorize)
+async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    await auth_check(Authorize)
     if action == "start":
-        check_permission("perm_start", Authorize, db)
+        await check_permission("perm_start", Authorize, db)
     elif action == "stop":
-        check_permission("perm_stop", Authorize, db)
+        await check_permission("perm_stop", Authorize, db)
     elif action == "restart":
-        check_permission("perm_restart", Authorize, db)
+        await check_permission("perm_restart", Authorize, db)
     elif action == "kill" or action == "remove":
-        check_permission("perm_delete", Authorize, db)
+        await check_permission("perm_delete", Authorize, db)
 
     # Audit Log
     try:
-        user = Authorize.get_jwt_subject()
-        log_activity(db, user=user, action=action, resource=app_name)
+        user = await Authorize.get_jwt_subject()
+        await asyncio.to_thread(log_activity, db, user, action, app_name)
     except Exception as e:
         # We deliberately don't block the action on audit-write failure
         # (an unavailable audit DB shouldn't lock operators out of the
@@ -201,15 +195,15 @@ async def container_actions(app_name, action, background_tasks: BackgroundTasks,
     return await actions.app_action(app_name, action, background_tasks)
 
 @router.post("/deploy", response_model=schemas.DeployLogs)
-async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: Session = Depends(get_db)):
-    auth_check(Authorize)
+async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    await auth_check(Authorize)
     # Deploying implies starting/creating
-    check_permission("perm_start", Authorize, db)
+    await check_permission("perm_start", Authorize, db)
 
     # If template_id is provided, fetch defaults from DB and merge.
     if template.template_id:
         try:
-            db_template_item = template_crud.read_app_template(db, template.template_id)
+            db_template_item = await template_crud.read_app_template(db, template.template_id)
             if db_template_item:
                 template = merge_template(template, db_template_item)
         except Exception as e:
@@ -232,8 +226,8 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
 
     # Audit Log
     try:
-        user = Authorize.get_jwt_subject()
-        log_activity(db, user=user, action="deploy", resource=template.name, details=f"Image: {template.image}")
+        user = await Authorize.get_jwt_subject()
+        await asyncio.to_thread(log_activity, db, user, "deploy", template.name, f"Image: {template.image}")
     except Exception as e:
         logger.error(
             "Audit log write failed for action=deploy resource=%s: %s",
@@ -247,18 +241,18 @@ async def logs(
     app_name: str,
     request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: Session = Depends(get_db),
+    db: AsyncSession = Depends(get_db),
 ):
     # Container stdout/stderr regularly contains secrets, tokens and
     # credentials printed during boot. Gate behind perm_start.
-    auth_check(Authorize)
-    check_permission("perm_start", Authorize, db)
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     log_generator = actions.log_generator(request, app_name)
     return EventSourceResponse(log_generator)
 
 
 @router.get("/{app_name}/stats")
 async def sse_stats(app_name: str, request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    auth_check(Authorize)
+    await auth_check(Authorize)
     stat_generator = actions.stat_generator(request, app_name)
     return EventSourceResponse(stat_generator)

@@ -8,13 +8,23 @@ maps aiodocker DockerError similarly, and otherwise returns a generic
 "Deploy failed" with the full traceback in the server log.
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi import HTTPException
 import docker.errors
 import aiodocker.exceptions
 
 from api.actions.apps import deploy_app
 from api.db.schemas.apps import DeployForm
+
+
+@pytest.fixture(autouse=True)
+def _stub_template_vars(monkeypatch):
+    # deploy_app calls load_template_variables_async() (async DB read). In
+    # these focused error-mapping tests we stub it so the DB isn't touched.
+    monkeypatch.setattr(
+        "api.utils.apps.load_template_variables_async",
+        AsyncMock(return_value=[]),
+    )
 
 
 def _form(**kwargs):
