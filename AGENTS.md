@@ -38,7 +38,7 @@ monorepo tooling — they are independent Node and Python projects.
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2.x (async engine), aiodocker, APScheduler, slowapi (rate limit), bcrypt, PyJWT, pyotp |
 | DB | SQLite default (`sqlite:////config/yacht.db`, via `sqlite+aiosqlite`); Postgres via `postgresql+asyncpg`; MySQL via `mysql+aiomysql` — all driven by `DATABASE_URL` |
 | Build/Deploy | Multi-stage `Dockerfile` (Node build → Python runtime + nginx); `docker-compose.yml`; GitHub Actions in `.github/workflows/` (`docker-image.yml`, `ghcr.yml`) |
-| Test | pytest (backend, 499 tests, all green), vitest (frontend, 21 tests, all green), no Playwright |
+| Test | pytest (backend, 499 tests, all green, **kept local / not tracked**), vitest (frontend, 21 tests, all green, **kept local / not tracked**), no Playwright |
 
 ---
 
@@ -66,7 +66,7 @@ backend/
     services/              # Background jobs (watchtower poll, audit cleanup)
     utils/                 # Pure helpers: compose parsing, crypto, audit, sanitiser
   alembic/                 # Migrations
-  tests/                   # pytest, with conftest.py for env setup
+  tests/                   # pytest, with conftest.py for env setup (local, not tracked)
   requirements.txt
 frontend/
   src/
@@ -424,6 +424,10 @@ npm run build    # writes to frontend/dist
 
 ### Tests
 
+The test suites live **locally** (`backend/tests/`, `frontend/**/*.test.js`)
+and are intentionally **not tracked** by git (see `.gitignore`: `backend/tests/`,
+`*.test.js`, `*.spec.js`). CI runs Docker builds only. To run them:
+
 ```bash
 # Backend
 cd backend
@@ -434,8 +438,8 @@ cd frontend
 npx vitest run
 ```
 
-Current baseline: **499 backend + 21 frontend tests, all green.**
-`backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
+Current baseline (local, untracked): **499 backend + 21 frontend tests, all
+green.** `backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
 *before* `Settings` is evaluated — needed because `TrustedHostMiddleware`
 would otherwise reject TestClient's default `Host: testserver`.
 

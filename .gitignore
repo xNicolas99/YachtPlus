@@ -24,3 +24,8 @@ config
 .fernet_salt
 .claude/
 .pytest_cache/
+
+# Test files — kept local, not tracked
+backend/tests/
+*.test.js
+*.spec.js
