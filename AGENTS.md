@@ -395,6 +395,11 @@ stale comments along the way — don't add to the pile.
 **Error envelope:** all API errors return `{"detail": "..."}` (FastAPI default).
 Frontend reads `err.response?.data?.detail` and surfaces it via `snackbar/setErr`.
 
+**Global error handling:** `api/main.py` registers `unhandled_exception_handler`
+(500 → generic `{"detail": ..., "trace_id": ...}`, full traceback logged
+server-side) and `validation_exception_handler` (422 → sensitive fields masked,
+never echoed back). Both live in `api/utils/error_handler.py`.
+
 ---
 
 ## 9. Local development

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +7,11 @@ from starlette.responses import PlainTextResponse
 from contextlib import asynccontextmanager
 import ipaddress
 import os
+
+from api.utils.error_handler import (
+    unhandled_exception_handler,
+    validation_exception_handler,
+)
 
 # Import ALL routers (Fixed 'settings' -> 'app_settings')
 from api.routers import (
@@ -30,6 +36,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)
+
+# --- GLOBAL ERROR HANDLING ---
+# Unexpected exceptions are logged server-side with a trace id and returned
+# to the client as a generic message (no stack traces / SQL / paths leak).
+# Validation errors are sanitised so sensitive input (passwords, tokens) is
+# never echoed back verbatim.
+app.add_exception_handler(Exception, unhandled_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 # --- ROBUST SETUP CHECK ---
 from api.routers.setup.setup import is_setup_completed_async

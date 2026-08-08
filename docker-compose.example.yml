@@ -1,17 +1,83 @@
+# Härtungs-Beispiel: YachtPlus hinter einem Docker-Socket-Proxy
+#
+# Least-Privilege-Prinzip: YachtPlus bekommt KEINEN direkten Zugriff auf
+# /var/run/docker.sock. Stattdessen spricht es einen schreibgeschützten
+# Socket-Proxy an, der nur die API-Endpunkte freigibt, die YachtPlus
+# tatsächlich braucht. Der Proxy selbst mountet den Socket nur lesend (:ro).
+#
+# Empfohlenes Image: tecspirit/docker-socket-proxy (aktiv gepflegter Fork
+# von tecnativa/docker-socket-proxy). Die Umgebungsvariablen steuern, welche
+# Docker-API-Routen erlaubt sind — alles andere wird mit 403 abgelehnt.
+#
+# WICHTIG: Jede hier gesetzte Variable ist ein bewusstes Zugeständnis.
+#   - CONTAINERS/IMAGES/NETWORKS/VOLUMES=1  -> Lese-Zugriff (GET) auf diese
+#     Ressourcen. Nötig für Dashboard, App-Liste, Ressourcen-Ansicht.
+#   - POST=1 -> erlaubt POST (Container starten/stoppen/erstellen). Das ist
+#     für die Steuerung nötig, aber auch der mächtigste Schalter. Nur setzen,
+#     wenn du die App-Steuerung wirklich nutzt.
+#   - Alle anderen Routen (DELETE, exec, attach, build, events, …) bleiben
+#     standardmäßig deaktiviert.
+#
+# Für reine Lese-/Monitoring-Nutzung: POST weglassen und nur die Lese-Flags
+# setzen. Dann kann YachtPlus nichts am Docker-Daemon verändern.
+
 version: "3"
 services:
   dockerproxy:
-    image: tecnativa/docker-socket-proxy
+    image: tecspirit/docker-socket-proxy:latest
     container_name: yachtplus-socket-proxy
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
+      # Lese-Zugriff (GET) auf die Ressourcen, die YachtPlus anzeigt
       - CONTAINERS=1
       - IMAGES=1
       - NETWORKS=1
       - VOLUMES=1
-      - POST=1 # Erlaubt Steuerung (Start/Stop), blockiert aber gefährliche Host-Befehle
+      # Steuerung (POST): Container starten/stoppen/erstellen.
+      # Nur setzen, wenn du die App-Steuerung nutzt. Weglassen = read-only.
+      - POST=1
+      # Explizit deaktivierte, gefährliche Routen (Standard ist bereits "aus",
+      # hier zur Verdeutlichung):
+      - DELETE=0
+      - EXEC=0
+      - ATTACH=0
+      - BUILD=0
+      - EVENTS=0
+      - INFO=0
+      - VERSION=0
+      - PING=0
+      - AUTH=0
+      - COMMIT=0
+      - CONTAINERS_CREATE=0
+      - CONTAINERS_START=0
+      - CONTAINERS_STOP=0
+      - CONTAINERS_KILL=0
+      - CONTAINERS_RESTART=0
+      - CONTAINERS_PAUSE=0
+      - CONTAINERS_UNPAUSE=0
+      - CONTAINERS_ATTACH=0
+      - CONTAINERS_EXEC=0
+      - CONTAINERS_LOGS=0
+      - CONTAINERS_TOP=0
+      - CONTAINERS_STATS=0
+      - CONTAINERS_UPDATE=0
+      - CONTAINERS_RENAME=0
+      - CONTAINERS_PRUNE=0
+      - IMAGES_PULL=0
+      - IMAGES_PUSH=0
+      - IMAGES_BUILD=0
+      - IMAGES_TAG=0
+      - IMAGES_PRUNE=0
+      - NETWORKS_CREATE=0
+      - NETWORKS_DELETE=0
+      - NETWORKS_CONNECT=0
+      - NETWORKS_DISCONNECT=0
+      - NETWORKS_PRUNE=0
+      - VOLUMES_CREATE=0
+      - VOLUMES_DELETE=0
+      - VOLUMES_PRUNE=0
     networks:
       - yachtplus-net
 
@@ -27,7 +93,7 @@ services:
     ports:
       - "8000:8080"
     volumes:
-      # Socket is NO LONGER mounted here
+      # Socket ist hier bewusst NICHT gemountet
       # - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/config
     networks:
