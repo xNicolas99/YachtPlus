@@ -395,11 +395,11 @@ async def refresh_template(db: AsyncSession, template_id: id):
             items.append(template_content)
     except Exception as exc:
         if hasattr(exc, "code") and exc.code == 404:
-            raise HTTPException(status_code=exc.code, detail=exc.url)
+            raise HTTPException(status_code=exc.code, detail="Template source not found")
         logger.error("Template refresh failed (ERR_001) for %s: %s", template.url, exc)
         if hasattr(exc, "status_code"):
-            raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
-        raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=exc.status_code, detail="Failed to refresh template. Check server logs for details.")
+        raise HTTPException(status_code=400, detail="Failed to refresh template. Check server logs for details.")
     else:
         template.updated_at = datetime.utcnow()
         template.items = items

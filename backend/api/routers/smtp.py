@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import smtplib
+import logging
 from email.mime.text import MIMEText
 import asyncio
 from api.utils.auth import get_db
@@ -10,6 +11,8 @@ from api.db.models.settings import SMTPSettings
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, require_superuser
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -44,8 +47,12 @@ def _send_test_email_sync(settings, recipient: str) -> None:
 
         server.sendmail(settings.sender_email, recipient, msg.as_string())
         server.quit()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("SMTP test failed for recipient %s", recipient)
+        raise HTTPException(
+            status_code=500,
+            detail="SMTP test failed. Check server logs for details.",
+        )
 
 
 @router.get("/", response_model=SMTPSettingsSchema)
