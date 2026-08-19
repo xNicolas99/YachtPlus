@@ -151,10 +151,15 @@ async def verify_password(plain_password, hashed_password):
     return await asyncio.to_thread(bcrypt.checkpw, plain_password, hashed_password)
 
 async def get_password_hash(password) -> str:
-    """Hash a password with bcrypt without blocking the event loop."""
+    """Hash a password with bcrypt without blocking the event loop.
+
+    Uses 13 rounds to stay ahead of offline brute-force hardware in 2026.
+    The previous default (bcrypt.gensalt() = 12 rounds) is still acceptable,
+    but 13 provides a meaningful cost increase for little UX impact.
+    """
     if isinstance(password, str):
         password = password.encode('utf-8')
-    hashed = await asyncio.to_thread(bcrypt.hashpw, password, bcrypt.gensalt())
+    hashed = await asyncio.to_thread(bcrypt.hashpw, password, bcrypt.gensalt(rounds=13))
     return hashed.decode('utf-8')
 
 async def prune_blacklist(db: AsyncSession):

@@ -503,6 +503,8 @@ migration, every test that touches the DB uses an `AsyncSession`;
 | Removing `unsafe-eval` from CSP is a non-goal — it's already removed. Adding it back is a no. | XSS surface | If a dep needs `unsafe-eval`, the dep is the problem. |
 | Adding `settings.X` reference for a new env var | Pydantic `Settings` uses `class Config: env_file=".env"` (no `extra` set) | Declare `X` as a field on the `Settings` class in `api/settings.py`. Otherwise the read crashes with `AttributeError` at request time. `tests/test_settings_fields.py` pins the must-exist contract for the currently-declared fields. |
 | Calling `docker.from_env()` | Bypasses `settings.DOCKER_HOST` | Always go through `api.utils.docker_client.get_sync_docker_client()` for the sync SDK. |
+| Generating a JWT signing key | `HS256` needs >= 32 bytes of raw entropy | `secrets.token_urlsafe(48)` in `api/settings.py`; never use `token_urlsafe(32)` or shorter. |
+| Hashing a user password | bcrypt cost factor | Use `bcrypt.gensalt(rounds=13)` via `api.db.crud.users.get_password_hash()`. Verify via `asyncio.to_thread(bcrypt.checkpw, ...)`. |
 | Trusting `X-Real-IP` / `X-Forwarded-For` outside `_resolve_client_ip` | IP-spoofing for rate-limit evasion | Don't. There's one entry point and it requires the peer to be in `settings.TRUSTED_PROXIES`. |
 | Logging shell input/output, terminal frames, JWTs, or DB rows containing secrets | Sensitive data in logs | Log lengths, ids, or sanitised summaries — never the raw bytes. Semgrep's log-leak rule is configured to flag this. |
 

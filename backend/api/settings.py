@@ -36,7 +36,11 @@ def get_or_create_secret_key() -> str:
             with open(secret_file, "r") as f:
                 new_secret = f.read().strip()
         else:
-            new_secret = secrets.token_urlsafe(32)
+            # 48 urlsafe characters => 36 bytes of raw entropy before
+            # base64url encoding, which decodes to >= 32 bytes. This satisfies
+            # PyJWT's InsecureKeyLengthWarning for HS256 and gives a robust
+            # margin beyond the 32-byte minimum recommended by RFC 7518.
+            new_secret = secrets.token_urlsafe(48)
 
         # Write to .env
         with open(env_file, "a") as f:
