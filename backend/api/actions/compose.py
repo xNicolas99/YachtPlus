@@ -57,11 +57,24 @@ def _run_compose_command(command_args, cwd, env_vars):
         )
         return result.stdout.strip() if result.stdout else (result.stderr.strip() if result.stderr else "No Output")
     except subprocess.CalledProcessError as e:
-        logger.error(f"Command failed: {e.stderr}")
-        raise HTTPException(400, e.stderr.strip() if e.stderr else str(e))
+        logger.error(
+            "Command failed in %r (exit %s): stderr=%s",
+            cwd,
+            e.returncode,
+            e.stderr,
+        )
+        # Don't echo stderr to the client: it may contain host paths,
+        # internal hostnames, env values, or other sensitive details.
+        raise HTTPException(
+            status_code=400,
+            detail="Compose command failed. Check server logs for details.",
+        )
     except Exception as e:
-        logger.error(f"Unexpected error: {str(e)}")
-        raise HTTPException(500, str(e))
+        logger.exception("Unexpected error running compose command in %r", cwd)
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while running the compose command.",
+        )
 
 # Whitelist of docker-compose subcommands we ever pass through. The router
 # already validates the same set, but enforcing it again here gives us

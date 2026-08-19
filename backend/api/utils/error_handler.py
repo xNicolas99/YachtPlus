@@ -141,3 +141,31 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
     sanitized = sanitize_error_message(errors)
     sanitized = _mask_sensitive_input(sanitized)
     return JSONResponse(status_code=422, content={"detail": sanitized})
+
+
+def docker_error_detail(exc) -> str:
+    """Return a client-safe error message for an aiodocker/docker exception.
+
+    The raw exception message may contain daemon paths, internal hostnames,
+    or other operational details that should not leave the server. This
+    helper preserves the HTTP status via `safe_http_status` but maps the
+    message to a small set of generic, still actionable descriptions.
+    """
+    message = ""
+    if hasattr(exc, "message") and exc.message:
+        message = exc.message
+    elif hasattr(exc, "explanation") and exc.explanation:
+        message = exc.explanation
+    elif hasattr(exc, "args") and exc.args:
+        message = str(exc.args[0])
+
+    lower = message.lower()
+    status = safe_http_status(exc, default=500)
+
+    if status == 404 or "no such" in lower or "not found" in lower:
+        return "Container or resource not found"
+    if status == 409 or "conflict" in lower:
+        return "Resource is in a state that prevents this action"
+    if "cannot" in lower:
+        return "Docker operation could not be completed"
+    return "Docker operation failed. Check server logs for details."

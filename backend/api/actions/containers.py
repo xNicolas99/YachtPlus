@@ -98,8 +98,16 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
     except asyncio.CancelledError:
         # Client disconnected
         pass
+    except HTTPException:
+        # Re-raise FastAPI/Starlette HTTPExceptions (e.g. 404) as-is.
+        raise
     except Exception as e:
-        yield {"event": "error", "data": str(e)}
+        logger.exception(
+            "Error streaming logs for container %r", container_id
+        )
+        # Never send the raw exception text to the client: it may contain
+        # daemon paths, internal hostnames, or other operational details.
+        yield {"event": "error", "data": "Failed to stream container logs."}
     finally:
         await docker.close()
 

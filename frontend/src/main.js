@@ -71,28 +71,42 @@ function createAxiosResponseInterceptor() {
   const interceptor = axios.interceptors.response.use(
     response => response,
     error => {
-      if (error.config && error.config.skipAuthRefresh) {
+      // Only handle 401s, honour explicit opt-out, and avoid retry loops.
+      if (
+        !error.config ||
+        error.config.skipAuthRefresh ||
+        (error.response && error.response.status !== 401) ||
+        !error.response
+      ) {
         return Promise.reject(error);
       }
-      if (error.response && error.response.status !== 401) {
+
+      // Guard against an endless refresh loop if /auth/refresh itself
+      // keeps returning 401 or the retry request also comes back 401.
+      const refreshCount = error.config._authRefreshCount || 0;
+      if (refreshCount >= 1) {
+        store.dispatch("auth/AUTH_LOGOUT");
+        router.push("/login");
         return Promise.reject(error);
       }
+
       axios.interceptors.response.eject(interceptor);
       return store
         .dispatch("auth/AUTH_REFRESH")
         .then(() => {
-          error.response.config.xsrfCookieName = "csrf_access_token";
-          error.response.config.xsrfHeaderName = "X-CSRF-TOKEN";
-          return axios(error.response.config);
+          const retryConfig = {
+            ...error.config,
+            xsrfCookieName: "csrf_access_token",
+            xsrfHeaderName: "X-CSRF-TOKEN",
+            skipAuthRefresh: true,
+            _authRefreshCount: refreshCount + 1,
+          };
+          return axios(retryConfig);
         })
-        .catch(error => {
-          if (error.response && error.response.status !== 401) {
-            return Promise.reject(error);
-          } else {
-            store.dispatch("auth/AUTH_LOGOUT");
-            router.push("/login");
-            return Promise.reject(error);
-          }
+        .catch(() => {
+          store.dispatch("auth/AUTH_LOGOUT");
+          router.push("/login");
+          return Promise.reject(error);
         })
         .finally(() => {
           createAxiosResponseInterceptor();

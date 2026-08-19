@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query, HTTPException
 from sse_starlette.sse import EventSourceResponse
 from api.auth.jwt import get_auth_wrapper, get_secret_key
-from api.auth.auth import auth_check
+from api.auth.auth import auth_check, check_permission
 import api.actions.containers as actions
 import asyncio
 import aiodocker
@@ -87,12 +87,14 @@ async def get_container_logs(
     tail: int = 100,
     follow: bool = True,
     timestamps: bool = False,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Streams container logs using Docker API
     """
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return EventSourceResponse(
         actions.get_logs_generator(container_id, tail, follow, timestamps)
     )

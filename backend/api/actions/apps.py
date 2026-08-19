@@ -69,7 +69,8 @@ async def check_app_update(app_name):
             attrs = await app.show()
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
-                 status_code=_safe_http_status(exc), detail=exc.message,
+                 status_code=_safe_http_status(exc),
+                 detail="Docker operation failed. Check server logs for details.",
              )
 
         config = attrs.get("Config")
@@ -124,6 +125,26 @@ def normalize_ports(summary_ports):
 from api.utils.error_handler import safe_http_status as _safe_http_status
 
 
+def _docker_error_detail(exc: aiodocker.exceptions.DockerError) -> str:
+    """Return a client-safe error message for an aiodocker exception.
+
+    The raw `exc.message` may contain daemon paths, internal hostnames, or
+    other operational details that should not leave the server. This helper
+    preserves the HTTP status via `_safe_http_status` but maps the message
+    to a small set of generic, still actionable descriptions.
+    """
+    # Common aiodocker messages are simple status text; whitelist them so
+    # the UI can show useful feedback without exposing internals.
+    lower = (exc.message or "").lower()
+    if exc.status == 404 or "no such" in lower or "not found" in lower:
+        return "Container not found"
+    if exc.status == 409 or "conflict" in lower:
+        return "Container is in a state that prevents this action"
+    if exc.status == 500 and "cannot" in lower:
+        return "Container action could not be completed"
+    return "Docker operation failed. Check server logs for details."
+
+
 async def get_apps():
     apps_list = []
     try:
@@ -133,7 +154,7 @@ async def get_apps():
             except aiodocker.exceptions.DockerError as exc:
                 logger.error(f"Docker API Error in get_apps: {exc.message}")
                 raise HTTPException(
-                    status_code=_safe_http_status(exc), detail=exc.message,
+                    status_code=_safe_http_status(exc), detail=_docker_error_detail(exc),
                 )
             except Exception as exc:
                 logger.error(f"Unexpected error in get_apps (Docker connection?): {exc}")
@@ -197,7 +218,7 @@ async def get_app(app_name):
             app = await docker.containers.get(app_name)
             attrs = await app.show()
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
         attrs["name"] = attrs.get("Name", "")[1:]
         attrs["short_id"] = attrs.get("Id", "")[:12]
@@ -468,7 +489,7 @@ async def app_action(app_name, action, background_tasks=None):
         try:
             app = await docker.containers.get(app_name)
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
         try:
             async with aiofiles.open("/proc/self/cgroup", "r") as f:
@@ -506,7 +527,7 @@ async def app_action(app_name, action, background_tasks=None):
             elif action == "unpause":
                 await app.unpause()
         except aiodocker.exceptions.DockerError as exc:
-            raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
+            raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
     return await get_apps()
 
@@ -517,7 +538,7 @@ async def app_update(app_name):
             old_info = await old.show()
             old_name = old_info["Name"][1:]
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
         config = {
             "Image": "containrrr/watchtower:latest",
@@ -537,7 +558,7 @@ async def app_update(app_name):
             await updater.wait(timeout=120)
 
         except aiodocker.exceptions.DockerError as exc:
-             raise HTTPException(status_code=_safe_http_status(exc), detail=exc.message)
+             raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
     await asyncio.sleep(1)
     return await get_apps()
@@ -602,7 +623,7 @@ async def check_self_update():
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, _check_updates, tag)
         except Exception as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
+            raise HTTPException(status_code=400, detail="Docker operation failed. Check server logs for details.")
 
 
 async def generate_support_bundle(app_name):
