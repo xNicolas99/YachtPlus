@@ -405,7 +405,8 @@ def _check_updates(tag):
                 return False
             else:
                 raise HTTPException(
-                    status_code=err.response.status_code, detail=err.explanation
+                    status_code=err.response.status_code,
+                    detail="Docker registry operation failed. Check server logs for details.",
                 )
         try:
             new = dclient.images.get_registry_data(tag)

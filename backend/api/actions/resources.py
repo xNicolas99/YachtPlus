@@ -3,7 +3,7 @@ from fastapi import HTTPException
 import asyncio
 import logging
 from api.settings import Settings
-from api.utils.error_handler import safe_http_status
+from api.utils.error_handler import safe_http_status, docker_error_detail
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -74,7 +74,7 @@ async def write_image(image_tag):
         try:
             await docker.images.pull(f"{repo}:{tag}")
         except Exception as exc:
-             raise HTTPException(status_code=500, detail=str(exc))
+             raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
     return await get_images()
 
@@ -95,15 +95,15 @@ async def get_image(image_id):
 
             if isinstance(results[1], Exception):
                  if isinstance(results[1], aiodocker.exceptions.DockerError):
-                     raise HTTPException(status_code=results[1].status, detail=results[1].message)
-                 raise HTTPException(status_code=500, detail=str(results[1]))
+                     raise HTTPException(status_code=safe_http_status(results[1]), detail=docker_error_detail(results[1]))
+                 raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
             else:
                  image = results[1]
 
         except HTTPException:
             raise
         except Exception as exc:
-             raise HTTPException(status_code=500, detail=str(exc))
+             raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
         attrs = image.copy()
 
@@ -125,7 +125,7 @@ async def update_image(image_id):
                 await docker.images.pull(tag)
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
     return await get_image(image_id)
 
@@ -138,7 +138,7 @@ async def delete_image(image_id):
              return image
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
 
 
@@ -187,7 +187,7 @@ async def write_volume(volume_name):
             await docker.volumes.create({"Name": volume_name})
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
     return await get_volumes()
 
@@ -218,8 +218,8 @@ async def get_volume(volume_name):
                           # If it passed, `volume` would be undefined.
                           # I will keep the behavior but ensure `volume` is handled.
                           # Actually, if 404, we should probably raise 404.
-                     raise HTTPException(status_code=safe_http_status(exc), detail=exc.message)
-                 raise HTTPException(status_code=500, detail=str(exc))
+                     raise HTTPException(status_code=safe_http_status(exc), detail=docker_error_detail(exc))
+                 raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
             else:
                  volume = results[1]
 
@@ -250,7 +250,7 @@ async def delete_volume(volume_name):
             return volume
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
 
 
@@ -341,7 +341,7 @@ async def write_network(network_form):
             await docker.networks.create(config)
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
 
     return await get_networks()
@@ -373,8 +373,8 @@ async def get_network(network_id):
             if isinstance(results[1], Exception):
                  exc = results[1]
                  if isinstance(exc, aiodocker.exceptions.DockerError):
-                      raise HTTPException(status_code=safe_http_status(exc), detail=exc.message)
-                 raise HTTPException(status_code=500, detail=str(exc))
+                      raise HTTPException(status_code=safe_http_status(exc), detail=docker_error_detail(exc))
+                 raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
             else:
                  network = results[1]
 
@@ -403,7 +403,7 @@ async def delete_network(network_id):
             return network
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
-                status_code=safe_http_status(exc), detail=exc.message
+                status_code=safe_http_status(exc), detail=docker_error_detail(exc)
             )
 
 async def prune_resources(resource):

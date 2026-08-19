@@ -24,8 +24,8 @@ async def get_containers():
                 result.append(c_dict)
             return result
         except Exception as e:
-            logger.error(f"Error fetching containers: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            logger.exception("Error fetching containers")
+            raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
 async def stream_stats_generator(request, container_id: str):
     async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
@@ -84,13 +84,13 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
         except aiodocker.exceptions.DockerError as e:
             if e.status == 404:
                 raise HTTPException(status_code=404, detail="Container not found")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
         # log() returns an async generator
         try:
             logs = container.log(stdout=True, stderr=True, follow=follow, tail=tail, timestamps=timestamps)
         except aiodocker.exceptions.DockerError as e:
-             raise HTTPException(status_code=500, detail=str(e))
+             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
         async for line in logs:
             yield {"data": line}
@@ -118,7 +118,7 @@ async def get_stats(container_id: str):
         except aiodocker.exceptions.DockerError as e:
             if e.status == 404:
                 raise HTTPException(status_code=404, detail="Container not found")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
         c_inspect = await container.show()
         if c_inspect["State"]["Status"] != "running":
@@ -156,9 +156,9 @@ async def get_stats(container_id: str):
                            break
 
         except aiodocker.exceptions.DockerError as e:
-             raise HTTPException(status_code=500, detail=str(e))
-        except Exception as e:
-             logger.error(f"Error fetching stats stream: {e}")
+             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
+        except Exception:
+             logger.exception("Error fetching stats stream for %s", container_id)
              if not stats:
                  raise HTTPException(status_code=500, detail="Failed to fetch stats")
 
