@@ -101,7 +101,7 @@ def _is_trusted_proxy(client_ip: str) -> bool:
                 if peer == ipaddress.ip_address(entry):
                     return True
         except ValueError:
-            logger.warning("Skipping invalid TRUSTED_PROXIES entry: %r", entry)
+            logger.warning("Skipping invalid TRUSTED_PROXIES entry")
     return False
 
 

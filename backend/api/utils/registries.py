@@ -327,8 +327,8 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
                     tags = [t.get('name') for t in data.get('results', [])]
 
         elif registry == 'ghcr':
-             if 'ghcr.io/' in image:
-                 image = image.replace('ghcr.io/', '')
+             if image.startswith('ghcr.io/'):
+                 image = image.replace('ghcr.io/', '', 1)
 
              parts = image.split('/')
              if len(parts) >= 2:

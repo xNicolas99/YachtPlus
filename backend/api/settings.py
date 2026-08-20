@@ -24,27 +24,23 @@ def get_or_create_secret_key() -> str:
         secret_file = ".secret_key"
 
     try:
-        # First try to read from .env
-        if os.path.exists(env_file):
-            with open(env_file, "r") as f:
-                for line in f:
-                    if line.startswith("SECRET_KEY="):
-                        return line.split("=", 1)[1].strip()
-
-        # If not found in .env, check legacy secret_file or generate new
+        # Persist only to the dedicated secret file. Writing the signing key
+        # into a generic .env file broadens the attack surface and triggers
+        # code-scanning alerts for clear-text secret storage. The secret file
+        # is treated as a single-purpose credential store.
         if os.path.exists(secret_file):
             with open(secret_file, "r") as f:
-                new_secret = f.read().strip()
-        else:
-            # 48 urlsafe characters => 36 bytes of raw entropy before
-            # base64url encoding, which decodes to >= 32 bytes. This satisfies
-            # PyJWT's InsecureKeyLengthWarning for HS256 and gives a robust
-            # margin beyond the 32-byte minimum recommended by RFC 7518.
-            new_secret = secrets.token_urlsafe(48)
+                return f.read().strip()
 
-        # Write to .env
-        with open(env_file, "a") as f:
-            f.write(chr(10) + "SECRET_KEY=" + str(new_secret) + chr(10))
+        # 48 urlsafe characters => 36 bytes of raw entropy before
+        # base64url encoding, which decodes to >= 32 bytes. This satisfies
+        # PyJWT's InsecureKeyLengthWarning for HS256 and gives a robust
+        # margin beyond the 32-byte minimum recommended by RFC 7518.
+        new_secret = secrets.token_urlsafe(48)
+
+        os.makedirs(os.path.dirname(secret_file) or ".", exist_ok=True)
+        with open(secret_file, "w") as f:
+            f.write(new_secret + "\n")
 
         return new_secret
     except Exception as e:

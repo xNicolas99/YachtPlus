@@ -13,7 +13,7 @@ async def get_image_config(image_name: str) -> Optional[Dict]:
     registry = "dockerhub"
     if image_name.startswith("ghcr.io/"):
         registry = "ghcr"
-        image_name = image_name.replace("ghcr.io/", "")
+        image_name = image_name.removeprefix("ghcr.io/")
     elif image_name.startswith("lscr.io/"):
         registry = "linuxserver" # Effectively DockerHub or GHCR depending on where it points, but usually lscr.io redirects to GHCR/Hub.
         # But for metadata, we treat it as remote.
