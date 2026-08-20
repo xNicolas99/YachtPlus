@@ -83,13 +83,15 @@ class Settings(BaseSettings):
 
     # Networking. The default list covers localhost only; for LAN deploys
     # set YACHT_ALLOWED_HOSTS to your hostname(s) or use the wildcard "*"
-    # to disable Host-header pinning. ALLOW_PRIVATE_NETWORK_HOSTS=true (the
-    # default) additionally accepts any RFC 1918 / link-local IP regardless
-    # of this list — covers the "access via 192.168.x.y" case without
-    # forcing every user to edit the env file. Set it to false to enforce
-    # strict matching (typical for a public-internet deploy).
+    # to disable Host-header pinning. ALLOW_PRIVATE_NETWORK_HOSTS=false (the
+    # new default) enforces strict Host-header matching — this prevents
+    # SSRF/Host-header injection against internal services. LAN users can
+    # set YACHT_ALLOW_PRIVATE_NETWORK_HOSTS=true to restore the legacy
+    # behaviour (covers the "access via 192.168.x.y" case without forcing
+    # every user to edit the env file), but that should only be used behind
+    # a trusted network boundary.
     ALLOWED_HOSTS: list = os.getenv("YACHT_ALLOWED_HOSTS", "localhost,127.0.0.1,[::1]").split(",") if os.getenv("YACHT_ALLOWED_HOSTS") else ["localhost", "127.0.0.1", "[::1]"]
-    ALLOW_PRIVATE_NETWORK_HOSTS: bool = os.getenv("YACHT_ALLOW_PRIVATE_NETWORK_HOSTS", "true").lower() in ("1", "true", "yes", "on")
+    ALLOW_PRIVATE_NETWORK_HOSTS: bool = os.getenv("YACHT_ALLOW_PRIVATE_NETWORK_HOSTS", "false").lower() in ("1", "true", "yes", "on")
     CORS_ORIGINS: list = os.getenv("YACHT_CORS_ORIGINS", "http://localhost,http://127.0.0.1,http://localhost:8080,http://127.0.0.1:8080").split(",") if os.getenv("YACHT_CORS_ORIGINS") else ["http://localhost", "http://127.0.0.1", "http://localhost:8080", "http://127.0.0.1:8080"]
 
     # Database

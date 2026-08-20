@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from typing import List
 import io
 import json
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.utils.auth import get_db
 from api.auth.auth import auth_check, require_superuser
+from api.utils.security import limiter
 
 from api.db.crud import templates as crud
 from api.db.crud import settings as scrud
@@ -115,15 +116,28 @@ async def import_settings(
 @router.get(
     "/prune/{resource}",
 )
-async def prune_resources(resource: str, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    await auth_check(Authorize)
+@limiter.limit("10/minute")
+async def prune_resources(
+    request: Request,
+    resource: str,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    await require_superuser(Authorize, db)
+    allowed = {"images", "containers", "volumes", "networks", "build_cache"}
+    if resource not in allowed:
+        raise HTTPException(
+            status_code=422, detail=f"Resource must be one of {sorted(allowed)}"
+        )
     return await resources.prune_resources(resource)
 
 
 @router.get(
     "/update",
 )
+@limiter.limit("10/minute")
 async def update_self(
+    request: Request,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),

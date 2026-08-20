@@ -53,7 +53,8 @@ def _run_compose_command(command_args, cwd, env_vars):
             check=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            timeout=600,  # cap long-running compose ops (pull, build)
         )
         return result.stdout.strip() if result.stdout else (result.stderr.strip() if result.stderr else "No Output")
     except subprocess.CalledProcessError as e:
@@ -308,23 +309,28 @@ def _write_compose_sync(compose):
     if "\x00" in content:
         raise HTTPException(status_code=422, detail="Compose file contains NUL bytes.")
 
-    if not os.path.exists(settings.COMPOSE_DIR + compose.name):
-        try:
-            pathlib.Path(settings.COMPOSE_DIR + compose.name).mkdir(parents=True)
-        except Exception as exc:
-            raise HTTPException(500, str(exc))
+    # Canonicalise the target directory and guarantee it stays inside the
+    # configured compose directory. String concatenation was vulnerable to
+    # traversal if COMPOSE_DIR contained a trailing slash mismatch or if a
+    # symlink redirected the target; resolve() + is_relative_to() closes
+    # both paths.
+    base_dir = pathlib.Path(settings.COMPOSE_DIR).resolve()
+    target_dir = (base_dir / compose.name).resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid compose project name.")
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(settings.COMPOSE_DIR + compose.name + "/docker-compose.yml", "w") as f:
-        try:
-            f.write(content)
-        except TypeError as exc:
-            if "write() argument must be str" in str(exc):
-                raise HTTPException(
-                    status_code=422, detail="Compose file cannot be empty."
-                )
-            raise HTTPException(500, str(exc))
-        except Exception as exc:
-            raise HTTPException(500, str(exc))
+    target_file = target_dir / "docker-compose.yml"
+    try:
+        target_file.write_text(content, encoding="utf-8")
+    except TypeError as exc:
+        if "write() argument must be str" in str(exc):
+            raise HTTPException(
+                status_code=422, detail="Compose file cannot be empty."
+            )
+        raise HTTPException(status_code=500, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
     return _get_compose_sync(name=compose.name)
 

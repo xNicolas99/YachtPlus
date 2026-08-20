@@ -73,7 +73,7 @@ async def inspect_image(
     image = image.strip()
     import httpx
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=10.0) as client:
             return await registry_utils.fetch_dockerhub_image_info(client, image) or {}
     except Exception:
         return {}

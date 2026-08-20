@@ -12,6 +12,7 @@ from api.utils.error_handler import (
     unhandled_exception_handler,
     validation_exception_handler,
 )
+from api.utils.security import limiter
 
 # Import ALL routers (Fixed 'settings' -> 'app_settings')
 from api.routers import (
@@ -21,6 +22,9 @@ from api.routers import (
 )
 from api.db.database import engine, Base
 from api.settings import get_settings
+
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
 
 
 @asynccontextmanager
@@ -36,6 +40,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)
+app.state.limiter = limiter
+app.state.limiter.default_limits = ["100/minute"]
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- GLOBAL ERROR HANDLING ---
 # Unexpected exceptions are logged server-side with a trace id and returned

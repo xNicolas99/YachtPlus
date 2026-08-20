@@ -51,6 +51,19 @@ def validate_url(url: str):
     if not hostname:
         raise HTTPException(status_code=400, detail="Invalid URL: Hostname missing.")
 
+    # Reject raw IP literals outright. They bypass DNS-based rebinding
+    # defences and are almost never legitimate for public template feeds.
+    # Environments that need internal template servers should use a hostname
+    # and opt-in to ALLOW_PRIVATE_NETWORK_HOSTS.
+    try:
+        ipaddress.ip_address(hostname)
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid URL: raw IP addresses are not allowed in template URLs.",
+        )
+    except ValueError:
+        pass  # hostname is not an IP literal, continue with DNS validation
+
     # Resolve hostname to IPs. Every failure mode must fail CLOSED — a
     # silently-skipped validation here turns the template fetcher into an
     # SSRF gadget against the host network. We previously only caught

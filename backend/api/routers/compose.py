@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.jwt import get_auth_wrapper
 
@@ -13,6 +13,7 @@ from api.actions.compose import (
 )
 from api.auth.auth import auth_check, check_permission
 from api.utils.auth import get_db
+from api.utils.security import limiter
 from api.db.schemas import compose as schemas
 import api.db.crud.users as users_crud
 
@@ -51,7 +52,9 @@ async def _require_action_permission(action: str, Authorize, db: AsyncSession):
 
 
 @router.get("/")
+@limiter.limit("60/minute")
 async def get_projects(
+    request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
 ):
@@ -81,12 +84,11 @@ async def get_project(
 # POST is the correct verb for state-changing compose actions: the GET
 # variant was CSRF-triggerable via <img src=...> / link click (SameSite=lax
 # sends cookies on top-level GET navigation) and could be prefetched or
-# cached by intermediaries — `.../actions/delete` as a GET is a stack-wipe
-# waiting to happen. The GET alias is retained for one release so existing
-# clients keep working — remove once they're migrated.
+# cached by intermediaries. Only POST is accepted now.
 @router.post("/{project_name}/actions/{action}")
-@router.get("/{project_name}/actions/{action}", deprecated=True)
+@limiter.limit("30/minute")
 async def compose_project_action(
+    request: Request,
     project_name,
     action,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -103,7 +105,9 @@ async def compose_project_action(
 
 
 @router.post("/{project_name}/edit", response_model=schemas.ComposeRead)
+@limiter.limit("30/minute")
 async def write_compose_project(
+    request: Request,
     project_name,
     compose: schemas.ComposeWrite,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -117,8 +121,9 @@ async def write_compose_project(
 
 
 @router.post("/{project_name}/actions/{action}/{app}")
-@router.get("/{project_name}/actions/{action}/{app}", deprecated=True)
+@limiter.limit("30/minute")
 async def compose_app_action_route(
+    request: Request,
     project_name,
     action,
     app,

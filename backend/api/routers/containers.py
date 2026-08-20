@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDis
 from sse_starlette.sse import EventSourceResponse
 from api.auth.jwt import get_auth_wrapper, get_secret_key
 from api.auth.auth import auth_check, check_permission
+from api.utils.security import limiter
 import api.actions.containers as actions
 import asyncio
 import aiodocker
@@ -61,7 +62,9 @@ ALLOWED_EXEC_SHELLS = frozenset({
 })
 
 @router.get("/stats")
+@limiter.limit("60/minute")
 async def get_all_container_stats(
+    request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     """
@@ -81,10 +84,11 @@ async def get_containers(
     return await actions.get_containers()
 
 @router.get("/{container_id}/logs")
+@limiter.limit("60/minute")
 async def get_container_logs(
     request: Request,
     container_id: str,
-    tail: int = 100,
+    tail: int = Query(100, ge=0, le=10000),
     follow: bool = True,
     timestamps: bool = False,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
@@ -102,31 +106,38 @@ async def get_container_logs(
 @router.get("/{container_id}/stats")
 async def get_container_stats(
     container_id: str,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Returns current CPU/RAM usage
     """
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await actions.get_stats(container_id)
 
 @router.get("/{container_id}/stats/stream")
 async def stream_container_stats(
     request: Request,
     container_id: str,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
     """Echtzeit-Stream für CPU/RAM Metriken via SSE"""
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return EventSourceResponse(actions.stream_stats_generator(request, container_id))
 
 @router.post("/{container_id}/start")
+@limiter.limit("30/minute")
 async def start_container(
+    request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     user = await Authorize.get_jwt_subject()
 
     # Perform action
@@ -151,12 +162,15 @@ async def start_container(
         await docker.close()
 
 @router.post("/{container_id}/stop")
+@limiter.limit("30/minute")
 async def stop_container(
+    request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     await auth_check(Authorize)
+    await check_permission("perm_stop", Authorize, db)
     user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
@@ -176,12 +190,15 @@ async def stop_container(
         await docker.close()
 
 @router.post("/{container_id}/restart")
+@limiter.limit("30/minute")
 async def restart_container(
+    request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     await auth_check(Authorize)
+    await check_permission("perm_restart", Authorize, db)
     user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
@@ -201,12 +218,15 @@ async def restart_container(
         await docker.close()
 
 @router.delete("/{container_id}")
+@limiter.limit("30/minute")
 async def delete_container(
+    request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
     await auth_check(Authorize)
+    await check_permission("perm_delete", Authorize, db)
     container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 

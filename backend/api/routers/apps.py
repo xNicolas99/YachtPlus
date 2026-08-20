@@ -28,16 +28,16 @@ _DEPLOY_NAME_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
 # would let a perm_start user attach their workload into another tenant's
 # network namespace by name.
 _DEPLOY_NETWORK_MODES = {"bridge", "host", "none", "default"}
-# Capabilities considered dangerous-by-default. perm_start is not the same
-# as root-on-host, so reject these and force the operator to add caps via
-# a host-side change instead of through a deploy form.
-_DEPLOY_FORBIDDEN_CAPS = {
-    "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO", "SYS_BOOT",
-    "MAC_ADMIN", "MAC_OVERRIDE", "ALL",
+# Capabilities that are permitted through the deploy form. Keep this an
+# explicit whitelist: Docker adds new capabilities over time, and a
+# blacklist will always lag behind.
+_DEPLOY_ALLOWED_CAPS = {
+    "CHOWN", "DAC_OVERRIDE", "FSETID", "FOWNER", "KILL", "SETGID",
+    "SETUID", "SETPCAP", "NET_BIND_SERVICE", "SYS_CHROOT", "AUDIT_WRITE",
 }
 
 
-def _validate_deploy_template(template: "schemas.DeployForm") -> None:
+def _validate_deploy_template(template: "schemas.DeployForm") -> None:  # type: ignore[name-defined]
     """Defense-in-depth checks on the DeployForm before we hand it to the
     docker daemon. Pydantic only checks types — these are the
     semantic-validity rules. Failures map to 422 so the frontend can
@@ -62,10 +62,34 @@ def _validate_deploy_template(template: "schemas.DeployForm") -> None:
             # user jump into another tenant's netns; disallowed here.
             raise HTTPException(status_code=422, detail="Unsupported network_mode")
 
+    if template.command:
+        for i, part in enumerate(template.command):
+            if not isinstance(part, str) or not part.strip():
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"command[{i}] must be a non-empty string",
+                )
+        cmd = [p.strip() for p in template.command]
+        # Reject shell-style options that make the command field a remote
+        # code execution channel. Only plain executable + arguments are
+        # allowed; `-c` / `-e` / `--eval` and similar must be configured
+        # in the image, not through the deploy form.
+        if len(cmd) >= 2 and cmd[0] in ("sh", "bash", "ash", "zsh", "/bin/sh", "/bin/bash", "/bin/ash", "/bin/zsh"):
+            if cmd[1] in ("-c", "--command"):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Shell command execution is not permitted through the deploy form",
+                )
+        if any(ch in ";|&`$()" for part in cmd for ch in part):
+            raise HTTPException(
+                status_code=422,
+                detail="command contains disallowed shell metacharacters",
+            )
+
     if template.cap_add:
         for cap in template.cap_add:
             cap_name = (cap or "").strip().upper().removeprefix("CAP_")
-            if cap_name in _DEPLOY_FORBIDDEN_CAPS:
+            if cap_name not in _DEPLOY_ALLOWED_CAPS:
                 raise HTTPException(
                     status_code=422,
                     detail=f"Capability {cap_name} not permitted via deploy form",

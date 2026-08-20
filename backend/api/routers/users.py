@@ -13,20 +13,16 @@ from api.settings import Settings
 from api.db.crud import users as crud
 from api.db.models import users as models
 from api.db.schemas import users as schemas
-from api.utils.security import check_ip_restriction, record_login_attempt
+from api.utils.security import check_ip_restriction, record_login_attempt, limiter
 from api.utils.crypto import decrypt
 import pyotp
-from slowapi import Limiter
-from api.utils.security import rate_limit_key
 
 router = APIRouter()
 settings = Settings()
 logger = logging.getLogger(__name__)
 
-# Initialize limiter (ensure it matches the one in main.py).
-# key_func uses our own TRUSTED_PROXIES-aware resolver so the rate limit
-# applies per real client, not per nginx loopback peer.
-limiter = Limiter(key_func=rate_limit_key)
+# Shared limiter from api.utils.security (TRUSTED_PROXIES-aware resolver,
+# common state). key_func applies per real client, not per nginx loopback peer.
 
 # Used to keep login response time roughly constant when the supplied username
 # is unknown. bcrypt.checkpw still runs against this fixed digest, so an

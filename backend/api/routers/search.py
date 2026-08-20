@@ -4,8 +4,7 @@ from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.utils.auth import get_db
-from slowapi import Limiter
-from api.utils.security import rate_limit_key
+from api.utils.security import limiter
 
 import api.utils.registries as registries
 from api.db.crud.templates import match_templates
@@ -17,8 +16,8 @@ router = APIRouter()
 # Each search round-trips out to the DockerHub registry; without a rate
 # limit a hostile (or just buggy) client could turn this endpoint into a
 # free amplification proxy against the upstream registry, getting both
-# the YachtPlus instance and its host IP throttled.
-limiter = Limiter(key_func=rate_limit_key)
+# the YachtPlus instance and its host IP throttled. Uses the shared
+# limiter from api.utils.security (proxy-aware client IP, common state).
 
 # Caps for the unified search:
 #  - q max 128 chars: prevents huge LIKE patterns that pin the DB on a

@@ -14,6 +14,7 @@ from api.settings import Settings
 logger = logging.getLogger(__name__)
 _settings = Settings()
 
+
 def is_private_ip(ip: str) -> bool:
     # The literal here is the unspecified-address sentinel, NOT a bind
     # target — we treat it as private/unsafe so the SSRF guard refuses
@@ -146,6 +147,14 @@ def _resolve_client_ip(request: Request) -> str:
         if not is_private_ip(ip):
             return ip
     return ips[-1]
+
+
+# Shared slowapi instance, created after key_func is defined so the
+# forward reference resolves correctly. Routers import this from
+# api.utils.security instead of creating their own Limiter objects so
+# every endpoint uses the same in-memory state and key resolution.
+from slowapi import Limiter
+limiter = Limiter(key_func=rate_limit_key)
 
 
 async def _count_recent_failed_attempts(db: AsyncSession, client_ip: str, minutes: int = 15) -> int:
