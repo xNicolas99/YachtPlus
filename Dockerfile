@@ -51,14 +51,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker Compose 2.x as a standalone binary and as Docker CLI plugin.
-# The backend intentionally calls `docker compose` (plugin form). We also
-# keep the `docker-compose` symlink for any external scripts/tools.
-RUN mkdir -p /usr/local/lib/docker/cli-plugins && \
-    curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose && \
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose && \
-    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose && \
-    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker
+# Install the Docker CLI and the Compose v2 plugin. The backend calls
+# `docker compose` (plugin form), which requires the real Docker CLI plus the
+# plugin in /usr/local/lib/docker/cli-plugins. The previous build symlinked
+# `/usr/local/bin/docker` directly to the Compose binary, causing
+# `unknown docker command: "compose compose"`.
+# Architecture: download.docker.com only publishes static docker tgz for
+# x86_64 and aarch64 under the generic path used below. For other architectures
+# the build would need an alternative Docker CLI source.
+ARG TARGETARCH
+ARG DOCKER_VERSION=27.1.2
+ARG COMPOSE_VERSION=2.29.1
+RUN set -eux; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    case "${TARGETARCH}" in \
+        amd64)  docker_arch=x86_64 ;; \
+        arm64)  docker_arch=aarch64 ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+        "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz" \
+        -o /tmp/docker.tgz && \
+    tar -xzf /tmp/docker.tgz -C /tmp && \
+    mv /tmp/docker/docker /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker && \
+    rm -rf /tmp/docker /tmp/docker.tgz && \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+        "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${docker_arch}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-compose && \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Upgrade pip, setuptools, and wheel
 RUN pip3 install --upgrade pip setuptools wheel

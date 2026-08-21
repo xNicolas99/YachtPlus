@@ -25,7 +25,7 @@ async def get_user(db: AsyncSession, user_id: int):
 async def get_user_by_name(db: AsyncSession, username: str):
     if not username:
         return None
-    canonical = _normalize_username(username)
+    canonical = normalize_username(username)
     result = await db.execute(select(models.User).filter(models.User.username == canonical))
     return result.scalars().first()
 
@@ -33,13 +33,13 @@ async def get_users(db: AsyncSession, skip: int = 0, limit: int = 100):
     result = await db.execute(select(models.User).offset(skip).limit(limit))
     return result.scalars().all()
 
-def _normalize_username(username: str) -> str:
+def normalize_username(username: str) -> str:
     if username is None:
         return ""
     return username.strip().casefold()
 
 async def _username_is_taken(db: AsyncSession, username: str, excluding_id: int = None) -> bool:
-    canonical = _normalize_username(username)
+    canonical = normalize_username(username)
     q = select(models.User).filter(func.lower(models.User.username) == canonical)
     if excluding_id is not None:
         q = q.filter(models.User.id != excluding_id)
@@ -48,7 +48,7 @@ async def _username_is_taken(db: AsyncSession, username: str, excluding_id: int 
 
 async def create_user(db: AsyncSession, user: schemas.UserCreate):
     _hashed_password = await get_password_hash(user.password)
-    canonical_username = _normalize_username(user.username)
+    canonical_username = normalize_username(user.username)
 
     if await _username_is_taken(db, canonical_username):
         raise HTTPException(status_code=409, detail="Username already in use.")
@@ -78,7 +78,7 @@ async def update_user(db: AsyncSession, user: schemas.UserUpdate, current_user: 
         raise HTTPException(status_code=403, detail="User account is disabled.")
 
     if user.username:
-        canonical_username = _normalize_username(user.username)
+        canonical_username = normalize_username(user.username)
         if await _username_is_taken(db, canonical_username, excluding_id=_user.id):
             raise HTTPException(status_code=409, detail="Username already in use.")
         _user.username = canonical_username
@@ -107,7 +107,7 @@ async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas
         raise HTTPException(status_code=404, detail="User not found")
 
     if user_update.username:
-        canonical_username = _normalize_username(user_update.username)
+        canonical_username = normalize_username(user_update.username)
         if await _username_is_taken(db, canonical_username, excluding_id=db_user.id):
             raise HTTPException(status_code=409, detail="Username already in use.")
         db_user.username = canonical_username

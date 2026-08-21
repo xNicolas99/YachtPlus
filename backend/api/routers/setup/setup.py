@@ -1,7 +1,6 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
-from slowapi import Limiter
-from api.utils.security import rate_limit_key
+from api.utils.security import rate_limit_key, limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
@@ -31,7 +30,6 @@ router = APIRouter()
 # admin) so without a rate limit it doubles as a CPU exhaust vector via
 # bcrypt — each call invokes the work-factor-12 hash. Cap at a value
 # that's still comfortable for a real install over a flaky connection.
-limiter = Limiter(key_func=rate_limit_key)
 
 # Whitelist the directories the setup flag file is allowed to live under.
 # /config is the production volume mount; $cwd covers dev installs and the

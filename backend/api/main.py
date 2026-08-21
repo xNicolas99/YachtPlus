@@ -88,7 +88,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)
 app.state.limiter = limiter
-app.state.limiter.default_limits = ["100/minute"]
+
+from slowapi.middleware import SlowAPIMiddleware
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- GLOBAL ERROR HANDLING ---

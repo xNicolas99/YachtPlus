@@ -154,7 +154,11 @@ def _resolve_client_ip(request: Request) -> str:
 # api.utils.security instead of creating their own Limiter objects so
 # every endpoint uses the same in-memory state and key resolution.
 from slowapi import Limiter
-limiter = Limiter(key_func=rate_limit_key)
+limiter = Limiter(
+    key_func=rate_limit_key,
+    default_limits=["100/minute"],
+    headers_enabled=True,
+)
 
 
 async def _count_recent_failed_attempts(db: AsyncSession, client_ip: str, minutes: int = 15) -> int:

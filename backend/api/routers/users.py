@@ -6,7 +6,7 @@ from typing import List, Optional
 import logging
 import asyncio
 
-from api.db.crud.users import verify_password
+from api.db.crud.users import verify_password, normalize_username
 from api.utils.auth import get_db
 from api.auth.auth import auth_check
 from api.settings import Settings
@@ -32,6 +32,68 @@ logger = logging.getLogger(__name__)
 # nosem: generic.secrets.security.detected-generic-secret.detected-generic-secret
 # nosec: B105
 _TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
+
+
+async def _authenticate_user(
+    db: AsyncSession,
+    request: Request,
+    user_data: schemas.UserLogin,
+) -> models.User:
+    """Shared credential + 2FA verification for login and login_cookie.
+
+    Returns the active, authenticated user. Raises HTTPException on any
+    failure. Records every attempt via record_login_attempt.
+    """
+    if not user_data.username:
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+    username = crud.normalize_username(user_data.username)
+    if not username:
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+    client_ip = await check_ip_restriction(request, db, username)
+
+    _user = await crud.get_user_by_name(db=db, username=username)
+
+    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
+    is_valid_password = await crud.verify_password(user_data.password, hash_to_verify)
+
+    if _user is None or not is_valid_password:
+        await record_login_attempt(db, client_ip, username, False)
+        logger.warning("Login failed for IP: %s - Reason: Invalid credentials", client_ip)
+        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+    if not _user.is_active:
+        await record_login_attempt(db, client_ip, username, False)
+        logger.warning("Login failed for IP: %s - Reason: User is inactive", client_ip)
+        raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
+
+    if _user.is_2fa_enabled:
+        if not user_data.otp_token:
+            # Caller must return the 2fa_required response; we just verify
+            # the user exists and password is correct.
+            return _user
+
+        try:
+            secret = decrypt(_user.otp_secret)
+            totp = pyotp.TOTP(secret)
+            code_ok = totp.verify(user_data.otp_token)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("2FA Verify Error: %s", e)
+            await record_login_attempt(db, client_ip, username, False)
+            logger.warning("Login failed for IP: %s - Reason: 2FA Error", client_ip)
+            raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+        if not code_ok:
+            await record_login_attempt(db, client_ip, username, False)
+            logger.warning("Login failed for IP: %s - Reason: Invalid 2FA code", client_ip)
+            raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+    await record_login_attempt(db, client_ip, username, True)
+    return _user
+
 
 # Add list users endpoint for admin
 @router.get("/users", response_model=List[schemas.User])
@@ -138,75 +200,20 @@ async def login(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    # Security Check
-    if not user_data.username:
-        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+    _user = await _authenticate_user(db, request, user_data)
 
-    client_ip = await check_ip_restriction(request, db, user_data.username)
-
-    # Defensive check for casefold
-    username_query = user_data.username
-    if hasattr(username_query, 'casefold'):
-        username_query = username_query.casefold()
-
-    result = await db.execute(
-        select(models.User).filter(models.User.username == username_query)
-    )
-    _user = result.scalars().first()
-
-    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
-    is_valid_password = await crud.verify_password(user_data.password, hash_to_verify)
-
-    if _user is not None and is_valid_password:
-        if not _user.is_active:
-            await record_login_attempt(db, client_ip, user_data.username, False)
-            logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
-            raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
-
-        # Check 2FA
-        if _user.is_2fa_enabled:
-            if not user_data.otp_token:
-                return {
-                    "login": "2fa_required",
-                    "username": _user.username
-                }
-            else:
-                # The previous implementation wrapped totp.verify() in a
-                # broad `except Exception` that ALSO caught the legitimate
-                # HTTPException(400) raised on a bad code — collapsing two
-                # distinct failure modes into one ambiguous handler and
-                # making it impossible to tell wrong-code from
-                # crypto-corruption in production. Re-raise HTTPException
-                # cleanly and only swallow real decrypt/parse errors.
-                try:
-                    secret = decrypt(_user.otp_secret)
-                    totp = pyotp.TOTP(secret)
-                    code_ok = totp.verify(user_data.otp_token)
-                except HTTPException:
-                    raise
-                except Exception as e:
-                    logger.error(f"2FA Verify Error: {e}")
-                    await record_login_attempt(db, client_ip, user_data.username, False)
-                    logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
-                    raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
-                if not code_ok:
-                    await record_login_attempt(db, client_ip, user_data.username, False)
-                    logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                    raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
-
-        # Success
-        await record_login_attempt(db, client_ip, user_data.username, True)
-        access_token = create_access_token(data={"sub": _user.username})
-
+    if _user.is_2fa_enabled and not user_data.otp_token:
         return {
-            "login": "successful",
+            "login": "2fa_required",
             "username": _user.username,
-            "access_token": access_token,
         }
-    else:
-        await record_login_attempt(db, client_ip, user_data.username, False)
-        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
-        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+
+    access_token = create_access_token(data={"sub": _user.username})
+    return {
+        "login": "successful",
+        "username": _user.username,
+        "access_token": access_token,
+    }
 
 @router.post("/login_cookie")
 @limiter.limit("5/minute")
@@ -217,65 +224,20 @@ async def login_cookie(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    # Security Check
-    if not user_data.username:
-        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+    _user = await _authenticate_user(db, request, user_data)
 
-    client_ip = await check_ip_restriction(request, db, user_data.username)
+    if _user.is_2fa_enabled and not user_data.otp_token:
+        return {"login": "2fa_required", "username": _user.username}
 
-    # Defensive check for casefold
-    username_query = user_data.username
-    if hasattr(username_query, 'casefold'):
-        username_query = username_query.casefold()
-
-    result = await db.execute(
-        select(models.User).filter(models.User.username == username_query)
-    )
-    _user = result.scalars().first()
-
-    hash_to_verify = _user.hashed_password if _user else _TIMING_DUMMY_BCRYPT_HASH
-    is_valid_password = await crud.verify_password(user_data.password, hash_to_verify)
-
-    if _user is not None and is_valid_password:
-        if not _user.is_active:
-            await record_login_attempt(db, client_ip, user_data.username, False)
-            logger.warning(f"Login failed for IP: {client_ip} - Reason: User is inactive")
-            raise HTTPException(status_code=400, detail="User account is inactive. Setup may be incomplete.")
-
-        if _user.is_2fa_enabled:
-             if not user_data.otp_token:
-                return {"login": "2fa_required", "username": _user.username}
-
-             try:
-                 secret = decrypt(_user.otp_secret)
-                 totp = pyotp.TOTP(secret)
-                 code_ok = totp.verify(user_data.otp_token)
-             except HTTPException:
-                 raise
-             except Exception as e:
-                 logger.error(f"2FA Verify Error: {e}")
-                 await record_login_attempt(db, client_ip, user_data.username, False)
-                 logger.warning(f"Login failed for IP: {client_ip} - Reason: 2FA Error")
-                 raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
-             if not code_ok:
-                 await record_login_attempt(db, client_ip, user_data.username, False)
-                 logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid 2FA code")
-                 raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
-
-        await record_login_attempt(db, client_ip, user_data.username, True)
-        access_token = create_access_token(data={"sub": _user.username})
-        Authorize.set_access_cookies(access_token, response)
-        # Token lives only in the HttpOnly cookie. Echoing it in the body
-        # would defeat the cookie strategy by making the JWT reachable to
-        # any DOM XSS via response.data.access_token.
-        return {
-            "login": "successful",
-            "username": _user.username,
-        }
-    else:
-        await record_login_attempt(db, client_ip, user_data.username, False)
-        logger.warning(f"Login failed for IP: {client_ip} - Reason: Invalid credentials")
-        raise HTTPException(status_code=400, detail="Validation error: required field(s) missing or invalid")
+    access_token = create_access_token(data={"sub": _user.username})
+    Authorize.set_access_cookies(access_token, response)
+    # Token lives only in the HttpOnly cookie. Echoing it in the body
+    # would defeat the cookie strategy by making the JWT reachable to
+    # any DOM XSS via response.data.access_token.
+    return {
+        "login": "successful",
+        "username": _user.username,
+    }
 
 
 @router.post("/refresh")
