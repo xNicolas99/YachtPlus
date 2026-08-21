@@ -80,6 +80,6 @@ def get_logo_file(path):
     for file in os.listdir(path):
         full = os.path.join(path, file)
         if file.lower() == "logo.png" and os.path.isfile(full):
-            with open(full) as f:
+            with open(full, "rb") as f:
                 return f.read()
     return None

@@ -358,8 +358,7 @@ async def delete_api_key(
 @router.get("/me", response_model=schemas.User)
 async def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     await auth_check(Authorize)
-    auth_setting = str(settings.DISABLE_AUTH)
-    if auth_setting.lower() == "true":
+    if settings.DISABLE_AUTH:
         # Previous code mutated the schemas.User CLASS object directly,
         # which AttributeErrors on Pydantic v2 model classes and bleeds
         # state across requests. Construct a real instance instead.
@@ -393,7 +392,7 @@ async def update_user(
     return await crud.update_user(db=db, user=user, current_user=current_user)
 
 
-@router.get("/logout")
+@router.post("/logout")
 async def logout(
     request: Request,
     response: Response,
@@ -413,7 +412,7 @@ async def logout(
     return {"msg": "Logout Successful"}
 
 
-@router.get("/logout/refresh")
+@router.post("/logout/refresh")
 async def logout_refresh(
     request: Request,
     response: Response,

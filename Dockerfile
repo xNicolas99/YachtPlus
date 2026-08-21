@@ -48,12 +48,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     procps \
     gosu \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker Compose 2.x as a standalone binary
-# Using v2.29.1
-RUN curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
-    chmod +x /usr/local/bin/docker-compose
+# Install Docker Compose 2.x as a standalone binary and as Docker CLI plugin.
+# The backend intentionally calls `docker compose` (plugin form). We also
+# keep the `docker-compose` symlink for any external scripts/tools.
+RUN mkdir -p /usr/local/lib/docker/cli-plugins && \
+    curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose && \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose && \
+    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose && \
+    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker
 
 # Upgrade pip, setuptools, and wheel
 RUN pip3 install --upgrade pip setuptools wheel

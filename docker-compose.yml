@@ -44,6 +44,10 @@ services:
     depends_on:
       - dockerproxy
     restart: unless-stopped
+    volumes:
+      # Persist SQLite DB, SECRET_KEY, Fernet salt and setup flag across
+      # container recreation.
+      - yacht_config:/config
     # YachtPlus itself does not need any host capability beyond the ones
     # the runtime asks for explicitly. start.sh chmods /config + bind-mounts
     # so the FS isn't read-only, but no-new-privileges + dropping the full
@@ -60,3 +64,7 @@ services:
       - NET_BIND_SERVICE  # nginx listens on 8080
     mem_limit: 1g
     pids_limit: 200
+
+volumes:
+  yacht_config:
+    driver: local

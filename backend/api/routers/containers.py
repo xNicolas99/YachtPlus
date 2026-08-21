@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query, HTTPException
 from sse_starlette.sse import EventSourceResponse
-from api.auth.jwt import get_auth_wrapper, get_secret_key
+from api.auth.jwt import get_auth_wrapper, get_secret_key, revoke_token, get_current_user_token
 from api.auth.auth import auth_check, check_permission
 from api.utils.security import limiter
 import api.actions.containers as actions
@@ -17,8 +17,8 @@ from sqlalchemy import select
 from api.utils.auth import get_db
 from api.db.database import SessionLocal
 from api.db.models.users import User
+from api.db.models.settings import TokenBlacklist
 from api.utils.audit import log_activity
-import asyncio
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -38,95 +38,37 @@ router = APIRouter()
 # `{container_id}` placeholder into the aiodocker client.
 import re as _re
 _CONTAINER_ID_RE = _re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$")
+ALLOWED_EXEC_SHELLS = {
+    "/bin/bash",
+    "/bin/sh",
+    "/bin/ash",
+    "/bin/zsh",
+    "/usr/bin/bash",
+    "/usr/bin/sh",
+    "/usr/bin/ash",
+    "/usr/bin/zsh",
+}
 
+
+# --- Helpers ---
 
 def _validate_container_id(container_id: str) -> str:
-    if not isinstance(container_id, str) or not _CONTAINER_ID_RE.match(container_id):
-        raise HTTPException(status_code=400, detail="Invalid container id")
+    if not container_id or not _CONTAINER_ID_RE.match(container_id):
+        raise HTTPException(status_code=400, detail="Invalid container identifier")
     return container_id
 
 
-ALLOWED_EXEC_SHELLS = frozenset({
-    "/bin/sh",
-    "/bin/bash",
-    "/bin/ash",
-    "/bin/zsh",
-    "/usr/bin/sh",
-    "/usr/bin/bash",
-    "/usr/bin/ash",
-    "/usr/bin/zsh",
-    "sh",
-    "bash",
-    "ash",
-    "zsh",
-})
-
-@router.get("/stats")
-@limiter.limit("60/minute")
-async def get_all_container_stats(
-    request: Request,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    """
-    Get stats for all running containers (Optimized & Cached)
-    """
-    await auth_check(Authorize)
-    return await actions.get_all_stats()
-
 @router.get("/")
-async def get_containers(
+@limiter.limit("60/minute")
+async def list_containers(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    """
-    List all containers
-    """
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await actions.get_containers()
 
-@router.get("/{container_id}/logs")
-@limiter.limit("60/minute")
-async def get_container_logs(
-    request: Request,
-    container_id: str,
-    tail: int = Query(100, ge=0, le=10000),
-    follow: bool = True,
-    timestamps: bool = False,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Streams container logs using Docker API
-    """
-    await auth_check(Authorize)
-    await check_permission("perm_start", Authorize, db)
-    return EventSourceResponse(
-        actions.get_logs_generator(container_id, tail, follow, timestamps)
-    )
-
-@router.get("/{container_id}/stats")
-async def get_container_stats(
-    container_id: str,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Returns current CPU/RAM usage
-    """
-    await auth_check(Authorize)
-    await check_permission("perm_start", Authorize, db)
-    return await actions.get_stats(container_id)
-
-@router.get("/{container_id}/stats/stream")
-async def stream_container_stats(
-    request: Request,
-    container_id: str,
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
-    db: AsyncSession = Depends(get_db),
-):
-    """Echtzeit-Stream für CPU/RAM Metriken via SSE"""
-    await auth_check(Authorize)
-    await check_permission("perm_start", Authorize, db)
-    return EventSourceResponse(actions.stream_stats_generator(request, container_id))
 
 @router.post("/{container_id}/start")
 @limiter.limit("30/minute")
@@ -145,7 +87,7 @@ async def start_container(
     try:
         container = await docker.containers.get(container_id)
         await container.start()
-        await asyncio.to_thread(log_activity, db, user, "start", container_id)
+        await log_activity(db, user, "start", container_id)
         return {"message": "Container started"}
     except DockerError as e:
         # Map docker daemon errors to their proper HTTP status (404 for
@@ -160,6 +102,7 @@ async def start_container(
         raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
+
 
 @router.post("/{container_id}/stop")
 @limiter.limit("30/minute")
@@ -177,7 +120,7 @@ async def stop_container(
     try:
         container = await docker.containers.get(container_id)
         await container.stop()
-        await asyncio.to_thread(log_activity, db, user, "stop", container_id)
+        await log_activity(db, user, "stop", container_id)
         return {"message": "Container stopped"}
     except DockerError as e:
         logger.error("Error stopping container %s: %s", container_id, e)
@@ -188,6 +131,7 @@ async def stop_container(
         raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
+
 
 @router.post("/{container_id}/restart")
 @limiter.limit("30/minute")
@@ -205,7 +149,7 @@ async def restart_container(
     try:
         container = await docker.containers.get(container_id)
         await container.restart()
-        await asyncio.to_thread(log_activity, db, user, "restart", container_id)
+        await log_activity(db, user, "restart", container_id)
         return {"message": "Container restarted"}
     except DockerError as e:
         logger.error("Error restarting container %s: %s", container_id, e)
@@ -216,6 +160,7 @@ async def restart_container(
         raise HTTPException(status_code=500, detail="Internal error")
     finally:
         await docker.close()
+
 
 @router.delete("/{container_id}")
 @limiter.limit("30/minute")
@@ -234,7 +179,7 @@ async def delete_container(
     try:
         container = await docker.containers.get(container_id)
         await container.delete(force=True)
-        await asyncio.to_thread(log_activity, db, user, "delete", container_id)
+        await log_activity(db, user, "delete", container_id)
         return {"message": "Container deleted"}
     except DockerError as e:
         # 404 for "no such container" is the right answer — the previous
@@ -252,52 +197,103 @@ async def delete_container(
     finally:
         await docker.close()
 
+
+@router.get("/{container_id}/logs")
+@limiter.limit("60/minute")
+async def get_container_logs(
+    request: Request,
+    container_id: str,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
+    container_id = _validate_container_id(container_id)
+    follow = request.query_params.get("follow", "false").lower() == "true"
+    tail = request.query_params.get("tail", "all")
+    since = request.query_params.get("since", None)
+
+    if follow:
+        return EventSourceResponse(
+            actions.stream_logs_generator(request, container_id),
+            media_type="text/event-stream",
+        )
+
+    return await actions.get_logs(container_id, tail=tail, since=since)
+
+
+@router.get("/{container_id}/stats")
+@limiter.limit("60/minute")
+async def get_container_stats(
+    request: Request,
+    container_id: str,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
+    container_id = _validate_container_id(container_id)
+    stream = request.query_params.get("stream", "false").lower() == "true"
+
+    if stream:
+        return EventSourceResponse(
+            actions.stream_stats_generator(request, container_id),
+            media_type="text/event-stream",
+        )
+
+    return await actions.get_stats(container_id)
+
+
 @router.websocket("/{container_id}/exec")
-async def container_exec(
+async def container_exec_websocket(
     websocket: WebSocket,
     container_id: str,
-    shell: str = Query("/bin/sh"),
-    cols: int = Query(80),
-    rows: int = Query(24)
+    shell: str = Query(default="/bin/bash"),
 ):
-    """
-    WebSocket endpoint for container exec (terminal)
-    """
     await websocket.accept()
+    container_id = _validate_container_id(container_id)
 
-    # Validate the shell argument before doing anything else. The whitelist
-    # blocks ?shell=/bin/sh -c 'rm -rf /' style smuggling where shlex.split
-    # would happily turn the parameter into a multi-token command.
+    # Whitelist the requested shell before doing any auth work, so token
+    # probing attempts get no signal from the docker daemon.
+    # shlex.split is safe here because we have already constrained `shell`
+    # to a single path token from the allowlist; an attacker who tried to
+    # smuggle spaces or options would first fail this membership check.
     if shell.strip() not in ALLOWED_EXEC_SHELLS:
         logger.warning("WebSocket exec rejected: disallowed shell %r", shell)
         await websocket.send_json({"error": "Forbidden: shell not allowed"})
         await websocket.close(code=1008)
         return
 
-    # Check Auth + AuthZ
-    # The previous implementation only verified the JWT signature; any valid
-    # token — including a short-lived setup_pending token — granted shell access
-    # to any container. Validate the claim set and the user's runtime
-    # permissions before opening a stream.
-    if settings.DISABLE_AUTH:
-        pass  # local/dev mode: skip all auth checks
-    else:
+    token = None
+    if hasattr(websocket, "cookies") and websocket.cookies:
+        token = websocket.cookies.get("access_token_cookie")
+    if not token and hasattr(websocket, "headers"):
+        auth_header = websocket.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+
+    # In dev mode we still want a deterministic audit identity. Use a
+    # synthetic username so the audit log remains usable.
+    username = "dev"
+
+    if not settings.DISABLE_AUTH:
+        if not token:
+            logger.warning("WebSocket exec rejected: no token")
+            await websocket.send_json({"error": "Unauthorized"})
+            await websocket.close(code=1008)
+            return
+
         try:
-            token = websocket.cookies.get("access_token_cookie")
-            if not token:
-                raise Exception("No token")
             claims = jwt.decode(token, get_secret_key(), algorithms=["HS256"])
         except Exception as e:
-            logger.error(f"WebSocket Auth Error: {e}")
+            logger.error("WebSocket Auth Error: %s", e)
             await websocket.send_json({"error": "Unauthorized"})
             await websocket.close(code=1008)
             return
 
         if claims.get("setup_pending"):
-            # %r so any newlines/CR/escape sequences in a hostile `sub`
-            # claim get quoted instead of fragmenting the log line (log
-            # injection / forging fake entries against a downstream
-            # log aggregator).
             logger.warning(
                 "WebSocket exec rejected: setup_pending token for user %r",
                 claims.get("sub"),
@@ -305,6 +301,23 @@ async def container_exec(
             await websocket.send_json({"error": "Forbidden: setup not completed"})
             await websocket.close(code=1008)
             return
+
+        # Hard-revocation check: if the token's jti is in the blacklist,
+        # the token has been logged out / revoked and must not open a shell.
+        jti = claims.get("jti")
+        if jti:
+            auth_db = SessionLocal()
+            try:
+                result = await auth_db.execute(
+                    select(TokenBlacklist).filter(TokenBlacklist.jti == jti)
+                )
+                if result.scalars().first() is not None:
+                    logger.warning("WebSocket exec rejected: revoked token (jti=%r)", jti)
+                    await websocket.send_json({"error": "Unauthorized: token revoked"})
+                    await websocket.close(code=1008)
+                    return
+            finally:
+                await auth_db.close()
 
         username = claims.get("sub")
         if not username:
@@ -337,7 +350,7 @@ async def container_exec(
     # Audit log the session initiation (not the terminal contents).
     audit_db = SessionLocal()
     try:
-        await asyncio.to_thread(log_activity, audit_db, username, "container_exec", container_id, f"shell={shell}")
+        await log_activity(audit_db, username, "container_exec", container_id, f"shell={shell}")
     except Exception as exc:
         logger.error("Failed to write exec audit log: %s", exc)
     finally:
@@ -358,117 +371,65 @@ async def container_exec(
             return
 
         exec_instance = await container.exec(
-            cmd=shlex.split(shell),
-            stdin=True,
-            stdout=True,
-            stderr=True,
-            privileged=False,
-            tty=True,
-            environment=["TERM=xterm"]
+            {
+                "AttachStdin": True,
+                "AttachStdout": True,
+                "AttachStderr": True,
+                "Tty": True,
+                "Cmd": [shell.strip(), "-i", "-l"],
+            }
         )
+        exec_id = exec_instance.get("Id")
+        if not exec_id:
+            logger.error("No exec ID returned")
+            await websocket.close(code=1011, reason="Failed to create exec instance")
+            return
 
-        # Now start it. We need a stream.
-        stream = exec_instance.start(detach=False)
+        stream = await exec_instance.start(detach=False, Tty=True, stdin=True)
 
-        if stream is None:
-             raise Exception("Failed to start exec stream")
-
-        # We need to handle resizing.
-        # Run resize in background to avoid blocking initial connection
-        async def resize_exec():
+        async def docker_to_ws():
             try:
-                await exec_instance.resize(w=cols, h=rows)
+                async for msg in stream:
+                    if isinstance(msg, bytes):
+                        await websocket.send_bytes(msg)
+                    else:
+                        await websocket.send_text(str(msg))
             except Exception as e:
-                logger.error(f"Resize error: {e}")
+                logger.error(f"Docker to WS error: {e}")
 
-        asyncio.create_task(resize_exec())
-
-        # Task to read from docker and send to websocket
-        async def read_from_docker():
-            try:
-                # stream.read_out() yields data
-                while True:
-                    msg = await stream.read_out()
-                    if msg is None:
-                        break
-                    # msg is bytes?
-                    # xterm expects string or bytes.
-                    if msg.data:
-                         # Deliberately NOT logging msg.data — raw terminal
-                         # output can include passwords typed at sudo prompts,
-                         # tokens emitted by tools, etc. Semgrep flagged this
-                         # (log-leak rule) and the flag was correct; only the
-                         # frame length is safe to record.
-                         logger.debug("OUT: %d bytes", len(msg.data))
-                         await websocket.send_bytes(msg.data)
-            except Exception as e:
-                logger.error(f"Read from docker error: {e}")
-
-        # Task to read from websocket and write to docker
-        async def write_to_docker():
+        async def ws_to_docker():
             try:
                 while True:
-                    data = await websocket.receive()
-                    # data can be bytes or text.
-
-                    if "text" in data:
-                        input_data = data["text"]
-
-                        try:
-                            cmd = None
-                            if input_data.startswith("{"):
-                                cmd = json.loads(input_data)
-
-                            if cmd and cmd.get("type") == "resize":
-                                await exec_instance.resize(w=cmd["cols"], h=cmd["rows"])
-                                continue
-                        except (json.JSONDecodeError, KeyError, TypeError) as parse_err:
-                            # Not a JSON control frame -> fall through and forward
-                            # the raw bytes to the container's stdin.
-                            logger.debug(f"WS input not a control frame: {parse_err}")
-
-                        # Send to docker. Same reasoning as the OUT path:
-                        # never log the raw user input — it's a live shell,
-                        # so the bytes include passwords / API tokens / etc.
-                        logger.debug("IN: %d bytes", len(input_data))
-                        await stream.write_in(input_data.encode())
-
-                    elif "bytes" in data:
-                        await stream.write_in(data["bytes"])
-
-                    if data.get("type") == "websocket.disconnect":
-                        break
-
+                    data = await websocket.receive_text()
+                    # Respect client-side resize messages without forwarding them to the shell
+                    if data.startswith("__resize__:"):
+                        continue
+                    # Convert CRLF to LF for terminal consistency
+                    data = data.replace("\r\n", "\n").replace("\r", "\n")
+                    await stream.send(data.encode("utf-8"))
             except WebSocketDisconnect:
-                pass
+                logger.info("WebSocket disconnected for container %s", container_id)
             except Exception as e:
-                logger.error(f"Write to docker error: {e}")
+                logger.error(f"WS to Docker error: {e}")
 
-        # Run tasks
-        reader = asyncio.create_task(read_from_docker())
-        writer = asyncio.create_task(write_to_docker())
+        await asyncio.gather(docker_to_ws(), ws_to_docker())
 
-        await asyncio.wait([reader, writer], return_when=asyncio.FIRST_COMPLETED)
-
-        reader.cancel()
-        writer.cancel()
-
-    except aiodocker.exceptions.DockerError:
-        # The previous code echoed the full DockerError message into the
-        # WS close `reason` field, which is visible to any caller. That
-        # leaked internal daemon details (file paths, container ids,
-        # capability names) on every failure. Keep the detail in the
-        # server log and send a generic reason over the wire.
-        logger.exception("Docker exec error for container %s", container_id)
-        await websocket.close(code=1011, reason="Docker error")
-    except Exception:
-        logger.exception("Unexpected error in shell for container %s", container_id)
+    except Exception as e:
+        logger.error(f"WebSocket exec error: {e}")
         try:
             await websocket.close(code=1011, reason="Internal error")
         except Exception:
-            # Socket may already be closed; nothing we can do — but the
-            # stack trace above already captured the real cause.
-            logger.debug("WS close after error failed", exc_info=True)
+            pass
     finally:
-        if docker:
-            await docker.close()
+        if stream and hasattr(stream, "close"):
+            try:
+                await stream.close()
+            except Exception:
+                pass
+        if exec_id:
+            try:
+                exec_obj = docker.executes.object(exec_id)
+                await exec_obj.resize(h=24, w=80)
+            except Exception:
+                pass
+        await docker.close()

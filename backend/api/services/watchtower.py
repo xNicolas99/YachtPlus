@@ -15,6 +15,13 @@ logger = logging.getLogger("yachtplus.watchtower")
 settings = Settings()
 scheduler = BackgroundScheduler()
 
+# Guard to avoid starting the scheduler more than once per process. This is
+# important when running under gunicorn with multiple workers; without the
+# guard each worker would start its own scheduler and run the same update
+# job concurrently.
+_scheduler_started = False
+
+
 def update_compose_project(project_name):
     """
     Pulls images and updates the stack for a given compose project.
@@ -51,12 +58,20 @@ def update_all_projects():
         update_compose_project(project_name)
 
 def start_scheduler():
+    global _scheduler_started
+    if _scheduler_started:
+        logger.debug("Watchtower scheduler already started in this process; skipping.")
+        return
+
     # Schedule update every 24 hours (example)
     # Ideally this should be configurable via DB settings
     scheduler.add_job(update_all_projects, 'interval', hours=24, id='auto_update_all')
     scheduler.start()
+    _scheduler_started = True
     logger.info("Watchtower scheduler started.")
 
 def stop_scheduler():
+    global _scheduler_started
     scheduler.shutdown()
+    _scheduler_started = False
 # updated

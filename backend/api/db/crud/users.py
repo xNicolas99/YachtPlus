@@ -1,5 +1,6 @@
 import bcrypt
 import asyncio
+import hashlib
 import jwt as _pyjwt
 
 from datetime import datetime, timezone, timedelta
@@ -24,7 +25,8 @@ async def get_user(db: AsyncSession, user_id: int):
 async def get_user_by_name(db: AsyncSession, username: str):
     if not username:
         return None
-    result = await db.execute(select(models.User).filter(models.User.username == username.casefold()))
+    canonical = _normalize_username(username)
+    result = await db.execute(select(models.User).filter(models.User.username == canonical))
     return result.scalars().first()
 
 async def get_users(db: AsyncSession, skip: int = 0, limit: int = 100):
@@ -219,13 +221,11 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
     jti = decoded.get("jti")
     expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
 
-    # Hash the bearer token with bcrypt so that a database compromise does
-    # not expose a fast-to-brute-force SHA256 digest of a long-lived key.
-    # bcrypt's 72-byte input limit is applied here; the first 72 bytes of a
-    # JWT already contain the header + a large part of the signed payload, so
-    # the resulting hash remains unique enough for lookup and verification.
-    _key_bytes = api_key.encode("utf-8")[:72]
-    _hashed_key = bcrypt.hashpw(_key_bytes, bcrypt.gensalt(rounds=12)).decode("utf-8")
+    # Hash the key's unique JTI (not the bearer token). The JTI is a
+    # high-entropy UUID embedded in the JWT; hashing it gives a stable,
+    # unique lookup value without bcrypt's 72-byte input limit, which
+    # would otherwise only cover the constant JWT header/payload prefix.
+    _hashed_key = hashlib.sha256(jti.encode("utf-8")).hexdigest()
 
     db_key = models.APIKEY(
         key_name=key_name, user=user.id, hashed_key=_hashed_key, jti=jti, expires=expires_at

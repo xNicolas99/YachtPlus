@@ -164,8 +164,7 @@ def get_current_user_token(request: Request):
     return None
 
 async def get_current_user(token: str = Depends(get_current_user_token)):
-    auth_setting = str(settings.DISABLE_AUTH)
-    if auth_setting.lower() == "true":
+    if settings.DISABLE_AUTH:
         return "admin" # Mock user when auth disabled
 
     credentials_exception = HTTPException(

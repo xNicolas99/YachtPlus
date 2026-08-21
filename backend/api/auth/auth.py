@@ -14,7 +14,7 @@ settings = Settings()
 # Now Authorize will be our AuthWrapper.
 
 async def auth_check(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    if settings.DISABLE_AUTH is True:
+    if settings.DISABLE_AUTH:
         return
     else:
         # AuthWrapper.jwt_required() raises HTTPException if invalid
@@ -31,7 +31,7 @@ async def auth_check_setup_pending(
     Without this, a stale setup_pending token (15-min window) could still hit
     the 2FA endpoints after setup is done.
     """
-    if settings.DISABLE_AUTH is True:
+    if settings.DISABLE_AUTH:
         return
     # Lazy import to avoid the circular dependency between auth.auth and the
     # setup router (which itself imports from this module).
@@ -51,7 +51,7 @@ async def require_superuser(Authorize: get_auth_wrapper, db: AsyncSession) -> Us
     Returns the resolved User row so callers can audit/log without a second
     DB hit. Honours DISABLE_AUTH for dev mode parity with auth_check().
     """
-    if settings.DISABLE_AUTH is True:
+    if settings.DISABLE_AUTH:
         # Return a transient (never persisted) User so callers that audit
         # `user.id` / `user.username` don't AttributeError on None in dev
         # mode. id=0 marks it as synthetic — no real row ever has id 0.
@@ -74,7 +74,7 @@ async def check_permission(permission_name: str, Authorize: get_auth_wrapper, db
     Checks if the current user has the specified permission.
     Admins (is_superuser) always have access.
     """
-    if settings.DISABLE_AUTH is True:
+    if settings.DISABLE_AUTH:
         return True
 
     username = await Authorize.get_jwt_subject()

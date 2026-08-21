@@ -106,7 +106,7 @@ def encrypt(data: str) -> str:
         return V2_PREFIX + token
     except Exception as e:
         logger.error(f"Encryption error: {e}")
-        return data
+        raise RuntimeError("Failed to encrypt sensitive data") from e
 
 
 def decrypt(token: str) -> str:
@@ -118,7 +118,7 @@ def decrypt(token: str) -> str:
             return Fernet(_get_fernet_key()).decrypt(token[len(V2_PREFIX):].encode()).decode()
         except InvalidToken as e:
             logger.warning("v2 decryption failed: %s", e)
-            return token
+            raise ValueError("Decryption failed: invalid token") from e
 
     # Legacy path: token has no v2 prefix. Try the old SHA-256 key derivation.
     try:
@@ -130,4 +130,4 @@ def decrypt(token: str) -> str:
         return token
     except Exception as e:
         logger.warning("Unexpected decryption error: %s", e)
-        return token
+        raise RuntimeError("Failed to decrypt sensitive data") from e

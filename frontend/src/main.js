@@ -1,5 +1,4 @@
 import { createApp } from 'vue'
-import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
 import store from './store'
@@ -147,8 +146,6 @@ if ("serviceWorker" in navigator && !sessionStorage.getItem(SW_CLEANUP_FLAG)) {
     .catch(() => {});
 }
 
-const pinia = createPinia()
-app.use(pinia)
 app.use(router)
 app.use(store)
 app.use(vuetify)

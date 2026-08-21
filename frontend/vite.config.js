@@ -35,7 +35,7 @@ export default defineConfig({
         // initial bundle stays small and unchanged vendors are re-used
         // across deploys (long-lived HTTP cache).
         manualChunks: {
-          'vue-vendor': ['vue', 'vue-router', 'vuex', 'pinia'],
+          'vue-vendor': ['vue', 'vue-router', 'vuex'],
           'vuetify': ['vuetify'],
           'axios': ['axios'],
         },
@@ -50,8 +50,7 @@ export default defineConfig({
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
       }
     }
   }

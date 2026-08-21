@@ -5,6 +5,7 @@ from fastapi import HTTPException
 import logging
 from datetime import datetime
 from api.settings import Settings
+from api.utils.error_handler import safe_http_status, docker_error_detail
 
 logger = logging.getLogger(__name__)
 settings = Settings()
@@ -75,6 +76,66 @@ async def stream_stats_generator(request, container_id: str):
                         container_id,
                         exc_info=True,
                     )
+
+async def get_logs(container_id: str, tail: int = 100, timestamps: bool = False):
+    """Fetch container logs once and return them as a list of lines."""
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        try:
+            container = await docker.containers.get(container_id)
+        except aiodocker.exceptions.DockerError as e:
+            if e.status == 404:
+                raise HTTPException(status_code=404, detail="Container not found")
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
+
+        try:
+            logs = container.log(stdout=True, stderr=True, follow=False, tail=tail, timestamps=timestamps)
+        except aiodocker.exceptions.DockerError as e:
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
+
+        lines = []
+        async for line in logs:
+            lines.append(line)
+        return lines
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error fetching logs for container %r", container_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch container logs.")
+    finally:
+        await docker.close()
+
+
+async def get_logs(container_id: str, tail: int = 100, since: int = None):
+    """Fetch container logs once and return them as a list of lines."""
+    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    try:
+        try:
+            container = await docker.containers.get(container_id)
+        except aiodocker.exceptions.DockerError as e:
+            if e.status == 404:
+                raise HTTPException(status_code=404, detail="Container not found")
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
+
+        try:
+            logs = container.log(stdout=True, stderr=True, follow=False, tail=tail, since=since)
+        except aiodocker.exceptions.DockerError as e:
+            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
+
+        lines = []
+        async for line in logs:
+            lines.append(line)
+        return lines
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Error fetching logs for container %r", container_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch container logs.")
+    finally:
+        await docker.close()
+
 
 async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = True, timestamps: bool = False):
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)

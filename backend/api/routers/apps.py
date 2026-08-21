@@ -221,7 +221,7 @@ async def container_actions(app_name, action, background_tasks: BackgroundTasks,
     # Audit Log
     try:
         user = await Authorize.get_jwt_subject()
-        await asyncio.to_thread(log_activity, db, user, action, app_name)
+        await log_activity(db, user, action, app_name)
     except Exception as e:
         # We deliberately don't block the action on audit-write failure
         # (an unavailable audit DB shouldn't lock operators out of the
@@ -267,7 +267,7 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
     # Audit Log
     try:
         user = await Authorize.get_jwt_subject()
-        await asyncio.to_thread(log_activity, db, user, "deploy", template.name, f"Image: {template.image}")
+        await log_activity(db, user, "deploy", template.name, f"Image: {template.image}")
     except Exception as e:
         logger.error(
             "Audit log write failed for action=deploy resource=%s: %s",

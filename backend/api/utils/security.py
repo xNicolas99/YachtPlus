@@ -3,7 +3,7 @@ import logging
 from fastapi import Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import smtplib
 from email.mime.text import MIMEText
 import asyncio
@@ -39,7 +39,7 @@ def _send_security_alert_sync(settings_row, ip_address: str, reason: str, userna
     Reason: {reason}
     IP Address: {ip_address}
     Username Attempted: {username or 'Unknown'}
-    Timestamp: {datetime.utcnow()}
+    Timestamp: {datetime.now(timezone.utc)}
 
     This IP has been blocked or restricted.
     """

@@ -39,7 +39,11 @@ class APIKEY(Base):
     id = Column(Integer, primary_key=True, index=True)
     key_name = Column(String, index=True, nullable=False)
     jti = Column(String, unique=True, index=True, nullable=False)
-    hashed_key = Column(String(length=255), unique=True, index=False, nullable=False)
+    # SHA256 hash of the key's unique JTI. Used only as a defence-in-depth
+    # lookup value; the actual bearer-token verification relies on the JWT
+    # signature and JTI blacklist. The JTI is a high-entropy UUID, so a fast
+    # hash is sufficient here and avoids bcrypt's 72-byte input limit.
+    hashed_key = Column(String(length=64), unique=True, index=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(
         DateTime,

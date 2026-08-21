@@ -66,7 +66,24 @@ async def lifespan(app: FastAPI):
             len(errors),
         )
 
+    # Start the automatic compose-update scheduler. It is a background
+    # scheduler that runs its jobs in a dedicated thread, so it is safe to
+    # start from the async lifespan. The guard inside start_scheduler
+    # prevents multiple workers (gunicorn -w 4) from each starting a scheduler.
+    from api.services.watchtower import start_scheduler
+    try:
+        start_scheduler()
+    except Exception as exc:
+        logger.error("Failed to start watchtower scheduler: %s", exc, exc_info=True)
+
     yield
+
+    # Shutdown the scheduler cleanly on application exit.
+    from api.services.watchtower import stop_scheduler
+    try:
+        stop_scheduler()
+    except Exception as exc:
+        logger.error("Failed to stop watchtower scheduler: %s", exc, exc_info=True)
 
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)

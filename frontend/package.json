@@ -8,7 +8,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@mdi/font": "^7.0.0",
@@ -22,7 +25,6 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.20",
     "dompurify": "^3.4.5",
-    "pinia": "^3.0.4",
     "register-service-worker": "^1.7.1",
     "vee-validate": "^4.15.1",
     "vue": "^3.4.0",

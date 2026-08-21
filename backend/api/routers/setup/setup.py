@@ -261,11 +261,11 @@ async def finalize_setup(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
-    auth_check_setup_pending(Authorize, db)
+    await auth_check_setup_pending(Authorize, db)
     if await is_setup_completed_async(db):
         return {"message": "Setup already completed"}
 
-    username = Authorize.get_jwt_subject(allow_setup_pending=True)
+    username = await Authorize.get_jwt_subject(allow_setup_pending=True)
     user = await get_user_by_name(db, username)
 
     if not user or not user.is_superuser:
