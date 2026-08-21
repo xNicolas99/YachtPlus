@@ -57,7 +57,7 @@ export default {
       this.isLoading = true;
       axios({
         url: "/settings/check/update",
-        method: "GET",
+        method: "POST",
         responseType: "text/json"
       })
         .then(response => {
@@ -73,7 +73,7 @@ export default {
       this.isLoading = true;
       axios({
         url: "/settings/update",
-        method: "GET",
+        method: "POST",
         responseType: "text/json"
       })
         .then(() => {

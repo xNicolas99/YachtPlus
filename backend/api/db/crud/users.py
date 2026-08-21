@@ -12,11 +12,9 @@ from sqlalchemy import func
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
-from api.settings import Settings
 from api.auth.jwt import create_access_token
 from fastapi.exceptions import HTTPException
 
-settings = Settings()
 
 async def get_user(db: AsyncSession, user_id: int):
     result = await db.execute(select(models.User).filter(models.User.id == user_id))

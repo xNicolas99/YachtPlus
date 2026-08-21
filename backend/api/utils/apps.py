@@ -1,6 +1,7 @@
 import api.db.models.containers as models
 from api.db.database import SessionLocal
-from api.settings import Settings
+from api.settings import get_settings
+_settings = get_settings()
 import api.db.schemas.apps as schemas
 
 import aiodocker
@@ -13,7 +14,6 @@ import logging
 import os
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 # ... (Existing code kept as is) ...
 
@@ -353,7 +353,7 @@ def graceful_chain_get(d, *args, default=None):
 
 
 async def get_app_stats(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         cpu_total = 0.0
         cpu_system = 0.0
         cpu_percent = 0.0

@@ -6,13 +6,13 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # without await — every call produced a "RuntimeWarning: coroutine
 # never awaited" and silently did nothing. Auto-update was broken.
 from api.actions.compose import _compose_action_sync
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.compose import find_yml_files
 import logging
 
 logger = logging.getLogger("yachtplus.watchtower")
 
-settings = Settings()
 scheduler = BackgroundScheduler()
 
 # Guard to avoid starting the scheduler more than once per process. This is
@@ -53,7 +53,7 @@ def update_all_projects():
     """
     Iterates through all compose projects and updates them.
     """
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
     for project_name in files.keys():
         update_compose_project(project_name)
 

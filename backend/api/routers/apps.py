@@ -8,7 +8,8 @@ from api.db.schemas import apps as schemas
 from api.db.crud import templates as template_crud
 from api.utils.auth import get_db
 import api.actions.apps as actions
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.auth.auth import auth_check, check_permission
 from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
 from api.utils.security import limiter
@@ -125,7 +126,6 @@ async def _require_superuser(Authorize, db: AsyncSession) -> None:
     if not user or not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
-settings = Settings()
 
 router = APIRouter()
 

@@ -10,7 +10,8 @@ from aiodocker.exceptions import DockerError
 import logging
 import jwt
 import json
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 import shlex
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -21,7 +22,6 @@ from api.db.models.settings import TokenBlacklist
 from api.utils.audit import log_activity
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 router = APIRouter()
 
@@ -83,7 +83,7 @@ async def start_container(
     user = await Authorize.get_jwt_subject()
 
     # Perform action
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.start()
@@ -116,7 +116,7 @@ async def stop_container(
     await check_permission("perm_stop", Authorize, db)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.stop()
@@ -145,7 +145,7 @@ async def restart_container(
     await check_permission("perm_restart", Authorize, db)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.restart()
@@ -175,7 +175,7 @@ async def delete_container(
     container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.delete(force=True)
@@ -356,7 +356,7 @@ async def container_exec_websocket(
     finally:
         await audit_db.close()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     exec_id = None
     stream = None
 

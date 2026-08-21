@@ -4,11 +4,11 @@ from sqlalchemy import select, delete
 from api.db.models import containers as models
 from api.db.models.settings import SecretKey
 from datetime import datetime
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 import json
 import asyncio
 
-settings = Settings()
 
 
 async def export_settings(db: AsyncSession):
@@ -33,7 +33,7 @@ async def generate_secret_key(db: AsyncSession):
     result = await db.execute(select(SecretKey).limit(1))
     check = result.scalars().first()
     if check is None:
-        key = SecretKey(key=settings.SECRET_KEY)
+        key = SecretKey(key=get_settings().SECRET_KEY)
         db.add(key)
         await db.commit()
         print("Secret key generated")

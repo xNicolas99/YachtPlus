@@ -1,4 +1,5 @@
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from fastapi import HTTPException, Depends, status
 from api.auth.jwt import get_auth_wrapper
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,7 +7,6 @@ from sqlalchemy import select
 from api.db.models.users import User
 from api.utils.auth import get_db
 
-settings = Settings()
 
 # This is a compatibility layer to replace fastapi-jwt-auth usage in other files
 # The function `auth_check` was used in routers.
@@ -14,7 +14,7 @@ settings = Settings()
 # Now Authorize will be our AuthWrapper.
 
 async def auth_check(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    if settings.DISABLE_AUTH:
+    if get_settings().DISABLE_AUTH:
         return
     else:
         # AuthWrapper.jwt_required() raises HTTPException if invalid
@@ -31,7 +31,7 @@ async def auth_check_setup_pending(
     Without this, a stale setup_pending token (15-min window) could still hit
     the 2FA endpoints after setup is done.
     """
-    if settings.DISABLE_AUTH:
+    if get_settings().DISABLE_AUTH:
         return
     # Lazy import to avoid the circular dependency between auth.auth and the
     # setup router (which itself imports from this module).
@@ -51,7 +51,7 @@ async def require_superuser(Authorize: get_auth_wrapper, db: AsyncSession) -> Us
     Returns the resolved User row so callers can audit/log without a second
     DB hit. Honours DISABLE_AUTH for dev mode parity with auth_check().
     """
-    if settings.DISABLE_AUTH:
+    if get_settings().DISABLE_AUTH:
         # Return a transient (never persisted) User so callers that audit
         # `user.id` / `user.username` don't AttributeError on None in dev
         # mode. id=0 marks it as synthetic — no real row ever has id 0.
@@ -74,7 +74,7 @@ async def check_permission(permission_name: str, Authorize: get_auth_wrapper, db
     Checks if the current user has the specified permission.
     Admins (is_superuser) always have access.
     """
-    if settings.DISABLE_AUTH:
+    if get_settings().DISABLE_AUTH:
         return True
 
     username = await Authorize.get_jwt_subject()

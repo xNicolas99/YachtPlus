@@ -16,13 +16,13 @@ from api.db.schemas import templates as schemas
 from api.actions import resources
 from api.actions.apps import _update_self, check_self_update
 
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.deployment_mode import DeploymentMode, ConfigCheck
 
 from api.auth.jwt import get_auth_wrapper
 
 
-settings = Settings()
 
 router = APIRouter()
 
@@ -114,8 +114,7 @@ async def import_settings(
     return await scrud.import_settings(db=db, upload=upload)
 
 
-@router.get(
-    "/prune/{resource}",
+@router.post("/prune/{resource}",
 )
 @limiter.limit("10/minute")
 async def prune_resources(
@@ -133,8 +132,7 @@ async def prune_resources(
     return await resources.prune_resources(resource)
 
 
-@router.get(
-    "/update",
+@router.post("/update",
 )
 @limiter.limit("10/minute")
 async def update_self(

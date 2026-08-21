@@ -13,9 +13,9 @@ Always use :func:`get_sync_docker_client` for the sync SDK.
 from contextlib import contextmanager
 import docker
 
-from api.settings import Settings
+from api.settings import get_settings
+_settings = get_settings()
 
-_settings = Settings()
 
 
 def get_sync_docker_client() -> docker.DockerClient:
@@ -26,8 +26,8 @@ def get_sync_docker_client() -> docker.DockerClient:
     configured. Callers must close the returned client (or use it as a
     short-lived local variable) — there is no global instance.
     """
-    if _settings.DOCKER_HOST:
-        return docker.DockerClient(base_url=_settings.DOCKER_HOST)
+    if get_settings().DOCKER_HOST:
+        return docker.DockerClient(base_url=get_settings().DOCKER_HOST)
     return docker.from_env()
 
 

@@ -9,7 +9,8 @@ import asyncio
 from api.db.crud.users import verify_password, normalize_username
 from api.utils.auth import get_db
 from api.auth.auth import auth_check
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.db.crud import users as crud
 from api.db.models import users as models
 from api.db.schemas import users as schemas
@@ -18,7 +19,6 @@ from api.utils.crypto import decrypt
 import pyotp
 
 router = APIRouter()
-settings = Settings()
 logger = logging.getLogger(__name__)
 
 # Shared limiter from api.utils.security (TRUSTED_PROXIES-aware resolver,
@@ -320,7 +320,7 @@ async def delete_api_key(
 @router.get("/me", response_model=schemas.User)
 async def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     await auth_check(Authorize)
-    if settings.DISABLE_AUTH:
+    if get_settings().DISABLE_AUTH:
         # Previous code mutated the schemas.User CLASS object directly,
         # which AttributeErrors on Pydantic v2 model classes and bleeds
         # state across requests. Construct a real instance instead.

@@ -1,12 +1,12 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import StaticPool
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 
-settings = Settings()
 
 # Translate DB URL for async drivers
-db_url = settings.DATABASE_URL
+db_url = get_settings().DATABASE_URL
 if db_url.startswith("sqlite"):
     db_url = db_url.replace("sqlite:///", "sqlite+aiosqlite:///")
 elif db_url.startswith("postgresql"):

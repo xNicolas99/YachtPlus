@@ -4,18 +4,18 @@ import asyncio
 from fastapi import HTTPException
 import logging
 from datetime import datetime
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.error_handler import safe_http_status, docker_error_detail
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 # Cache stats for 5 seconds
 stats_cache = {}
 CACHE_TTL = 5  # seconds
 
 async def get_containers():
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             containers = await docker.containers.list(all=True)
             # Normalize container objects to dicts
@@ -29,7 +29,7 @@ async def get_containers():
             raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
 async def stream_stats_generator(request, container_id: str):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         stats_iter = None
         try:
             container = await docker.containers.get(container_id)
@@ -79,7 +79,7 @@ async def stream_stats_generator(request, container_id: str):
 
 async def get_logs(container_id: str, tail: int = 100, timestamps: bool = False):
     """Fetch container logs once and return them as a list of lines."""
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         try:
             container = await docker.containers.get(container_id)
@@ -109,7 +109,7 @@ async def get_logs(container_id: str, tail: int = 100, timestamps: bool = False)
 
 async def get_logs(container_id: str, tail: int = 100, since: int = None):
     """Fetch container logs once and return them as a list of lines."""
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         try:
             container = await docker.containers.get(container_id)
@@ -138,7 +138,7 @@ async def get_logs(container_id: str, tail: int = 100, since: int = None):
 
 
 async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = True, timestamps: bool = False):
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         try:
             container = await docker.containers.get(container_id)
@@ -173,7 +173,7 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
         await docker.close()
 
 async def get_stats(container_id: str):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             container = await docker.containers.get(container_id)
         except aiodocker.exceptions.DockerError as e:
@@ -295,7 +295,7 @@ async def get_all_stats():
         if age < CACHE_TTL:
             return stats_cache['data']
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         containers = await docker.containers.list()
 

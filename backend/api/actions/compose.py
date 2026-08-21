@@ -13,11 +13,11 @@ import asyncio
 import functools
 import logging
 
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.compose import find_yml_files, validate_compose_project_name, validate_app_name
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 """
 Helper for running blocking I/O in thread pool
@@ -95,7 +95,7 @@ def _compose_action_sync(name, action):
     validate_compose_project_name(name)
     if action not in _ALLOWED_PROJECT_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
     # We call the sync version of get_compose here
     compose = _get_compose_sync(name)
     env = os.environ.copy()
@@ -153,7 +153,7 @@ def _compose_app_action_sync(name, action, app):
     validate_app_name(app)
     if action not in _ALLOWED_APP_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
     compose = _get_compose_sync(name)
     env = os.environ.copy()
 
@@ -189,7 +189,7 @@ Checks for compose projects in the COMPOSE_DIR and
 returns most of the info inside them.
 """
 def _get_compose_projects_sync():
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
 
     projects = []
     for project, file in files.items():
@@ -236,7 +236,7 @@ project.
 def _get_compose_sync(name):
     validate_compose_project_name(name)
     try:
-        files = find_yml_files(settings.COMPOSE_DIR + name)
+        files = find_yml_files(get_settings().COMPOSE_DIR + name)
     except Exception as exc:
         # Re-raise exceptions properly
         if isinstance(exc, HTTPException):
@@ -314,7 +314,7 @@ def _write_compose_sync(compose):
     # traversal if COMPOSE_DIR contained a trailing slash mismatch or if a
     # symlink redirected the target; resolve() + is_relative_to() closes
     # both paths.
-    base_dir = pathlib.Path(settings.COMPOSE_DIR).resolve()
+    base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
     target_dir = (base_dir / compose.name).resolve()
     if not target_dir.is_relative_to(base_dir):
         raise HTTPException(status_code=400, detail="Invalid compose project name.")
@@ -342,17 +342,17 @@ Deletes a compose project
 """
 def _delete_compose_sync(project_name):
     validate_compose_project_name(project_name)
-    if not os.path.exists("/" + settings.COMPOSE_DIR + project_name):
+    if not os.path.exists("/" + get_settings().COMPOSE_DIR + project_name):
         raise HTTPException(404, "Project directory not found.")
     elif not os.path.exists(
-        "/" + settings.COMPOSE_DIR + project_name + "/docker-compose.yml"
+        "/" + get_settings().COMPOSE_DIR + project_name + "/docker-compose.yml"
     ):
         raise HTTPException(404, "Project docker-compose.yml not found.")
     else:
         pass
 
     try:
-        shutil.rmtree("/" + settings.COMPOSE_DIR + project_name)
+        shutil.rmtree("/" + get_settings().COMPOSE_DIR + project_name)
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return _get_compose_projects_sync()
@@ -363,7 +363,7 @@ async def delete_compose(project_name):
 
 def _generate_support_bundle_sync(project_name):
     validate_compose_project_name(project_name)
-    files = find_yml_files(settings.COMPOSE_DIR + project_name)
+    files = find_yml_files(get_settings().COMPOSE_DIR + project_name)
     if project_name in files:
         from api.utils.docker_client import sync_docker_client
         stream = io.BytesIO()

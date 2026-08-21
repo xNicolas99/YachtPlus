@@ -23,9 +23,9 @@ import logging
 import os
 import secrets
 
-from api.settings import Settings
+from api.settings import get_settings
+_settings = get_settings()
 
-settings = Settings()
 logger = logging.getLogger(__name__)
 
 V2_PREFIX = "v2:"
@@ -74,7 +74,7 @@ def _get_fernet_key() -> bytes:
     if _cached_fernet_key is not None:
         return _cached_fernet_key
 
-    secret = settings.SECRET_KEY
+    secret = get_settings().SECRET_KEY
     if not secret:
         raise ValueError("SECRET_KEY is missing")
 
@@ -91,7 +91,7 @@ def _get_fernet_key() -> bytes:
 
 def _get_legacy_fernet_key() -> bytes:
     """Pre-v2 key derivation: single SHA-256 over SECRET_KEY, no salt."""
-    secret = settings.SECRET_KEY
+    secret = get_settings().SECRET_KEY
     if not secret:
         raise ValueError("SECRET_KEY is missing")
     digest = hashlib.sha256(secret.encode()).digest()

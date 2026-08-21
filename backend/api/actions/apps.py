@@ -34,15 +34,15 @@ import aiostream
 from functools import lru_cache
 import logging
 import aiofiles
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 async def get_running_apps():
     apps_list = []
     try:
-        async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+        async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
             apps = await docker.containers.list()
             for app in apps:
                 attrs = app._container if hasattr(app, '_container') else app
@@ -63,7 +63,7 @@ async def get_running_apps():
     return apps_list
 
 async def check_app_update(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -148,7 +148,7 @@ def _docker_error_detail(exc: aiodocker.exceptions.DockerError) -> str:
 async def get_apps():
     apps_list = []
     try:
-        async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+        async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
             try:
                 apps = await docker.containers.list(all=True)
             except aiodocker.exceptions.DockerError as exc:
@@ -213,7 +213,7 @@ async def get_apps():
     return apps_list
 
 async def get_app(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -227,7 +227,7 @@ async def get_app(app_name):
         return attrs
 
 async def get_app_processes(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -242,7 +242,7 @@ async def get_app_processes(app_name):
             return Processes(Processes=[], Titles=[])
 
 async def get_app_logs(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -257,7 +257,7 @@ async def get_app_logs(app_name):
 
 async def check_container_conflicts(data: DeployForm):
     conflicts = []
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         # Check Name
         try:
             c = await docker.containers.get(data.name)
@@ -485,7 +485,7 @@ class AiodockerCompatWrapper:
 
 
 async def app_action(app_name, action, background_tasks=None):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
         except aiodocker.exceptions.DockerError as exc:
@@ -532,7 +532,7 @@ async def app_action(app_name, action, background_tasks=None):
     return await get_apps()
 
 async def app_update(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             old = await docker.containers.get(app_name)
             old_info = await old.show()
@@ -582,7 +582,7 @@ async def _update_self(background_tasks):
     if not self_id:
          raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             self_container = await docker.containers.get(self_id)
             self_info = await self_container.show()
@@ -594,7 +594,7 @@ async def _update_self(background_tasks):
     return {"result": "successful"}
 
 async def update_self_in_background(container_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         print("**** Updating " + container_name + "****")
         config = {
             "Image": "containrrr/watchtower:latest",
@@ -615,7 +615,7 @@ async def check_self_update():
     if not self_id:
          raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             self_container = await docker.containers.get(self_id)
             info = await self_container.show()
@@ -627,7 +627,7 @@ async def check_self_update():
 
 
 async def generate_support_bundle(app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             app = await docker.containers.get(app_name)
             attrs = await app.show()
@@ -650,7 +650,7 @@ async def generate_support_bundle(app_name):
     )
 
 async def log_generator(request, app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             container = await docker.containers.get(app_name)
             info = await container.show()
@@ -685,12 +685,12 @@ async def _stat_generator(docker, request, app_name):
         logger.debug(f"Stat generator stopped for {app_name}: {e}")
 
 async def stat_generator(request, app_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as adocker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as adocker:
         async for event in _stat_generator(adocker, request, app_name):
             yield event
 
 async def all_stat_generator(request):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers = await docker.containers.list()
 
         running_names = []

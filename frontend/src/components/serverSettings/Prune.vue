@@ -112,7 +112,7 @@ export default {
       this.loadingResource = resource;
       axios({
         url: "/settings/prune/" + resource,
-        method: "GET",
+        method: "POST",
         responseType: "text/json"
       })
         .then(response => {

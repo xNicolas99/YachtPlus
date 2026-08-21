@@ -12,7 +12,7 @@ from api.utils.auth import get_db
 from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
 from api.db.models.setup import SetupStatus
-from api.settings import Settings
+from api.settings import get_settings
 import logging
 import os
 import asyncio
@@ -178,7 +178,7 @@ async def bypass_setup(db: AsyncSession = Depends(get_db)):
     # DISABLE_AUTH=True. That env flag is already documented as dev-only
     # and gated everywhere else; reusing it here means an attacker can't
     # trigger this on a hardened production deploy.
-    if not Settings().DISABLE_AUTH:
+    if not get_settings().DISABLE_AUTH:
         raise HTTPException(
             status_code=404,
             detail="Setup bypass is only available in dev mode (DISABLE_AUTH=True).",

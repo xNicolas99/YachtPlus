@@ -3,9 +3,9 @@ import asyncio
 import logging
 import psutil
 from api.utils.compose import find_yml_files
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 
-settings = Settings()
 logger = logging.getLogger(__name__)
 
 async def get_dashboard_stats():
@@ -47,7 +47,7 @@ async def get_dashboard_stats():
     # We split this into two parts: Critical (Containers) and Secondary (Images, Volumes, Networks)
     # If Secondary fails, we still return Containers.
 
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         # Part 1: Critical - Containers
         try:
              # 5s timeout for containers
@@ -92,7 +92,7 @@ async def get_dashboard_stats():
 
     try:
         loop = asyncio.get_event_loop()
-        project_files = await loop.run_in_executor(None, find_yml_files, settings.COMPOSE_DIR)
+        project_files = await loop.run_in_executor(None, find_yml_files, get_settings().COMPOSE_DIR)
         project_names = set(project_files.keys()) if project_files else set()
     except Exception as e:
         logger.error(f"Error finding compose files: {e}")

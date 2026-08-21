@@ -1,10 +1,8 @@
-from ..settings import Settings
 import os
 import fnmatch
 from fastapi import HTTPException
 import re
 
-settings = Settings()
 
 
 def validate_app_name(name):
