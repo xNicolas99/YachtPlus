@@ -10,7 +10,7 @@ from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
 from api.settings import Settings
 from fastapi.exceptions import HTTPException
-from datetime import datetime
+from datetime import datetime, timezone
 from api.auth.jwt import create_access_token
 
 settings = Settings()
@@ -163,12 +163,12 @@ async def get_password_hash(password) -> str:
     return hashed.decode('utf-8')
 
 async def prune_blacklist(db: AsyncSession):
-    await db.execute(delete(TokenBlacklist).filter(TokenBlacklist.expires < datetime.utcnow()))
+    await db.execute(delete(TokenBlacklist).filter(TokenBlacklist.expires < datetime.now(timezone.utc)))
     await db.commit()
     return
 
 async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
-    from datetime import datetime, timedelta
+    from datetime import datetime, timezone, timedelta
     import jwt as _pyjwt
     from api.db.models.settings import TokenBlacklist
 
@@ -196,7 +196,7 @@ async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
         # timestamp (10 years from minting) so the row stays active long enough
         # to block the token.
         if expires_at is None:
-            expires_at = datetime.utcnow() + timedelta(days=3650)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=3650)
         db.add(TokenBlacklist(jti=key.jti, expires=expires_at, revoked=True))
 
     await db.delete(key)
@@ -220,7 +220,7 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
     api_key = create_access_token(data={"sub": user.username}, expires_delta=timedelta(days=3650))
     decoded = _pyjwt.decode(api_key, options={"verify_signature": False})
     jti = decoded.get("jti")
-    expires_at = datetime.utcfromtimestamp(decoded["exp"])
+    expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
 
     # Store a fast, length-stable hash of the token so we can detect
     # reuse if we ever need to, without bcrypt's 72-byte limit rejecting

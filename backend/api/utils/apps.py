@@ -396,51 +396,51 @@ def get_update_ports(ports):
 
 def _check_updates(tag):
     if tag:
-        from api.utils.docker_client import get_sync_docker_client
-        dclient = get_sync_docker_client()
-        try:
-            current = dclient.images.get(tag)
-        except APIError as err:
-            if err.status_code == 404:
+        from api.utils.docker_client import sync_docker_client
+        with sync_docker_client() as dclient:
+            try:
+                current = dclient.images.get(tag)
+            except APIError as err:
+                if err.status_code == 404:
+                    return False
+                else:
+                    raise HTTPException(
+                        status_code=err.response.status_code,
+                        detail="Docker registry operation failed. Check server logs for details.",
+                    )
+            try:
+                new = dclient.images.get_registry_data(tag)
+            except APIError:
+                return False
+
+            # Helper function to extract digest hash from a RepoDigest string
+            # Format is usually: repo@sha256:<hash>
+            def extract_hash(digest_str):
+                if "@" in digest_str:
+                    return digest_str.split("@")[-1]
+                return digest_str
+
+            registry_digest = new.attrs["Descriptor"]["digest"]
+
+            # Safely get RepoDigests, defaulting to empty list if missing
+            repo_digests = current.attrs.get("RepoDigests") or []
+
+            # Parse the repo name from the tag to filter relevant digests
+            try:
+                repo_name, _ = parse_repository_tag(tag)
+            except Exception:
+                repo_name = tag.split(":")[0]
+
+            # Filter RepoDigests to only those matching the current repo
+            relevant_digests = [d for d in repo_digests if d.startswith(repo_name + "@")]
+
+            # Check if the registry digest matches any of the local digests exactly
+            if any(
+                registry_digest == extract_hash(i) for i in relevant_digests
+            ):
                 return False
             else:
-                raise HTTPException(
-                    status_code=err.response.status_code,
-                    detail="Docker registry operation failed. Check server logs for details.",
-                )
-        try:
-            new = dclient.images.get_registry_data(tag)
-        except APIError:
-            return False
-
-        # Helper function to extract digest hash from a RepoDigest string
-        # Format is usually: repo@sha256:<hash>
-        def extract_hash(digest_str):
-            if "@" in digest_str:
-                return digest_str.split("@")[-1]
-            return digest_str
-
-        registry_digest = new.attrs["Descriptor"]["digest"]
-
-        # Safely get RepoDigests, defaulting to empty list if missing
-        repo_digests = current.attrs.get("RepoDigests") or []
-
-        # Parse the repo name from the tag to filter relevant digests
-        try:
-            repo_name, _ = parse_repository_tag(tag)
-        except Exception:
-            repo_name = tag.split(":")[0]
-
-        # Filter RepoDigests to only those matching the current repo
-        relevant_digests = [d for d in repo_digests if d.startswith(repo_name + "@")]
-
-        # Check if the registry digest matches any of the local digests exactly
-        if any(
-            registry_digest == extract_hash(i) for i in relevant_digests
-        ):
-            return False
-        else:
-            return True
+                return True
 
     else:
         return False

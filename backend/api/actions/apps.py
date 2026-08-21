@@ -425,53 +425,53 @@ def _launch_app_sync(
     network_mode, network, volumes, env, devices, labels,
     sysctls, caps, cpus, mem_limit, edit, _id
 ):
-    from api.utils.docker_client import get_sync_docker_client
-    dclient = get_sync_docker_client()
-    if edit == True:
-        try:
-            dclient.containers.get(_id)
+    from api.utils.docker_client import sync_docker_client
+    with sync_docker_client() as dclient:
+        if edit == True:
             try:
                 running_app = dclient.containers.get(_id)
                 running_app.remove(force=True)
+            except docker.errors.NotFound:
+                # Container might not exist, which is fine
+                pass
             except Exception as e:
                 logger.warning(f"Failed to remove existing container {_id} during edit: {e}")
-        except Exception:
-            # Container might not exist, which is fine
-            pass
 
-    combined_labels = Merge(portlabels, labels)
-    try:
-        launch = dclient.containers.run(
-            name=name,
-            image=image,
-            restart_policy=restart_policy,
-            command=command,
-            ports=ports,
-            network=network,
-            network_mode=network_mode,
-            volumes=volumes,
-            environment=env,
-            sysctls=sysctls,
-            labels=combined_labels,
-            devices=devices,
-            cap_add=caps,
-            nano_cpus=cpus,
-            mem_limit=mem_limit,
-            detach=True,
-        )
+        combined_labels = Merge(portlabels, labels)
+        try:
+            launch = dclient.containers.run(
+                name=name,
+                image=image,
+                restart_policy=restart_policy,
+                command=command,
+                ports=ports,
+                network=network,
+                network_mode=network_mode,
+                volumes=volumes,
+                environment=env,
+                sysctls=sysctls,
+                labels=combined_labels,
+                devices=devices,
+                cap_add=caps,
+                nano_cpus=cpus,
+                mem_limit=mem_limit,
+                detach=True,
+            )
 
-        return AiodockerCompatWrapper(launch)
+            return AiodockerCompatWrapper(launch)
 
-    except docker.errors.APIError as e:
-        if e.status_code == 500:
-            try:
-                failed_app = dclient.containers.get(name)
-                failed_app.remove()
-            except Exception as remove_err:
-                logger.error(f"Failed to cleanup container {name} after API error: {remove_err}")
-        raise HTTPException(
-            status_code=e.status_code, detail=e.explanation
-        )
+        except docker.errors.APIError as e:
+            if e.status_code == 500:
+                try:
+                    failed_app = dclient.containers.get(name)
+                    failed_app.remove()
+                except docker.errors.NotFound:
+                    pass
+                except Exception as remove_err:
+                    logger.error(f"Failed to cleanup container {name} after API error: {remove_err}")
+            raise HTTPException(
+                status_code=e.status_code, detail=e.explanation
+            )
 
 class AiodockerCompatWrapper:
     def __init__(self, container):

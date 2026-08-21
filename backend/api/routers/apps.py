@@ -11,6 +11,7 @@ import api.actions.apps as actions
 from api.settings import Settings
 from api.auth.auth import auth_check, check_permission
 from api.utils.apps import calculate_cpu_percent, calculate_cpu_percent2, format_bytes, merge_template
+from api.utils.security import limiter
 import api.db.crud.users as users_crud
 
 from api.auth.jwt import get_auth_wrapper
@@ -148,8 +149,14 @@ async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_a
     return await actions.app_update(app_name)
 
 @router.get("/stats")
-async def all_sse_stats(request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("60/minute")
+async def all_sse_stats(
+    request: Request,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
+):
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     stat_generator = actions.all_stat_generator(request)
     return EventSourceResponse(stat_generator)
 
@@ -274,7 +281,14 @@ async def logs(
 
 
 @router.get("/{app_name}/stats")
-async def sse_stats(app_name: str, request: Request, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("60/minute")
+async def sse_stats(
+    app_name: str,
+    request: Request,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
+):
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     stat_generator = actions.stat_generator(request, app_name)
     return EventSourceResponse(stat_generator)

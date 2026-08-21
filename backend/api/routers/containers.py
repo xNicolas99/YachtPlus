@@ -334,6 +334,15 @@ async def container_exec(
             await websocket.close(code=1008)
             return
 
+    # Audit log the session initiation (not the terminal contents).
+    audit_db = SessionLocal()
+    try:
+        await asyncio.to_thread(log_activity, audit_db, username, "container_exec", container_id, f"shell={shell}")
+    except Exception as exc:
+        logger.error("Failed to write exec audit log: %s", exc)
+    finally:
+        await audit_db.close()
+
     docker = aiodocker.Docker(url=settings.DOCKER_HOST)
     exec_id = None
     stream = None

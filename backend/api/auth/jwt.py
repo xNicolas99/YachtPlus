@@ -1,6 +1,6 @@
 import jwt
 import secrets as _secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict
 from fastapi import HTTPException, status, Depends, Request
 from fastapi.security import OAuth2PasswordBearer
@@ -63,7 +63,7 @@ async def revoke_token(token: str) -> None:
         return
     exp_ts = payload.get("exp")
     expires_at = (
-        datetime.utcfromtimestamp(exp_ts) if isinstance(exp_ts, (int, float)) else None
+        datetime.fromtimestamp(exp_ts, tz=timezone.utc) if isinstance(exp_ts, (int, float)) else None
     )
 
     from api.db.database import SessionLocal
@@ -76,7 +76,7 @@ async def revoke_token(token: str) -> None:
             await db.execute(
                 delete(TokenBlacklist).filter(
                     TokenBlacklist.expires.isnot(None),
-                    TokenBlacklist.expires < datetime.utcnow(),
+                    TokenBlacklist.expires < datetime.now(timezone.utc),
                 )
             )
 
@@ -118,9 +118,9 @@ def get_secret_key():
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     # jti = unique per-token id so /logout can blacklist exactly THIS
     # token (and re-uses of an older JWT for the same user are not
     # accidentally invalidated). Without this, JWTs were stateless and

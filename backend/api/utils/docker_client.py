@@ -10,6 +10,7 @@ bypassed the proxy and either failed or talked to the host socket directly.
 Always use :func:`get_sync_docker_client` for the sync SDK.
 """
 
+from contextlib import contextmanager
 import docker
 
 from api.settings import Settings
@@ -28,3 +29,17 @@ def get_sync_docker_client() -> docker.DockerClient:
     if _settings.DOCKER_HOST:
         return docker.DockerClient(base_url=_settings.DOCKER_HOST)
     return docker.from_env()
+
+
+@contextmanager
+def sync_docker_client():
+    """Context-managed variant of get_sync_docker_client().
+
+    Guarantees .close() is called even if an exception is raised, preventing
+    connection leaks in sync helpers that run inside the async thread pool.
+    """
+    client = get_sync_docker_client()
+    try:
+        yield client
+    finally:
+        client.close()

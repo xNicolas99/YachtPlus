@@ -134,9 +134,9 @@ def check_dockerhost(environment):
 
     if os.path.exists('/var/run/docker.sock'):
         try:
-            from api.utils.docker_client import get_sync_docker_client
-            client = get_sync_docker_client()
-            client.ping()
+            from api.utils.docker_client import sync_docker_client
+            with sync_docker_client() as client:
+                client.ping()
             return {}
         except Exception:
             pass
@@ -365,47 +365,39 @@ def _generate_support_bundle_sync(project_name):
     validate_compose_project_name(project_name)
     files = find_yml_files(settings.COMPOSE_DIR + project_name)
     if project_name in files:
-        from api.utils.docker_client import get_sync_docker_client
-        dclient = get_sync_docker_client()
+        from api.utils.docker_client import sync_docker_client
         stream = io.BytesIO()
-        try:
-            with zipfile.ZipFile(stream, "w") as zf, open(files[project_name], "r") as fp:
-                # yaml.load returns None for an empty or whitespace-only file;
-                # coerce to {} so the .get below doesn't blow up the bundle.
-                compose = yaml.load(fp, Loader=yaml.SafeLoader) or {}
+        with sync_docker_client() as dclient, zipfile.ZipFile(stream, "w") as zf, open(files[project_name], "r") as fp:
+            # yaml.load returns None for an empty or whitespace-only file;
+            # coerce to {} so the .get below doesn't blow up the bundle.
+            compose = yaml.load(fp, Loader=yaml.SafeLoader) or {}
 
-                services_list = compose.get("services", {})
-                for _service in services_list:
-                    service = None
-                    try:
-                        container_name = services_list[_service].get("container_name")
-                        if container_name:
-                            service = dclient.containers.get(container_name)
+            services_list = compose.get("services", {})
+            for _service in services_list:
+                service = None
+                try:
+                    container_name = services_list[_service].get("container_name")
+                    if container_name:
+                        service = dclient.containers.get(container_name)
+                    else:
+                        # Fallback logic for default naming
+                        if len(services_list.keys()) < 2:
+                            service = dclient.containers.get(_service)
                         else:
-                            # Fallback logic for default naming
-                            if len(services_list.keys()) < 2:
-                                service = dclient.containers.get(_service)
-                            else:
-                                service = dclient.containers.get(
-                                    project_name.lower() + "_" + _service + "_1"
-                                )
-                    except docker.errors.NotFound:
-                        # Log missing container but continue?
-                        # The original code raised HTTPException immediately.
-                        pass
+                            service = dclient.containers.get(
+                                project_name.lower() + "_" + _service + "_1"
+                            )
+                except docker.errors.NotFound:
+                    # Log missing container but continue?
+                    # The original code raised HTTPException immediately.
+                    pass
 
-                    if service:
-                        service_log = service.logs()
-                        zf.writestr(f"{_service}.log", service_log)
+                if service:
+                    service_log = service.logs()
+                    zf.writestr(f"{_service}.log", service_log)
 
-                fp.seek(0)
-                zf.writestr("docker-compose.yml", fp.read())
-        except Exception as exc:
-             # Make sure we don't leak connection if zip fails
-             raise exc
-        finally:
-            # Explicitly close the client we created
-            dclient.close()
+            fp.seek(0)
+            zf.writestr("docker-compose.yml", fp.read())
 
         stream.seek(0)
         return stream
