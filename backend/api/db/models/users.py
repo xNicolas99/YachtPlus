@@ -39,7 +39,7 @@ class APIKEY(Base):
     id = Column(Integer, primary_key=True, index=True)
     key_name = Column(String, index=True, nullable=False)
     jti = Column(String, unique=True, index=True, nullable=False)
-    hashed_key = Column(String(length=72), unique=True, index=False, nullable=False)
+    hashed_key = Column(String(length=255), unique=True, index=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(
         DateTime,

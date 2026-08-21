@@ -4,6 +4,8 @@ import logging
 import asyncio
 from datetime import datetime, timedelta
 
+from api.utils.registry_helpers import get_registry_and_name, drop_registry_prefix
+
 logger = logging.getLogger(__name__)
 
 # Cache structure
@@ -327,8 +329,7 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
                     tags = [t.get('name') for t in data.get('results', [])]
 
         elif registry == 'ghcr':
-             if image.startswith('ghcr.io/'):
-                 image = image.replace('ghcr.io/', '', 1)
+             image = drop_registry_prefix(image)
 
              parts = image.split('/')
              if len(parts) >= 2:

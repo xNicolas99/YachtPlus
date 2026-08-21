@@ -2,34 +2,26 @@ import httpx
 import logging
 from typing import Dict, Optional
 
+from api.utils.registry_helpers import get_registry_and_name
+
 logger = logging.getLogger(__name__)
+
 
 async def get_image_config(image_name: str) -> Optional[Dict]:
     """
     Fetches the image configuration (ExposedPorts, Volumes) from Docker Hub or GHCR.
     This is a best-effort implementation without authentication for public images.
     """
-    # Identify registry
-    registry = "dockerhub"
-    if image_name.startswith("ghcr.io/"):
-        registry = "ghcr"
-        image_name = image_name.removeprefix("ghcr.io/")
-    elif image_name.startswith("lscr.io/"):
-        registry = "linuxserver" # Effectively DockerHub or GHCR depending on where it points, but usually lscr.io redirects to GHCR/Hub.
-        # But for metadata, we treat it as remote.
-        # Actually lscr.io images are hosted on GHCR/DockerHub.
-        # Let's treat it as DockerHub for now if it looks like one, or try to resolving.
-        # For now, let's assume DockerHub library if no domain.
-        pass
+    registry, image_name = get_registry_and_name(image_name)
 
     if registry == "dockerhub":
         return await _get_dockerhub_config(image_name)
 
-    # GHCR support is more complex without auth token for some endpoints,
-    # but we can try the public manifest endpoint if available.
+    # GHCR / linuxserver (lscr.io) support is more complex without auth token
+    # for some endpoints, but we can try the public manifest endpoint if available.
     # For now, prioritize DockerHub as requested.
-
     return None
+
 
 async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
     if "/" not in image_name:
@@ -52,7 +44,6 @@ async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
             # 2. Get Manifest to find Config Blob Digest
             # We assume 'latest' tag if not specified, but the image name from UI likely has no tag.
             # If the user selected a tag, it should be in the image name (e.g. nginx:alpine).
-            # The current UI passes "full_name" which might not have tag.
             # ApplicationsForm sets image=image_name.
             # If no tag, we assume latest.
 

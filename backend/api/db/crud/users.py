@@ -1,17 +1,19 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from sqlalchemy import delete
-from sqlalchemy.orm import selectinload
-from sqlalchemy import func
 import bcrypt
 import asyncio
+import jwt as _pyjwt
+
+from datetime import datetime, timezone, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
+from sqlalchemy import func
+
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
 from api.settings import Settings
-from fastapi.exceptions import HTTPException
-from datetime import datetime, timezone
 from api.auth.jwt import create_access_token
+from fastapi.exceptions import HTTPException
 
 settings = Settings()
 
@@ -168,10 +170,6 @@ async def prune_blacklist(db: AsyncSession):
     return
 
 async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
-    from datetime import datetime, timezone, timedelta
-    import jwt as _pyjwt
-    from api.db.models.settings import TokenBlacklist
-
     res = await db.execute(select(models.APIKEY).filter(models.APIKEY.id == key_id))
     key = res.scalars().first()
     if not key:
@@ -213,15 +211,6 @@ async def get_keys(user, db: AsyncSession):
     return keys
 
 async def create_key(key_name, user, Authorize, db: AsyncSession):
-    import hashlib
-    from datetime import timedelta, datetime
-    import jwt as _pyjwt
-
-    # API keys are minted with a distinct token type so routes can
-    # distinguish them from interactive login sessions. Login tokens keep
-    # the default type (None / absent). Existing API keys without the
-    # claim continue to work; they are treated like session tokens until
-    # rotated.
     api_key = create_access_token(
         data={"sub": user.username, "type": "api_key"},
         expires_delta=timedelta(days=3650),
@@ -230,10 +219,13 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
     jti = decoded.get("jti")
     expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
 
-    # Store a fast, length-stable hash of the token so we can detect
-    # reuse if we ever need to, without bcrypt's 72-byte limit rejecting
-    # long JWTs.
-    _hashed_key = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    # Hash the bearer token with bcrypt so that a database compromise does
+    # not expose a fast-to-brute-force SHA256 digest of a long-lived key.
+    # bcrypt's 72-byte input limit is applied here; the first 72 bytes of a
+    # JWT already contain the header + a large part of the signed payload, so
+    # the resulting hash remains unique enough for lookup and verification.
+    _key_bytes = api_key.encode("utf-8")[:72]
+    _hashed_key = bcrypt.hashpw(_key_bytes, bcrypt.gensalt(rounds=12)).decode("utf-8")
 
     db_key = models.APIKEY(
         key_name=key_name, user=user.id, hashed_key=_hashed_key, jti=jti, expires=expires_at
