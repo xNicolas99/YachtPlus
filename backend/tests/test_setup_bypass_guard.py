@@ -31,12 +31,17 @@ async def db():
         yield s
 
 
+def _settings_mock(disabled_auth: bool):
+    fake = MagicMock()
+    fake.DISABLE_AUTH = disabled_auth
+    return fake
+
+
 @pytest.mark.asyncio
-async def test_bypass_rejected_in_production_mode(db, monkeypatch):
+async def test_bypass_rejected_in_production_mode(db):
     """The brick-DoS path. DISABLE_AUTH is the default False, so a hostile
     caller on a fresh install must get a 404 here."""
-    with patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=False)
+    with patch("api.routers.setup.setup.get_settings", return_value=_settings_mock(False)):
         with pytest.raises(HTTPException) as exc:
             await bypass_setup(db=db)
     assert exc.value.status_code == 404
@@ -52,8 +57,7 @@ async def test_bypass_rejected_in_production_mode(db, monkeypatch):
 async def test_bypass_allowed_in_dev_mode(db):
     """In dev mode (DISABLE_AUTH=True) the bypass is intentional — it lets
     a developer skip the wizard on a throwaway DB."""
-    with patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+    with patch("api.routers.setup.setup.get_settings", return_value=_settings_mock(True)):
         result = await bypass_setup(db=db)
     assert "bypassed" in result["message"].lower()
     status_result = await db.execute(select(SetupStatus))
@@ -70,8 +74,7 @@ async def test_bypass_still_refuses_after_user_exists(db):
     db.add(User(username="alice", hashed_password="pw"))
     await db.commit()
 
-    with patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+    with patch("api.routers.setup.setup.get_settings", return_value=_settings_mock(True)):
         with pytest.raises(HTTPException) as exc:
             await bypass_setup(db=db)
     assert exc.value.status_code == 400
@@ -84,8 +87,7 @@ async def test_bypass_returns_idempotent_message_when_already_completed(db):
     db.add(SetupStatus(is_complete=True))
     await db.commit()
 
-    with patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+    with patch("api.routers.setup.setup.get_settings", return_value=_settings_mock(True)):
         result = await bypass_setup(db=db)
     assert "already" in result["message"].lower()
     status_result = await db.execute(select(SetupStatus))

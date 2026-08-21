@@ -1,12 +1,85 @@
 import aiodocker
 import asyncio
 import logging
+import os
+import shutil
 import psutil
 from api.utils.compose import find_yml_files
 from api.settings import get_settings
 settings = get_settings()
 
 logger = logging.getLogger(__name__)
+
+
+def _read_cgroup_memory_stats() -> dict:
+    """Return container memory limit/usage from cgroup when available.
+
+    Inside a Docker container, psutil.virtual_memory() reports the *host*
+    memory, which is misleading for the dashboard KPI strip. cgroup v1 and
+    v2 expose the container's actual limit and usage under /sys/fs/cgroup.
+    If the files are missing (e.g. running outside a container) we fall
+    back to psutil below.
+
+    Returns a dict with optional keys: limit, usage. Missing keys mean
+    cgroup data is not available.
+    """
+    result: dict = {}
+
+    # cgroup v2 unified hierarchy
+    cgroup_v2_usage = "/sys/fs/cgroup/memory.current"
+    cgroup_v2_limit = "/sys/fs/cgroup/memory.max"
+    if os.path.exists(cgroup_v2_usage) and os.path.exists(cgroup_v2_limit):
+        try:
+            with open(cgroup_v2_usage, "r") as f:
+                result["usage"] = int(f.read().strip())
+            with open(cgroup_v2_limit, "r") as f:
+                limit_raw = f.read().strip()
+                # "max" means no limit
+                result["limit"] = int(limit_raw) if limit_raw.isdigit() else 0
+        except Exception as e:
+            logger.debug("Could not read cgroup v2 memory files: %s", e)
+        return result
+
+    # cgroup v1
+    cgroup_v1_limit = "/sys/fs/cgroup/memory/memory.limit_in_bytes"
+    cgroup_v1_usage = "/sys/fs/cgroup/memory/memory.usage_in_bytes"
+    if os.path.exists(cgroup_v1_limit) and os.path.exists(cgroup_v1_usage):
+        try:
+            with open(cgroup_v1_limit, "r") as f:
+                result["limit"] = int(f.read().strip())
+            with open(cgroup_v1_usage, "r") as f:
+                result["usage"] = int(f.read().strip())
+        except Exception as e:
+            logger.debug("Could not read cgroup v1 memory files: %s", e)
+        return result
+
+    return result
+
+
+async def _get_container_memory() -> dict:
+    """Return memory stats, preferring cgroup container limits over host RAM."""
+    cgroup = await asyncio.to_thread(_read_cgroup_memory_stats)
+
+    if cgroup.get("limit") and cgroup.get("limit") > 0:
+        limit = cgroup["limit"]
+        usage = cgroup.get("usage", 0)
+        percent = round((usage / limit) * 100, 1) if limit else 0
+        return {
+            "ram": percent,
+            "ram_total": limit,
+            "ram_used": usage,
+            "source": "cgroup",
+        }
+
+    # Fallback to psutil (host view, but still useful outside containers).
+    mem = await asyncio.to_thread(psutil.virtual_memory)
+    return {
+        "ram": mem.percent,
+        "ram_total": mem.total,
+        "ram_used": mem.used,
+        "source": "psutil",
+    }
+
 
 async def get_dashboard_stats():
     """
@@ -27,12 +100,10 @@ async def get_dashboard_stats():
     # System Resources
     try:
         cpu_percent = await asyncio.to_thread(psutil.cpu_percent)
-        mem = await asyncio.to_thread(psutil.virtual_memory)
+        mem_stats = await _get_container_memory()
         resources = {
             "cpu": cpu_percent,
-            "ram": mem.percent,
-            "ram_total": mem.total,
-            "ram_used": mem.used
+            **mem_stats,
         }
     except Exception as e:
         logger.error(f"Error fetching system resources: {e}")
@@ -40,7 +111,7 @@ async def get_dashboard_stats():
             "cpu": 0,
             "ram": 0,
             "ram_total": 0,
-            "ram_used": 0
+            "ram_used": 0,
         }
 
     # Increase timeout for Docker stats collection

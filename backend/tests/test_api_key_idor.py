@@ -5,6 +5,7 @@ delete someone else's API key. Verify the ownership check.
 """
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
 from sqlalchemy import select
@@ -61,11 +62,10 @@ async def test_non_owner_cannot_delete_other_user_key(db):
     bob = await _user(db, "bob")
     alice_key = await _key(db, alice.id, jti="alice-key")
 
-    result = await blacklist_api_key(alice_key.id, db, requesting_user=bob)
+    with pytest.raises(HTTPException) as exc:
+        await blacklist_api_key(alice_key.id, db, requesting_user=bob)
 
-    # Same "not found" message as for a missing key, so we don't leak
-    # whether the id maps to another account.
-    assert "error" in result
+    assert exc.value.status_code == 404
     # Alice's key is still there.
     res = await db.execute(select(APIKEY).filter(APIKEY.id == alice_key.id))
     assert res.scalars().first() is not None
@@ -87,8 +87,9 @@ async def test_superuser_can_delete_any_key(db):
 @pytest.mark.asyncio
 async def test_missing_key_returns_not_found(db):
     alice = await _user(db, "alice")
-    result = await blacklist_api_key(9999, db, requesting_user=alice)
-    assert "error" in result
+    with pytest.raises(HTTPException) as exc:
+        await blacklist_api_key(9999, db, requesting_user=alice)
+    assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio

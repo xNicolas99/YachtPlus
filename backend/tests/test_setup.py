@@ -81,8 +81,8 @@ def test_bypass_setup(override_db):
     # user count = 0 so the bypass is allowed
     db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: 0)
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
-         patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+         patch("api.routers.setup.setup.get_settings") as fake_get_settings:
+        fake_get_settings.return_value = MagicMock(DISABLE_AUTH=True)
         response = client.post("/api/setup/bypass")
     assert response.status_code == 200
     assert response.json() == {"message": "Setup bypassed"}
@@ -91,8 +91,8 @@ def test_bypass_setup(override_db):
 def test_bypass_setup_already_completed(override_db):
     db = override_db
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=True)), \
-         patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+         patch("api.routers.setup.setup.get_settings") as fake_get_settings:
+        fake_get_settings.return_value = MagicMock(DISABLE_AUTH=True)
         response = client.post("/api/setup/bypass")
     assert response.status_code == 200
     assert response.json() == {"message": "Setup already completed or bypassed."}
@@ -103,8 +103,8 @@ def test_bypass_setup_users_exist(override_db):
     # user count > 0 -> refuse
     db.execute.side_effect = lambda stmt: MagicMock(scalar=lambda: 1)
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
-         patch("api.routers.setup.setup.Settings") as fake_settings_cls:
-        fake_settings_cls.return_value = MagicMock(DISABLE_AUTH=True)
+         patch("api.routers.setup.setup.get_settings") as fake_get_settings:
+        fake_get_settings.return_value = MagicMock(DISABLE_AUTH=True)
         response = client.post("/api/setup/bypass")
     assert response.status_code == 400
     assert response.json() == {"detail": "Cannot bypass setup after a user has been registered."}

@@ -10,6 +10,8 @@ import asyncio
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
 from api.settings import get_settings
+
+# using module-level _settings
 _settings = get_settings()
 
 logger = logging.getLogger(__name__)
@@ -92,7 +94,7 @@ def _is_trusted_proxy(client_ip: str) -> bool:
     except ValueError:
         return False
 
-    for entry in getattr(get_settings(), "TRUSTED_PROXIES", []) or []:
+    for entry in getattr(_settings, "TRUSTED_PROXIES", []) or []:
         try:
             if "/" in entry:
                 if peer in ipaddress.ip_network(entry, strict=False):
@@ -205,13 +207,12 @@ async def _count_recent_failed_attempts_for_username(
 
 
 async def check_ip_restriction(request: Request, db: AsyncSession, username: str = None):
-    _settings = get_settings()
     client_ip = _resolve_client_ip(request)
 
     # Hard-blocking every public IP made hosted/VPS deployments impossible
     # to log into; the block is now opt-out via YACHT_BLOCK_PUBLIC_IP_LOGIN.
     # getattr fallback keeps older Settings stubs (tests, embedders) working.
-    if getattr(get_settings(), "BLOCK_PUBLIC_IP_LOGIN", True) and not is_private_ip(client_ip):
+    if getattr(_settings, "BLOCK_PUBLIC_IP_LOGIN", True) and not is_private_ip(client_ip):
         await send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

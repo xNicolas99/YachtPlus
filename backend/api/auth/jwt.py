@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from api.settings import get_settings
-_settings = get_settings()
+settings = get_settings()
 
 
 
@@ -52,7 +52,7 @@ async def revoke_token(token: str) -> None:
     try:
         payload = jwt.decode(
             token,
-            get_settings().SECRET_KEY,
+            settings.SECRET_KEY,
             algorithms=[ALGORITHM],
             options={"verify_exp": False},  # may be expired by now; that's fine
         )
@@ -104,15 +104,13 @@ class TokenData(BaseModel):
     token_type: Optional[str] = None
     # Add other claims if needed
 
-# JWT Configuration
-# _SECRET_KEY is now strictly from settings
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 def get_secret_key():
-    return get_settings().SECRET_KEY
+    return settings.SECRET_KEY
 
 # Deprecated/Removed: set_secret_key (secrets are immutable after startup now)
 
@@ -121,7 +119,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     if expires_delta:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=_access_token_expire_minutes())
+        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     # jti = unique per-token id so /logout can blacklist exactly THIS
     # token (and re-uses of an older JWT for the same user are not
     # accidentally invalidated). Without this, JWTs were stateless and
@@ -199,7 +197,7 @@ def get_current_user_token(request: Request):
     return None
 
 async def get_current_user(token: str = Depends(get_current_user_token)):
-    if get_settings().DISABLE_AUTH:
+    if settings.DISABLE_AUTH:
         return "admin" # Mock user when auth disabled
 
     credentials_exception = HTTPException(
@@ -258,9 +256,9 @@ class AuthWrapper:
         """Decide whether to mark the access-token cookie Secure.
 
         Three cases:
-          - get_settings().SECURE_COOKIES is True  -> always Secure (admin opted in).
-          - get_settings().SECURE_COOKIES is False -> never Secure (admin opted out).
-          - get_settings().SECURE_COOKIES is None  -> auto: Secure only if THIS
+          - settings.SECURE_COOKIES is True  -> always Secure (admin opted in).
+          - settings.SECURE_COOKIES is False -> never Secure (admin opted out).
+          - settings.SECURE_COOKIES is None  -> auto: Secure only if THIS
             request is HTTPS. We check the URL scheme first; behind nginx
             that's always http://, so we also honour X-Forwarded-Proto.
             (X-Forwarded-Proto is set by *our own* nginx in nginx.conf, so
@@ -271,7 +269,7 @@ class AuthWrapper:
         the browser refused the Secure cookie over http://192.168.x.y and
         every subsequent /2fa/* call returned 401.
         """
-        explicit = get_settings().SECURE_COOKIES
+        explicit = settings.SECURE_COOKIES
         if explicit is True:
             return True
         if explicit is False:
@@ -292,8 +290,8 @@ class AuthWrapper:
             key="access_token_cookie",
             value=token,
             httponly=True,
-            max_age=max_age or (int(get_settings().ACCESS_TOKEN_EXPIRE_MINUTES) * 60),
-            samesite=get_settings().SAME_SITE_COOKIES,
+            max_age=max_age or (int(settings.ACCESS_TOKEN_EXPIRE_MINUTES) * 60),
+            samesite=settings.SAME_SITE_COOKIES,
             secure=self._resolve_secure_flag(),
             path="/",  # explicit so it's sent on every API path, not just /api/setup/*
         )

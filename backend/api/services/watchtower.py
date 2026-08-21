@@ -1,3 +1,5 @@
+import atexit
+import fcntl
 import os
 from apscheduler.schedulers.background import BackgroundScheduler
 # Watchtower runs inside the *sync* BackgroundScheduler thread, so it
@@ -57,10 +59,36 @@ def update_all_projects():
     for project_name in files.keys():
         update_compose_project(project_name)
 
+def _acquire_leader_lock() -> bool:
+    """Try to acquire a filesystem lock so only one worker becomes leader.
+
+    gunicorn runs multiple worker processes. APScheduler's BackgroundScheduler
+    would start in every worker, causing the same compose auto-update to run
+    N times simultaneously. A non-blocking flock on a shared file elects
+    exactly one leader per container; other workers skip scheduling silently.
+    The lock is released automatically when the process exits.
+    """
+    lock_dir = os.path.dirname(settings.COMPOSE_DIR) or "."
+    os.makedirs(lock_dir, exist_ok=True)
+    lock_path = os.path.join(lock_dir, ".watchtower_leader.lock")
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+        fcntl.flock(fd, fcntl.LOCK_NB | fcntl.LOCK_EX)
+        # Keep fd open for the process lifetime; register a cleanup.
+        atexit.register(lambda: (fcntl.flock(fd, fcntl.LOCK_UN), os.close(fd)))
+        return True
+    except (OSError, BlockingIOError):
+        return False
+
+
 def start_scheduler():
     global _scheduler_started
     if _scheduler_started:
         logger.debug("Watchtower scheduler already started in this process; skipping.")
+        return
+
+    if not _acquire_leader_lock():
+        logger.info("Another worker already leads the watchtower scheduler; skipping.")
         return
 
     # Schedule update every 24 hours (example)

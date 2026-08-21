@@ -37,8 +37,8 @@ monorepo tooling — they are independent Node and Python projects.
 | Frontend | Vue 3.4 + Vite 7 + Vuetify 3, Vuex 4 for state + Pinia 3 mounted (active), vue-router 4, vee-validate v4, axios. Routes are lazy-loaded (code-split); vendor libs split via `manualChunks` in `vite.config.js`. |
 | Backend | Python 3.11, FastAPI, SQLAlchemy 2.x (async engine), aiodocker, APScheduler, slowapi (rate limit), bcrypt, PyJWT, pyotp |
 | DB | SQLite default (`sqlite:////config/yacht.db`, via `sqlite+aiosqlite`); Postgres via `postgresql+asyncpg`; MySQL via `mysql+aiomysql` — all driven by `DATABASE_URL` |
-| Build/Deploy | Multi-stage `Dockerfile` (Node build → Python runtime + nginx); `docker-compose.yml`; GitHub Actions in `.github/workflows/` (`docker-image.yml`, `ghcr.yml`) |
-| Test | pytest (backend, 499 tests, all green, **kept local / not tracked**), vitest (frontend, 21 tests, all green, **kept local / not tracked**), no Playwright |
+| Build/Deploy | Multi-stage `Dockerfile` (Node build → Python deps build → Python runtime + nginx); `docker-compose.yml`; GitHub Actions in `.github/workflows/` (`docker-image.yml`, `ghcr.yml`, `ci.yml`) |
+| Test | pytest (backend), vitest (frontend) | Backend and frontend tests are **tracked** in this repo (`backend/tests/`, `frontend/**/*.test.js`). CI runs both suites. |
 
 ---
 
@@ -66,7 +66,8 @@ backend/
     services/              # Background jobs (watchtower poll, audit cleanup)
     utils/                 # Pure helpers: compose parsing, crypto, audit, sanitiser
   alembic/                 # Migrations
-  tests/                   # pytest, with conftest.py for env setup (local, not tracked)
+  tests/                   # pytest, with conftest.py for env setup (tracked; run in CI)
+  alembic/versions/        # tracked Alembic migrations; run `alembic upgrade head` for upgrades
   requirements.txt
 frontend/
   src/
@@ -438,9 +439,8 @@ npm run build    # writes to frontend/dist
 
 ### Tests
 
-The test suites live **locally** (`backend/tests/`, `frontend/**/*.test.js`)
-and are intentionally **not tracked** by git (see `.gitignore`: `backend/tests/`,
-`*.test.js`, `*.spec.js`). CI runs Docker builds only. To run them:
+The test suites live in `backend/tests/` and `frontend/**/*.test.js` and are
+**tracked**; CI runs them on every push/PR. To run them locally:
 
 ```bash
 # Backend
@@ -449,13 +449,10 @@ DATABASE_URL="sqlite:///./test.db" python -m pytest tests/
 
 # Frontend
 cd frontend
-npx vitest run
+npm run test
 ```
 
-Current baseline (local, untracked): **501 backend + 21 frontend tests, all
-green.** `backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
-*before* `Settings` is evaluated — needed because `TrustedHostMiddleware`
-would otherwise reject TestClient's default `Host: testserver`.
+Current baseline: **513 backend + 21 frontend tests, all green.**
 
 `backend/tests/conftest.py` also provides shared async `db` / `db_session`
 fixtures (in-memory `sqlite+aiosqlite`, `StaticPool`). After the async

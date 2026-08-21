@@ -186,5 +186,5 @@ async def test_send_test_email_rejects_non_admin(db):
     from api.routers.smtp import send_test_email, TestEmailSchema
     payload = TestEmailSchema(recipient="phish@attacker.example")
     with pytest.raises(HTTPException) as exc:
-        await send_test_email(payload, db=db, Authorize=MockAuth("bob"))
+        await send_test_email(None, payload, db=db, Authorize=MockAuth("bob"))
     assert exc.value.status_code == 403

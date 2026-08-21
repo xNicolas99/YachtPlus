@@ -18,6 +18,18 @@ RUN ls -la
 
 RUN npm run build --verbose
 
+# Build Python wheels in a dedicated stage so C extensions and the
+# compiler toolchain don't bloat the final runtime image.
+FROM python:3.11-slim AS python-deps
+
+WORKDIR /deps
+
+# Install build dependencies and system libraries needed to compile packages.
+RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     python3-dev     default-libmysqlclient-dev     pkg-config     ca-certificates     && rm -rf /var/lib/apt/lists/*
+
+COPY ./backend/requirements.txt ./
+RUN pip install --upgrade pip setuptools wheel &&     pip wheel --no-cache-dir --wheel-dir /deps/wheels -r requirements.txt
+
 # Setup Container and install FastAPI backend
 FROM python:3.11-slim AS deploy-stage
 
@@ -81,14 +93,9 @@ RUN set -eux; \
         -o /usr/local/lib/docker/cli-plugins/docker-compose && \
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-# Upgrade pip, setuptools, and wheel
-RUN pip3 install --upgrade pip setuptools wheel
-
-# Copy requirements.txt first
-COPY ./backend/requirements.txt ./
-
-# Install Python packages from requirements.txt
-RUN pip3 install -r requirements.txt --no-cache-dir --verbose
+# Install pre-built wheels from the python-deps stage. This keeps the
+# deploy image free of compilers and build headers.
+RUN pip3 install --upgrade pip setuptools wheel &&     pip3 install --no-cache --no-index --find-links=/deps/wheels -r /deps/requirements.txt
 
 # Create directories and set permissions for appuser. Pre-create the
 # scratch dirs nginx.conf points at — Dockerfile bake-time chown is more
@@ -103,6 +110,11 @@ RUN mkdir -p /config \
         /var/lib/nginx /var/lib/nginx/body /var/lib/nginx/tmp \
         /etc/nginx/conf.d && \
     chown -R appuser:appuser /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx /var/cache/nginx /api
+
+# Copy pre-built wheels and the requirements manifest from the
+# python-deps stage, then copy the backend code.
+COPY --from=python-deps /deps/requirements.txt /deps/requirements.txt
+COPY --from=python-deps /deps/wheels /deps/wheels
 
 # Copy the backend code with correct ownership
 COPY --chown=appuser:appuser ./backend/ ./

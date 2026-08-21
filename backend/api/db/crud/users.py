@@ -170,19 +170,23 @@ async def prune_blacklist(db: AsyncSession):
     return
 
 async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
+    from fastapi import HTTPException
+
     res = await db.execute(select(models.APIKEY).filter(models.APIKEY.id == key_id))
     key = res.scalars().first()
     if not key:
-        return {"error": "Key not found"}
+        # Raise 404 instead of returning a 200-shaped error dict. The
+        # router is responsible for surfacing this as a proper HTTP 404.
+        raise HTTPException(status_code=404, detail="Key not found")
 
     if requesting_user is not None:
         is_owner = key.user == requesting_user.id
         is_admin = getattr(requesting_user, 'is_superuser', False)
         if not (is_owner or is_admin):
-            # Return the same payload as a missing id (no IDOR id-existence
+            # Return the same status as a missing id (no IDOR id-existence
             # leak): a non-owner must not be able to tell whether the key
             # belongs to another account.
-            return {"error": "Key not found"}
+            raise HTTPException(status_code=404, detail="Key not found")
 
     # Hard-revoke the JWT: insert its jti into the blacklist so the token
     # becomes invalid immediately, even though it may have years of remaining
