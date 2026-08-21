@@ -414,7 +414,7 @@ async def refresh_template(db: AsyncSession, template_id: id):
             raise HTTPException(status_code=exc.status_code, detail="Failed to refresh template. Check server logs for details.")
         raise HTTPException(status_code=400, detail="Failed to refresh template. Check server logs for details.")
     else:
-        template.updated_at = datetime.utcnow()
+        template.updated_at = datetime.now(timezone.utc)
         template.items = items
 
         try:

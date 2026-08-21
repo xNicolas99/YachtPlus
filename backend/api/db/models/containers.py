@@ -11,7 +11,7 @@ from sqlalchemy.orm import relationship
 
 from api.db.database import Base
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class Template(Base):
@@ -20,15 +20,15 @@ class Template(Base):
 
     # alternative: DateTime(timezone=True), sqlalchemy.sql.func.now()
     created_at = Column(
-        DateTime, nullable=False, unique=False, index=False, default=datetime.utcnow
+        DateTime, nullable=False, unique=False, index=False, default=lambda: datetime.now(timezone.utc)
     )
     updated_at = Column(
         DateTime,
         nullable=False,
         unique=False,
         index=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     # rename to title

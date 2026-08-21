@@ -167,7 +167,7 @@ limiter = Limiter(
 
 
 async def _count_recent_failed_attempts(db: AsyncSession, client_ip: str, minutes: int = 15) -> int:
-    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     result = await db.execute(
         select(func.count())
         .select_from(LoginAttempt)
@@ -191,7 +191,7 @@ _USERNAME_LOCKOUT_THRESHOLD = 20
 async def _count_recent_failed_attempts_for_username(
     db: AsyncSession, username: str, minutes: int = _USERNAME_LOCKOUT_WINDOW_MIN,
 ) -> int:
-    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     result = await db.execute(
         select(func.count())
         .select_from(LoginAttempt)

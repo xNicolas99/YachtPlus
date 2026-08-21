@@ -1,5 +1,8 @@
-.vscode
-versions
+# Keep top-level "versions" ignored (legacy artifact) but allow Alembic migrations
+/versions
+!/backend/alembic/versions
+/backend/alembic/versions/*.pyc
+
 sql_app.db
 venv
 *.db

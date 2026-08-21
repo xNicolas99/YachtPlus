@@ -1,6 +1,6 @@
 from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
 from api.db.database import Base
 
 
@@ -50,11 +50,11 @@ class APIKEY(Base):
         nullable=False,
         unique=False,
         index=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
     # Expiration of the underlying JWT; needed so that a revoked API key's
     # blacklist entry can be auto-pruned once the token naturally expires.
-    expires = Column(DateTime, nullable=True)
+    expires = Column(DateTime(timezone=True), nullable=True)
     user = Column(Integer, ForeignKey("user.id"))
 
 class LoginAttempt(Base):
@@ -62,5 +62,5 @@ class LoginAttempt(Base):
     id = Column(Integer, primary_key=True, index=True)
     ip_address = Column(String, index=True)
     username = Column(String, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     success = Column(Boolean)
