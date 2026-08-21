@@ -239,6 +239,7 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
 | Per-IP login limit | `api/routers/users.py` `@limiter.limit("5/minute")` | slowapi on login + refresh + key-creation. |
 | Per-IP fail2ban | `api/utils/security.py: check_ip_restriction` | 5 failed logins / 15 min from the same IP → 403. |
 | Per-username lockout | same | 20 failed logins / 30 min for the same username (across IPs) → 403. Error wording is identical to the IP block so an attacker can't tell which guard fired. |
+| Rate-limiting | `api/utils/security.py: limiter` | slowapi shared instance with key function `_resolve_client_ip`. Default limit 100/minute; Docker/compose/resource mutations limited to 10–60/minute by endpoint. Tests disable the decorator at import time so unit tests calling handlers directly still run. |
 | Trusted-proxy allowlist | `api/utils/security.py: _is_trusted_proxy` | X-Real-IP / X-Forwarded-For are **only** honoured when the direct peer is in `settings.TRUSTED_PROXIES` (`YACHT_TRUSTED_PROXIES=ip[,cidr,...]`). Default empty → never trust them. Stops same-LAN attackers from spoofing client-IP attribution. |
 | API-key delete | `api/routers/users.py: delete_api_key` | DELETE verb (GET kept as deprecated alias). Ownership-or-superuser check in `crud.blacklist_api_key`; non-owner gets the same "not found" payload as a missing id (no IDOR leak). |
 | API-key creation rate limit | `api/routers/users.py: create_api_key` | `@limiter.limit("5/minute")` — keys are long-lived (10y exp). |
@@ -443,7 +444,7 @@ cd frontend
 npx vitest run
 ```
 
-Current baseline (local, untracked): **499 backend + 21 frontend tests, all
+Current baseline (local, untracked): **501 backend + 21 frontend tests, all
 green.** `backend/tests/conftest.py` injects `YACHT_ALLOWED_HOSTS=...,testserver`
 *before* `Settings` is evaluated — needed because `TrustedHostMiddleware`
 would otherwise reject TestClient's default `Host: testserver`.
