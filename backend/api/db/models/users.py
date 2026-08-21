@@ -48,6 +48,9 @@ class APIKEY(Base):
         index=False,
         default=datetime.utcnow,
     )
+    # Expiration of the underlying JWT; needed so that a revoked API key's
+    # blacklist entry can be auto-pruned once the token naturally expires.
+    expires = Column(DateTime, nullable=True)
     user = Column(Integer, ForeignKey("user.id"))
 
 class LoginAttempt(Base):

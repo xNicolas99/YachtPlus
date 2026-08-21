@@ -168,6 +168,10 @@ async def prune_blacklist(db: AsyncSession):
     return
 
 async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
+    from datetime import datetime, timedelta
+    import jwt as _pyjwt
+    from api.db.models.settings import TokenBlacklist
+
     res = await db.execute(select(models.APIKEY).filter(models.APIKEY.id == key_id))
     key = res.scalars().first()
     if not key:
@@ -181,6 +185,19 @@ async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
             # leak): a non-owner must not be able to tell whether the key
             # belongs to another account.
             return {"error": "Key not found"}
+
+    # Hard-revoke the JWT: insert its jti into the blacklist so the token
+    # becomes invalid immediately, even though it may have years of remaining
+    # lifetime. Without this, deleting the APIKEY row only removes the lookup
+    # record; the bearer token stays usable until exp.
+    if key.jti:
+        expires_at = key.expires
+        # If we don't have a stored expiration, fall back to a far-future
+        # timestamp (10 years from minting) so the row stays active long enough
+        # to block the token.
+        if expires_at is None:
+            expires_at = datetime.utcnow() + timedelta(days=3650)
+        db.add(TokenBlacklist(jti=key.jti, expires=expires_at, revoked=True))
 
     await db.delete(key)
     try:
@@ -196,14 +213,22 @@ async def get_keys(user, db: AsyncSession):
     return keys
 
 async def create_key(key_name, user, Authorize, db: AsyncSession):
-    jti = None
-    from datetime import timedelta
-    api_key = create_access_token(data={"sub": user.username}, expires_delta=timedelta(days=3650))
+    import hashlib
+    from datetime import timedelta, datetime
+    import jwt as _pyjwt
 
-    _hashed_key = await get_password_hash(api_key)
+    api_key = create_access_token(data={"sub": user.username}, expires_delta=timedelta(days=3650))
+    decoded = _pyjwt.decode(api_key, options={"verify_signature": False})
+    jti = decoded.get("jti")
+    expires_at = datetime.utcfromtimestamp(decoded["exp"])
+
+    # Store a fast, length-stable hash of the token so we can detect
+    # reuse if we ever need to, without bcrypt's 72-byte limit rejecting
+    # long JWTs.
+    _hashed_key = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
     db_key = models.APIKEY(
-        key_name=key_name, user=user.id, hashed_key=_hashed_key, jti=jti
+        key_name=key_name, user=user.id, hashed_key=_hashed_key, jti=jti, expires=expires_at
     )
     db.add(db_key)
     await db.commit()
