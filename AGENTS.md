@@ -195,6 +195,14 @@ Flat boolean flags on `User`: `is_superuser`, `is_active`, `is_2fa_enabled`,
 and granular `perm_start`, `perm_stop`, `perm_restart`, `perm_delete`.
 Superusers bypass `check_permission`.
 
+> **No `perm_read`.** There is intentionally no dedicated read-only
+> permission. Read endpoints that expose container state, configuration, or
+> compose projects are gated behind `perm_start` (the lowest operator
+> permission) because even read access to a container orchestrator leaks
+> env vars, secrets, and runtime state that can be abused for privilege
+> escalation. A future `perm_read` would require its own audit/scope work;
+> until then, treat `perm_start` as the read floor. (FND-103 / S10)
+
 ### Where each permission is enforced
 
 | Endpoint family | Gate |

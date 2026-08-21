@@ -62,9 +62,22 @@ WebSocket exec sessions (container terminal) reuse the same cookie: `backend/api
 | HTML sanitisation | `frontend/src/main.js` | `$sanitize` uses DOMPurify with an explicit allowlist (`b,i,em,strong,a,p,br,ul,ol,li,code,pre`, only `http(s)`/`mailto:` URLs). |
 | Brute-force protection | `backend/api/routers/users.py` | `slowapi` rate limit `5/minute` on `/login` and `/login_cookie`, plus IP-restriction + `LoginAttempt` table for fail2ban-style blocking. Public-IP logins are blocked by default (`YACHT_BLOCK_PUBLIC_IP_LOGIN=false` to allow). |
 | State-changing routes use POST | `routers/apps.py`, `routers/compose.py` | Container/compose actions (start/stop/delete/update) are POST; the legacy GET aliases are deprecated and will be removed. |
-| Secret key | `backend/api/settings.py:8-39` | Reads `SECRET_KEY` env first, otherwise persists to `$SECRET_KEY_FILE` (default `/config/.secret_key`). **Refuses to start** if it can't be loaded or written — no ephemeral per-process fallback. |
 | 2FA enforcement | `backend/api/routers/setup/setup.py:165-169` | `/finalize` rejects accounts without 2FA. |
 | Setup-pending token | `setup.py:144` | 15-minute lifetime, blocked by `auth_check_setup_pending` once setup is complete (prevents stale-token replay). |
+
+### Permission model
+
+YachtPlus uses four action permissions on the `User` model:
+`perm_start`, `perm_stop`, `perm_restart`, and `perm_delete`.
+Superusers bypass all permission checks.
+
+There is **no dedicated `perm_read` permission**. Read-only views such as
+the Docker Compose project list are therefore gated behind `perm_start`,
+the lowest operator permission. This is intentional: even "read" access
+to a container orchestrator exposes configuration, environment variables,
+and runtime state that can be abused to escalate privileges. If you need
+a truly read-only account today, grant no action permissions and use
+superuser status only where necessary.
 
 ---
 

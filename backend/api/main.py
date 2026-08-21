@@ -26,6 +26,10 @@ from api.settings import get_settings
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,6 +40,32 @@ async def lifespan(app: FastAPI):
     # import.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Deployment-mode health check: log the derived mode and any config
+    # warnings/errors once at startup. We intentionally do not refuse to
+    # start — a misconfigured but reachable instance is more useful than one
+    # that fails silently. (FND-501 / S7)
+    _settings = get_settings()
+    mode = _settings.MODE
+    checks = _settings.CONFIG_CHECKS
+    errors = [c for c in checks if c.severity.value == "error"]
+    warnings = [c for c in checks if c.severity.value == "warning"]
+    infos = [c for c in checks if c.severity.value == "info"]
+    logger.info(
+        "YachtPlus deployment mode: %s | checks: %d info, %d warnings, %d errors",
+        mode.value, len(infos), len(warnings), len(errors),
+    )
+    for check in checks:
+        log_fn = logger.error if check.severity.value == "error" else logger.warning
+        if check.severity.value == "info":
+            log_fn = logger.info
+        log_fn("[%s] %s: %s (keys: %s)", check.severity.value.upper(), check.rule_id, check.message, ", ".join(check.config_keys))
+    if errors:
+        logger.warning(
+            "YachtPlus is starting despite %d configuration error(s). Review the [S7/*] log entries above.",
+            len(errors),
+        )
+
     yield
 
 

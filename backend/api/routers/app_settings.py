@@ -17,6 +17,7 @@ from api.actions import resources
 from api.actions.apps import _update_self, check_self_update
 
 from api.settings import Settings
+from api.utils.deployment_mode import DeploymentMode, ConfigCheck
 
 from api.auth.jwt import get_auth_wrapper
 
@@ -155,3 +156,32 @@ async def update_self(
 async def _check_self_update(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     await auth_check(Authorize)
     return await check_self_update()
+
+
+@router.get("/deployment")
+async def get_deployment_status(
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    """Read-only status of the detected deployment mode and config checks.
+
+    Returns the mode (local/public/mixed) and the list of configuration
+    health checks generated at startup. This endpoint is authenticated but
+    not restricted to superusers — any authenticated operator may review
+    the instance hardening status. (FND-501 / S7)
+    """
+    await auth_check(Authorize)
+    mode = settings.MODE
+    checks = settings.CONFIG_CHECKS
+    return {
+        "mode": mode.value,
+        "checks": [
+            {
+                "rule_id": c.rule_id,
+                "severity": c.severity.value,
+                "message": c.message,
+                "mode_expected": c.mode_expected.value if c.mode_expected else None,
+                "config_keys": c.config_keys,
+            }
+            for c in checks
+        ],
+    }

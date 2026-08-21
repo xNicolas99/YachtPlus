@@ -101,6 +101,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
     setup_pending: bool = False
+    token_type: Optional[str] = None
     # Add other claims if needed
 
 # JWT Configuration
@@ -134,13 +135,18 @@ async def verify_token(token: str, credentials_exception):
         payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         username: str = payload.get("sub")
         setup_pending: bool = payload.get("setup_pending", False)
+        token_type: str = payload.get("type")
         if username is None:
             raise credentials_exception
         if await _is_jti_revoked(payload.get("jti")):
             # Token was explicitly invalidated via /logout. Treat exactly
             # like an expired token from the client's perspective.
             raise credentials_exception
-        token_data = TokenData(username=username, setup_pending=setup_pending)
+        token_data = TokenData(
+            username=username,
+            setup_pending=setup_pending,
+            token_type=token_type,
+        )
         return token_data
     except jwt.PyJWTError:
         raise credentials_exception
@@ -197,6 +203,17 @@ class AuthWrapper:
         # If jwt_required wasn't called (it should have been), call it
         user = await self.jwt_required(allow_setup_pending=allow_setup_pending)
         return user.username
+
+    def is_api_key(self) -> bool:
+        """Return True if the authenticated token is an API key.
+
+        Must only be called after jwt_required()/get_jwt_subject() has run,
+        otherwise it returns False. This lets routes reject long-lived API
+        keys for the most dangerous state-changing operations without
+        breaking normal login sessions or legacy API keys that lack the
+        `type` claim.
+        """
+        return isinstance(self.user, TokenData) and self.user.token_type == "api_key"
 
     def unset_jwt_cookies(self, response):
         # path must match the one used in set_access_cookies, else the

@@ -1,9 +1,11 @@
 import os
 import secrets
-from typing import Optional
+from typing import List, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+from api.utils.deployment_mode import DeploymentMode, ConfigCheck, detect_deployment_mode
 
 
 def get_or_create_secret_key() -> str:
@@ -153,6 +155,23 @@ class Settings(BaseSettings):
         if os.getenv("YACHT_TRUSTED_PROXIES") is not None
         else ["127.0.0.1", "::1"]
     )
+
+    # Deployment-mode detection runs once per cached Settings instance.
+    # It only logs health checks; it never blocks startup.
+    _mode: DeploymentMode = DeploymentMode.LOCAL
+    _checks: List[ConfigCheck] = []
+
+    def model_post_init(self, __context):
+        super().model_post_init(__context)
+        self._mode, self._checks = detect_deployment_mode(self)
+
+    @property
+    def MODE(self) -> DeploymentMode:
+        return self._mode
+
+    @property
+    def CONFIG_CHECKS(self) -> List[ConfigCheck]:
+        return self._checks
 
     class Config:
         env_file = ".env"

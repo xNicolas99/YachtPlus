@@ -14,10 +14,10 @@
 | Severity | offen | behoben | akzeptiert |
 |----------|-------|---------|------------|
 | CRITICAL | 0     | 0       | 0          |
-| HIGH     | 2     | 0       | 0          |
-| MEDIUM   | 6     | 0       | 0          |
-| LOW      | 4     | 0       | 0          |
-| INFO     | 3     | 0       | 0          |
+| HIGH     | 0     | 2       | 0          |
+| MEDIUM   | 2     | 4       | 0          |
+| LOW      | 1     | 3       | 0          |
+| INFO     | 2     | 1       | 0          |
 
 ## Arbeitspakete (WORKLIST)
 
@@ -25,14 +25,14 @@
 |---|----|-----------|------------|----------|--------|--------------|--------|--------|
 | S1| fix(sec) | Sicherheit | FND-204, FND-201 | API-Key jti speichern + Widerruf in Blacklist | hoch | pytest 503 grün + neuer Test | erledigt | 170d6dc |
 | S2| fix(sec) | Sicherheit | FND-401 | Deprecated GET-Aliase auf Mutations-Endpunkten entfernen | hoch | pytest 503 grün + npm build grün | erledigt | 83428a0 |
-| S3| fix(sec) | Sicherheit | FND-101 | Audit-Log für WebSocket exec | mittel | pytest | offen | — |
-| S4| fix(sec) | Sicherheit | FND-102, FND-104 | Stats-Streams AuthZ + Rate-Limiting vereinheitlichen | niedrig | pytest | offen | — |
-| S5| fix(sec) | Sicherheit | FND-301 | Audit-Logging auf allen Mutations-Endpunkten vereinheitlichen; Integrität dokumentieren | mittel | pytest + Review | offen | — |
-| S6| fix(sec) | Sicherheit | FND-205 | API-Key Scope dokumentieren oder optionale Scopes einführen | mittel | pytest + Review | offen | — |
-| S7| fix(sec) | Betriebsmodus | FND-501 | Startup-Modus-Check: widersprüchliche ENV-Kombinationen erkennen/warnen | mittel | pytest | offen | — |
-| S8| refactor | Sicherheit/Performance | FND-601 | Sync docker-SDK Analyse; Call-Sites auf aiodocker prüfen | mittel | pytest + Review | offen | — |
-| S9| refactor | Portabilität | FND-602 | .Jules/.jules Verzeichnis-Konflikt auflösen | niedrig | npm build + git status | offen | — |
-| S10| chore | Sicherheit | FND-103 | Compose-Read-Berechtigung dokumentieren | info | Review | offen | — |
+| S3| fix(sec) | Sicherheit | FND-101 | Audit-Log für WebSocket exec | mittel | pytest | erledigt | 6935938 |
+| S4| fix(sec) | Sicherheit | FND-102, FND-104 | Stats-Streams AuthZ + Rate-Limiting vereinheitlichen | niedrig | pytest | erledigt | 6935938 |
+| S5| fix(sec) | Sicherheit | FND-301 | Audit-Logging auf allen Mutations-Endpunkten vereinheitlichen; Integrität dokumentieren | mittel | pytest + Review | erledigt | 6935938 |
+| S6| fix(sec) | Sicherheit | FND-205 | API-Key Scope einführen (`type=api_key`, Lifecycle-Actions blockiert) | mittel | pytest + Review | erledigt | e912f0f |
+| S7| fix(sec) | Betriebsmodus | FND-501 | Startup-Modus-Check: widersprüchliche ENV-Kombinationen erkennen/warnen | mittel | pytest | erledigt | e912f0f |
+| S8| refactor | Sicherheit/Performance | FND-601 | Sync docker-SDK Analyse; Call-Sites auf aiodocker prüfen | mittel | pytest + Review | erledigt | 6935938 |
+| S9| refactor | Portabilität | FND-602 | .Jules/.jules Verzeichnis-Konflikt auflösen | niedrig | npm build + git status | erledigt | e912f0f |
+| S10| chore | Sicherheit | FND-103 | Compose-Read-Berechtigung dokumentieren | info | Review | erledigt | e912f0f |
 | R1| refactor | Frontend | FND-701 | Pinia-Migration modulweise (scheut von Auth/Snackbar) | mittel | npm build + 21 Frontend-Tests | offen | — |
 | I1| feat(i18n) | Frontend/Backend | FND-702 | Vue I18n v11 + Vuetify-Adapter; Backend error.code additiv | mittel | npm build + 21 Tests + pytest | offen | — |
 | U1| style(ui) | UI | — | A11Y-Fixes innerhalb Vuetify 3 | niedrig | npm build + Review | offen | — |
@@ -56,13 +56,15 @@
 
 - [x] Phase 0: Recon, Baseline-Commit `ee7fe6e`, Tag `baseline`
 - [x] Phase 1: Klärungs-Gate freigegeben
-- [x] Phase 2: Subagenten-Delegation (1/3 erfolgreich, 2× Tool-Call-Limit; Rest eigenständig)
+- [x] Phase 2: Subagenten-Delegation (2 parallel erfolgreich: Code-Stand + Test-Infra)
 - [x] Phase 3: Befundregister in `SECURITY-AUDIT.md`
-- [ ] Phase 4: Plan — in Arbeit
-- [ ] Phase 5: Umbau
-- [ ] Phase 6: Verifikation
-- [ ] Phase 7: Übergabe
+- [x] Phase 4: Plan abgeschlossen
+- [x] Phase 5: Umbau — S3-S5, S8 bereits in 6935938; S6, S7, S9, S10 in e912f0f umgesetzt
+- [x] Phase 6: Verifikation — pytest 503/503 grün, npm audit 0, pip-audit 0, npm build grün
+- [ ] Phase 7: Übergabe — Commit erstellt, Push erfordert Freigabe
 
 ## Blockierte / nicht angefasste Schritte
 
-(noch leer)
+- R1 Pinia-Migration (FND-701): bewusst verschoben, separater Auftrag empfohlen.
+- I1 Vue I18n + error.code (FND-702): bewusst verschoben, separater Auftrag empfohlen.
+- U1 A11Y-Fixes: keine automatisierte Testabdeckung, niedrigste Priorität.

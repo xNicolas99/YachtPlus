@@ -217,7 +217,15 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
     from datetime import timedelta, datetime
     import jwt as _pyjwt
 
-    api_key = create_access_token(data={"sub": user.username}, expires_delta=timedelta(days=3650))
+    # API keys are minted with a distinct token type so routes can
+    # distinguish them from interactive login sessions. Login tokens keep
+    # the default type (None / absent). Existing API keys without the
+    # claim continue to work; they are treated like session tokens until
+    # rotated.
+    api_key = create_access_token(
+        data={"sub": user.username, "type": "api_key"},
+        expires_delta=timedelta(days=3650),
+    )
     decoded = _pyjwt.decode(api_key, options={"verify_signature": False})
     jti = decoded.get("jti")
     expires_at = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)

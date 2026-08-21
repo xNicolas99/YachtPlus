@@ -198,6 +198,17 @@ async def get_support_bundle(
 @router.post("/actions/{app_name}/{action}")
 async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
     await auth_check(Authorize)
+
+    # API keys are long-lived credentials. They remain valid for read-only
+    # and low-risk automation, but container lifecycle mutations are too
+    # dangerous to allow with a token that cannot be narrowed by scope today.
+    # (FND-205 / S6)
+    if Authorize.is_api_key():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API keys cannot perform container lifecycle actions"
+        )
+
     if action == "start":
         await check_permission("perm_start", Authorize, db)
     elif action == "stop":
