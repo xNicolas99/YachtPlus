@@ -14,7 +14,7 @@ from sqlalchemy import select, func
 
 from api.db.database import Base
 from api.db.models.users import User
-from api.db.crud.users import create_user, get_user_by_name, _normalize_username
+from api.db.crud.users import create_user, get_user_by_name, normalize_username
 from api.db.schemas.users import UserCreate
 from api.utils.auth import get_db
 from fastapi import HTTPException
