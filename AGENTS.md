@@ -267,6 +267,27 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
 |---|---|---|
 | Docker daemon (async) | `aiodocker.Docker(url=settings.DOCKER_HOST)` | `DOCKER_HOST`, `DOCKER_GID` |
 | Docker daemon (sync) | `api.utils.docker_client.get_sync_docker_client()` — wraps `docker.DockerClient(base_url=...)` when `settings.DOCKER_HOST` is set, else `docker.from_env()`. **Never call `docker.from_env()` directly** — it bypasses an operator-configured TCP proxy. | `DOCKER_HOST` |
+
+#### Least-privilege Docker socket proxy matrix (N-01/N-02)
+
+When YachtPlus talks to Docker through a socket proxy (e.g. `tecspirit/docker-socket-proxy`),
+the proxy should allow only the API paths the backend actually uses. The matrix below is the
+authoritative reference; keep it in sync with any new Docker call.
+
+| Area | Proxy env flags needed | YachtPlus usage |
+|---|---|---|
+| Read resources | `CONTAINERS=1`, `IMAGES=1`, `NETWORKS=1`, `VOLUMES=1` | Dashboard stats, app list, resource lists, logs, inspect |
+| Container lifecycle | `POST=1` + `CONTAINERS_CREATE=1`, `CONTAINERS_UPDATE=1`, `CONTAINERS_DELETE=1` | start / stop / restart / recreate / remove containers |
+| Image management | `IMAGES_CREATE=1`, `IMAGES_DELETE=1` | pull / prune / remove images |
+| Network management | `NETWORKS_CREATE=1`, `NETWORKS_DELETE=1` | create / remove networks |
+| Volume management | `VOLUMES_CREATE=1`, `VOLUMES_DELETE=1` | create / remove volumes |
+| Exec (terminal) | `POST=1` + `CONTAINERS_UPDATE=1` | `/api/containers/{id}/exec` WebSocket |
+| Compose | depends on above flags | `docker compose` CLI still runs inside the YachtPlus container; the proxy only filters the direct daemon calls |
+
+The production `docker-compose.example.yml` ships with a read-only proxy mount
+(`/var/run/docker.sock:ro`) and explicit allowlist. Direct `/var/run/docker.sock`
+mounts should never be used in production because a compromised YachtPlus container
+can gain root on the host through the unfiltered Docker API.
 | docker-compose CLI | `subprocess.run` inside `_run_compose_command` (array form, no `shell=True`). Subcommand is whitelisted twice: at the router and again at `_compose_action_sync` / `_compose_app_action_sync` via `_ALLOWED_PROJECT_ACTIONS` / `_ALLOWED_APP_ACTIONS`. Sync, run in thread pool via `run_in_thread`. | `COMPOSE_DIR` |
 | Docker Hub / GHCR | Plain HTTP for image metadata + image listing | — |
 | Template registries | URL fetch via `urllib` + `SafeRedirectHandler`, hard timeout `TEMPLATE_FETCH_TIMEOUT_S`. SSRF-validated on every redirect. | — |

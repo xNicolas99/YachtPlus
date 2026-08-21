@@ -97,11 +97,26 @@ services:
     container_name: yachtplus-dockerproxy
     restart: unless-stopped
     environment:
+      # Least-privilege allowlist. Everything else defaults to 0.
+      # Read access: needed for the dashboard, app lists, compose status.
       CONTAINERS: 1
       IMAGES: 1
       NETWORKS: 1
       VOLUMES: 1
+      # Mutation access: create/update/remove containers/images/networks/volumes.
+      # POST alone is not enough for tecnativa/docker-socket-proxy; the
+      # individual resource CREATE/UPDATE/DELETE toggles below must also be on.
       POST: 1
+      DELETE: 1
+      CONTAINERS_CREATE: 1
+      CONTAINERS_UPDATE: 1
+      CONTAINERS_DELETE: 1
+      IMAGES_CREATE: 1
+      IMAGES_DELETE: 1
+      NETWORKS_CREATE: 1
+      NETWORKS_DELETE: 1
+      VOLUMES_CREATE: 1
+      VOLUMES_DELETE: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     security_opt: [no-new-privileges:true]
