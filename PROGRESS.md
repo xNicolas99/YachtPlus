@@ -23,7 +23,7 @@
 
 | # | ID | Kategorie | Befund-IDs | Änderung | Risiko | Verifikation | Status | Commit |
 |---|----|-----------|------------|----------|--------|--------------|--------|--------|
-| S1| fix(sec) | Sicherheit | FND-204, FND-201 | API-Key jti speichern + Widerruf in Blacklist | hoch | pytest 501 grün + neuer Test | offen | — |
+| S1| fix(sec) | Sicherheit | FND-204, FND-201 | API-Key jti speichern + Widerruf in Blacklist | hoch | pytest 503 grün + neuer Test | erledigt | 170d6dc |
 | S2| fix(sec) | Sicherheit | FND-401 | Deprecated GET-Aliase auf Mutations-Endpunkten entfernen | hoch | pytest + npm build + Frontend-Tests 21 | offen | — |
 | S3| fix(sec) | Sicherheit | FND-101 | Audit-Log für WebSocket exec | mittel | pytest | offen | — |
 | S4| fix(sec) | Sicherheit | FND-102, FND-104 | Stats-Streams AuthZ + Rate-Limiting vereinheitlichen | niedrig | pytest | offen | — |

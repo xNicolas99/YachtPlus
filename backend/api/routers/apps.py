@@ -142,7 +142,6 @@ async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_
 
 
 @router.post("/{app_name}/update")
-@router.get("/{app_name}/update", deprecated=True)
 async def update_container(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
     await auth_check(Authorize)
     await check_permission("perm_restart", Authorize, db) # Update is effectively a restart/recreate
@@ -190,7 +189,6 @@ async def get_support_bundle(
 # were CSRF-triggerable via GET (SameSite=lax sends the auth cookie on
 # top-level GET navigation). GET alias kept for one release for old clients.
 @router.post("/actions/{app_name}/{action}")
-@router.get("/actions/{app_name}/{action}", deprecated=True)
 async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
     await auth_check(Authorize)
     if action == "start":

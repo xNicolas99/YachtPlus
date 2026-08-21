@@ -344,7 +344,6 @@ async def create_api_key(
 # intermediaries. The GET alias is retained for one release so existing
 # frontend builds keep working — remove once clients are migrated.
 @router.delete("/api/keys/{key_id}")
-@router.get("/api/keys/{key_id}", deprecated=True)
 async def delete_api_key(
     key_id, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
 ):
