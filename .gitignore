@@ -26,7 +26,4 @@ config
 .pytest_cache/
 .Jules/
 
-# Test files — kept local, not tracked
-backend/tests/
-*.test.js
 *.spec.js
