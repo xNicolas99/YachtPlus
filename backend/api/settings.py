@@ -9,42 +9,59 @@ from api.utils.deployment_mode import DeploymentMode, ConfigCheck, detect_deploy
 
 
 def get_or_create_secret_key() -> str:
+    """Return the persistent signing key, creating it atomically if needed.
+
+    Race-safety: if multiple workers start simultaneously and the secret file
+    does not exist yet, O_EXCL guarantees that exactly one process creates the
+    file. The loser(s) catch EEXIST and re-read the file written by the winner,
+    so every worker converges on the same key without file locks or a shared
+    cache. A fixed-length read caps the amount of data we ever load from disk.
+    """
     # First check environment variable
     env_secret = os.getenv("SECRET_KEY")
     if env_secret:
         return env_secret
 
-    # Check persistent file or create it
     secret_file = os.getenv("SECRET_KEY_FILE", "/config/.secret_key")
-    env_file = os.getenv("ENV_FILE", "/config/.env")
 
-    # If the directory doesn't exist (e.g. running outside docker), fall back to current directory
-    config_dir = os.path.dirname(env_file)
-    if config_dir and not os.path.exists(config_dir):
-        # Graceful fallback for local development
-        env_file = ".env"
-        secret_file = ".secret_key"
+    # If the default /config path is used and /config does not exist (e.g.
+    # running outside Docker), fall back to the current directory. We only
+    # override the *default* path, never an explicitly set SECRET_KEY_FILE.
+    if secret_file == "/config/.secret_key":
+        config_dir = os.path.dirname(secret_file)
+        if config_dir and not os.path.exists(config_dir):
+            secret_file = ".secret_key"
+
+    secret_path = os.path.dirname(secret_file) or "."
+    os.makedirs(secret_path, exist_ok=True)
+
+    def _read_secret() -> str:
+        # Limit read to a sane size to avoid loading a corrupt/malicious file.
+        with open(secret_file, "r") as f:
+            return f.read(256).strip()
 
     try:
-        # Persist only to the dedicated secret file. Writing the signing key
-        # into a generic .env file broadens the attack surface and triggers
-        # code-scanning alerts for clear-text secret storage. The secret file
-        # is treated as a single-purpose credential store.
+        # Fast path: secret already on disk.
         if os.path.exists(secret_file):
-            with open(secret_file, "r") as f:
-                return f.read().strip()
+            return _read_secret()
 
-        # 48 urlsafe characters => 36 bytes of raw entropy before
-        # base64url encoding, which decodes to >= 32 bytes. This satisfies
-        # PyJWT's InsecureKeyLengthWarning for HS256 and gives a robust
-        # margin beyond the 32-byte minimum recommended by RFC 7518.
-        new_secret = secrets.token_urlsafe(48)
+        # 48 urlsafe characters => 36 bytes of raw entropy before base64url
+        # encoding, which decodes to >= 32 bytes. This satisfies PyJWT's
+        # InsecureKeyLengthWarning for HS256 and exceeds RFC 7518's minimum.
+        new_secret = secrets.token_urlsafe(48) + "\n"
 
-        os.makedirs(os.path.dirname(secret_file) or ".", exist_ok=True)
-        with open(secret_file, "w") as f:
-            f.write(new_secret + "\n")
-
-        return new_secret
+        # Atomic create: if another worker already created the file, EEXIST
+        # tells us to re-read the winner's key instead of overwriting it.
+        fd = os.open(secret_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        try:
+            os.write(fd, new_secret.encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        return new_secret.strip()
+    except FileExistsError:
+        # Another process won the race; converge on its key.
+        return _read_secret()
     except Exception as e:
         # Refuse to start with an ephemeral per-process key. A random fallback
         # would invalidate all JWTs on every restart and diverge across workers.
