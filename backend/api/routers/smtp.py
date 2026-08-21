@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+import time
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,11 +11,21 @@ from api.utils.auth import get_db
 from api.db.models.settings import SMTPSettings
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, require_superuser
+from api.utils.security import limiter
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Global debounce for test-mail sending: even superusers cannot spam the
+# configured SMTP relay. Per-IP rate limiting is applied via @limiter.limit,
+# and this lock prevents any client from sending more than one test mail
+# every TEST_MAIL_COOLDOWN_SECONDS.
+_TEST_MAIL_COOLDOWN_SECONDS = 30.0
+_test_mail_last_sent = 0.0
+_test_mail_lock = asyncio.Lock()
+
 
 class SMTPSettingsSchema(BaseModel):
     server: str
@@ -85,12 +96,33 @@ async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = 
     return db_settings
 
 @router.post("/test")
-async def send_test_email(email_data: TestEmailSchema, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("5/hour")
+async def send_test_email(
+    request: Request,
+    email_data: TestEmailSchema,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
     # Without a superuser gate this route is an authenticated open relay:
     # any user can fire mail through the configured SMTP server to any
     # arbitrary recipient, which is both a spam vector and a way to burn
     # the configured mail server's reputation.
     await require_superuser(Authorize, db)
+
+    # Debounce globally so a misbehaving client (or a compromised superuser
+    # session) cannot flood the configured SMTP relay. The lock is async
+    # and per-process; combined with the per-IP limiter this is sufficient
+    # for a single-instance deployment.
+    global _test_mail_last_sent
+    async with _test_mail_lock:
+        now = time.monotonic()
+        if now - _test_mail_last_sent < _TEST_MAIL_COOLDOWN_SECONDS:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Test email sent recently; wait {_TEST_MAIL_COOLDOWN_SECONDS:.0f} seconds.",
+            )
+        _test_mail_last_sent = now
+
     result = await db.execute(select(SMTPSettings).limit(1))
     settings = result.scalars().first()
     if not settings:

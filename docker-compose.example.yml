@@ -21,7 +21,6 @@
 # Für reine Lese-/Monitoring-Nutzung: POST weglassen und nur die Lese-Flags
 # setzen. Dann kann YachtPlus nichts am Docker-Daemon verändern.
 
-version: "3"
 services:
   dockerproxy:
     image: tecspirit/docker-socket-proxy:latest

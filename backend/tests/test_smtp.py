@@ -56,6 +56,12 @@ def mock_settings_auth_enabled(monkeypatch):
     monkeypatch.setattr("api.auth.auth.settings.DISABLE_AUTH", False)
 
 
+@pytest.fixture(autouse=True)
+def _reset_smtp_debounce():
+    import api.routers.smtp as smtp_mod
+    smtp_mod._test_mail_last_sent = 0.0
+
+
 @pytest.mark.asyncio
 async def test_get_db_dependency_yields_and_closes():
     db_gen = get_db()
@@ -154,9 +160,9 @@ async def test_update_smtp_settings_unauthorized(db, mock_settings_auth_enabled)
 @pytest.mark.asyncio
 async def test_send_test_email_no_settings_raises_400(db, mock_settings_auth_enabled):
     auth = MockAuthValid()
-    payload = EmailPayload(recipient="to@example.com")
+    email_data = EmailPayload(recipient="to@example.com")
     with pytest.raises(HTTPException) as exc:
-        await send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(None, email_data, db=db, Authorize=auth)
     assert exc.value.status_code == 400
     assert "SMTP settings not configured" in exc.value.detail
 
@@ -174,13 +180,13 @@ async def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_e
     await db.commit()
 
     auth = MockAuthValid()
-    payload = EmailPayload(recipient="to@example.com")
+    email_data = EmailPayload(recipient="to@example.com")
 
     with patch("api.routers.smtp.smtplib.SMTP") as smtp_cls:
         server = MagicMock()
         smtp_cls.return_value = server
 
-        result = await send_test_email(payload, db=db, Authorize=auth)
+        result = await send_test_email(None, email_data, db=db, Authorize=auth)
 
     smtp_cls.assert_called_once_with("smtp.example.com", 587)
     server.starttls.assert_called_once()
@@ -206,13 +212,13 @@ async def test_send_test_email_without_tls_or_credentials(db, mock_settings_auth
     await db.commit()
 
     auth = MockAuthValid()
-    payload = EmailPayload(recipient="to@example.com")
+    email_data = EmailPayload(recipient="to@example.com")
 
     with patch("api.routers.smtp.smtplib.SMTP") as smtp_cls:
         server = MagicMock()
         smtp_cls.return_value = server
 
-        await send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(None, email_data, db=db, Authorize=auth)
 
     server.starttls.assert_not_called()
     server.login.assert_not_called()
@@ -231,11 +237,11 @@ async def test_send_test_email_smtp_failure_returns_500(db, mock_settings_auth_e
     await db.commit()
 
     auth = MockAuthValid()
-    payload = EmailPayload(recipient="to@example.com")
+    email_data = EmailPayload(recipient="to@example.com")
 
     with patch("api.routers.smtp.smtplib.SMTP", side_effect=OSError("connection refused")):
         with pytest.raises(HTTPException) as exc:
-            await send_test_email(payload, db=db, Authorize=auth)
+            await send_test_email(None, email_data, db=db, Authorize=auth)
 
     assert exc.value.status_code == 500
     assert "SMTP test failed" in exc.value.detail
@@ -244,7 +250,20 @@ async def test_send_test_email_smtp_failure_returns_500(db, mock_settings_auth_e
 @pytest.mark.asyncio
 async def test_send_test_email_unauthorized(db, mock_settings_auth_enabled):
     auth = MockAuthInvalid()
-    payload = EmailPayload(recipient="to@example.com")
+    email_data = EmailPayload(recipient="to@example.com")
     with pytest.raises(HTTPException) as exc:
-        await send_test_email(payload, db=db, Authorize=auth)
+        await send_test_email(None, email_data, db=db, Authorize=auth)
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_send_test_email_requires_request_param_and_rate_limit():
+    import inspect
+    from api.routers import smtp as smtp_mod
+
+    sig = inspect.signature(smtp_mod.send_test_email)
+    assert "request" in sig.parameters, "send_test_email must accept request for rate limiting"
+    # The endpoint should be wrapped by slowapi limiter (function name changes to wrapper).
+    # At minimum, the underlying function is still importable and the module has a limiter import.
+    assert hasattr(smtp_mod, "limiter")
+    assert smtp_mod._TEST_MAIL_COOLDOWN_SECONDS >= 10

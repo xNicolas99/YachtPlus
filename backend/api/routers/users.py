@@ -192,6 +192,26 @@ async def create_user(
         raise HTTPException(status_code=400, detail="Username already in use")
     return await crud.create_user(db=db, user=user)
 
+async def _perform_login(
+    db: AsyncSession,
+    request: Request,
+    user_data: schemas.UserLogin,
+):
+    """Shared login flow for /login and /login_cookie.
+
+    Returns a tuple (response_payload, access_token). access_token is None
+    when 2FA is required; the caller decides whether to return it in the
+    body (/login) or set it as an HttpOnly cookie (/login_cookie).
+    """
+    _user = await _authenticate_user(db, request, user_data)
+
+    if _user.is_2fa_enabled and not user_data.otp_token:
+        return {"login": "2fa_required", "username": _user.username}, None
+
+    access_token = create_access_token(data={"sub": _user.username})
+    return {"login": "successful", "username": _user.username}, access_token
+
+
 @router.post("/login")
 @limiter.limit("5/minute")
 async def login(
@@ -200,20 +220,11 @@ async def login(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _user = await _authenticate_user(db, request, user_data)
+    payload, access_token = await _perform_login(db, request, user_data)
+    if access_token is not None:
+        payload["access_token"] = access_token
+    return payload
 
-    if _user.is_2fa_enabled and not user_data.otp_token:
-        return {
-            "login": "2fa_required",
-            "username": _user.username,
-        }
-
-    access_token = create_access_token(data={"sub": _user.username})
-    return {
-        "login": "successful",
-        "username": _user.username,
-        "access_token": access_token,
-    }
 
 @router.post("/login_cookie")
 @limiter.limit("5/minute")
@@ -224,20 +235,13 @@ async def login_cookie(
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
-    _user = await _authenticate_user(db, request, user_data)
-
-    if _user.is_2fa_enabled and not user_data.otp_token:
-        return {"login": "2fa_required", "username": _user.username}
-
-    access_token = create_access_token(data={"sub": _user.username})
-    Authorize.set_access_cookies(access_token, response)
-    # Token lives only in the HttpOnly cookie. Echoing it in the body
-    # would defeat the cookie strategy by making the JWT reachable to
-    # any DOM XSS via response.data.access_token.
-    return {
-        "login": "successful",
-        "username": _user.username,
-    }
+    payload, access_token = await _perform_login(db, request, user_data)
+    if access_token is not None:
+        # Token lives only in the HttpOnly cookie. Echoing it in the body
+        # would defeat the cookie strategy by making the JWT reachable to
+        # any DOM XSS via response.data.access_token.
+        Authorize.set_access_cookies(access_token, response)
+    return payload
 
 
 @router.post("/refresh")
@@ -303,8 +307,6 @@ async def create_api_key(
 
 # DELETE is the correct verb for revoking an API key; the previous GET
 # route was CSRF-triggerable via <img src=...> and could be cached by
-# intermediaries. The GET alias is retained for one release so existing
-# frontend builds keep working — remove once clients are migrated.
 @router.delete("/api/keys/{key_id}")
 async def delete_api_key(
     key_id, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)

@@ -194,7 +194,6 @@ async def get_support_bundle(
 
 # POST is the correct verb — start/stop/kill/remove are state-changing and
 # were CSRF-triggerable via GET (SameSite=lax sends the auth cookie on
-# top-level GET navigation). GET alias kept for one release for old clients.
 @router.post("/actions/{app_name}/{action}")
 async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
     await auth_check(Authorize)
