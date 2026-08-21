@@ -127,8 +127,13 @@ def _resolve_client_ip(request: Request) -> str:
     TRUSTED_PROXIES list. Otherwise use the direct peer — anyone can set
     X-Real-IP, so trusting it without an allowlist defeats the purpose of
     IP-based limits.
+
+    request.client can be None in some ASGI/test setups; in that case we
+    fall back to the loopback address so rate-limiting and IP-restriction
+    checks don't crash, but we never trust proxy headers without a peer.
     """
-    client_ip = request.client.host
+    direct_peer = request.client.host if request.client else "127.0.0.1"
+    client_ip = direct_peer
     if not _is_trusted_proxy(client_ip):
         return client_ip
 
