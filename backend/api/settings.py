@@ -77,7 +77,6 @@ class Settings(BaseSettings):
     SECRET_KEY: str = Field(default_factory=get_or_create_secret_key)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    ACCESS_TOKEN_EXPIRES: int = 1440 * 60 # Legacy support
 
     # Auth & Cookies (Fixes for jwt.py/auth.py)
     DISABLE_AUTH: bool = False

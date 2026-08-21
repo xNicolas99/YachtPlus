@@ -107,7 +107,7 @@ class TokenData(BaseModel):
 # JWT Configuration
 # _SECRET_KEY is now strictly from settings
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(settings.ACCESS_TOKEN_EXPIRES) / 60
+ACCESS_TOKEN_EXPIRE_MINUTES = int(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -257,7 +257,7 @@ class AuthWrapper:
             key="access_token_cookie",
             value=token,
             httponly=True,
-            max_age=max_age or int(settings.ACCESS_TOKEN_EXPIRES),
+            max_age=max_age or (int(settings.ACCESS_TOKEN_EXPIRE_MINUTES) * 60),
             samesite=settings.SAME_SITE_COOKIES,
             secure=self._resolve_secure_flag(),
             path="/",  # explicit so it's sent on every API path, not just /api/setup/*
