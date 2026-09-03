@@ -27,6 +27,12 @@ async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
     if "/" not in image_name:
         image_name = f"library/{image_name}"
 
+    # Split tag before requesting the token: Docker Hub's token scope is
+    # repository:<name>:pull, where <name> must NOT include a tag.
+    tag = "latest"
+    if ":" in image_name:
+        image_name, tag = image_name.split(":", 1)
+
     # 1. Get Token
     auth_url = f"https://auth.docker.io/token?service=registry.docker.io&scope=repository:{image_name}:pull"
     async with httpx.AsyncClient() as client:
@@ -42,15 +48,6 @@ async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
             }
 
             # 2. Get Manifest to find Config Blob Digest
-            # We assume 'latest' tag if not specified, but the image name from UI likely has no tag.
-            # If the user selected a tag, it should be in the image name (e.g. nginx:alpine).
-            # ApplicationsForm sets image=image_name.
-            # If no tag, we assume latest.
-
-            tag = "latest"
-            if ":" in image_name:
-                image_name, tag = image_name.split(":", 1)
-
             manifest_url = f"https://registry-1.docker.io/v2/{image_name}/manifests/{tag}"
             manifest_resp = await client.get(manifest_url, headers=headers, timeout=5.0)
 
@@ -79,5 +76,5 @@ async def _get_dockerhub_config(image_name: str) -> Optional[Dict]:
             }
 
         except Exception as e:
-            logger.error(f"Error fetching config for {image_name}: {e}")
+            logger.error(f"Error fetching config for {image_name}:{tag}: {e}")
             return None

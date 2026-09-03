@@ -19,10 +19,12 @@ router = APIRouter()
 @limiter.limit("60/minute")
 async def get_images(
     request: Request,
+    offset: int = 0,
+    limit: int = 100,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     await auth_check(Authorize)
-    return await resources.get_images()
+    return await resources.get_images(offset=offset, limit=limit)
 
 
 @router.post(
@@ -47,7 +49,7 @@ async def get_image(image_id, Authorize: get_auth_wrapper = Depends(get_auth_wra
     return await resources.get_image(image_id)
 
 
-@router.get(
+@router.post(
     "/images/{image_id}/pull",
 )
 @limiter.limit("10/minute")
@@ -82,9 +84,15 @@ async def delete_image(
 @router.get(
     "/volumes/",
 )
-async def get_volumes(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("60/minute")
+async def get_volumes(
+    request: Request,
+    offset: int = 0,
+    limit: int = 100,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
     await auth_check(Authorize)
-    return await resources.get_volumes()
+    return await resources.get_volumes(offset=offset, limit=limit)
 
 
 @router.post(
@@ -129,9 +137,15 @@ async def delete_volume(
 @router.get(
     "/networks/",
 )
-async def get_networks(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("60/minute")
+async def get_networks(
+    request: Request,
+    offset: int = 0,
+    limit: int = 100,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
     await auth_check(Authorize)
-    return await resources.get_networks()
+    return await resources.get_networks(offset=offset, limit=limit)
 
 
 @router.post(

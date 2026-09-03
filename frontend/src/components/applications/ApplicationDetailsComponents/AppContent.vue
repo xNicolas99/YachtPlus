@@ -92,7 +92,7 @@
                           v-if="port.hip == '0.0.0.0'"
                           color="primary"
                           label
-                          :href="'http://' + host_ip + ':' + port.hport"
+                          :href="(port.hport == 443 || port.hport == 8443 ? 'https://' : 'http://') + host_ip + ':' + port.hport"
                           target="_blank"
                           ><v-icon small class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip
@@ -100,7 +100,7 @@
                           v-else
                           color="primary"
                           label
-                          :href="'http://' + port.hip + ':' + port.hport"
+                          :href="(port.hport == 443 || port.hport == 8443 ? 'https://' : 'http://') + port.hip + ':' + port.hport"
                           target="_blank"
                           ><v-icon small class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip

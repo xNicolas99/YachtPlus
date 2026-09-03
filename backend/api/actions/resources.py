@@ -2,15 +2,15 @@ import aiodocker
 from fastapi import HTTPException
 import asyncio
 import logging
+from api.utils.error_handler import safe_http_status, docker_error_detail
 from api.settings import get_settings
 settings = get_settings()
-from api.utils.error_handler import safe_http_status, docker_error_detail
 
 logger = logging.getLogger(__name__)
 
 ### IMAGES ###
 
-async def get_images():
+async def get_images(offset: int = 0, limit: int = 100):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         images_task = docker.images.list()
@@ -51,7 +51,13 @@ async def get_images():
             attrs['inUse'] = is_in_use
             image_list.append(attrs)
 
-        return image_list
+        total = len(image_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": image_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_image(image_tag):
@@ -143,7 +149,7 @@ async def delete_image(image_id):
 
 
 ### Volumes ###
-async def get_volumes():
+async def get_volumes(offset: int = 0, limit: int = 100):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         volumes_task = docker.volumes.list()
@@ -178,7 +184,13 @@ async def get_volumes():
             attrs['inUse'] = attrs.get('Name') in used_volumes
             volume_list.append(attrs)
 
-        return volume_list
+        total = len(volume_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": volume_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_volume(volume_name):
@@ -255,7 +267,7 @@ async def delete_volume(volume_name):
 
 
 ### Networks ###
-async def get_networks():
+async def get_networks(offset: int = 0, limit: int = 100):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         networks_task = docker.networks.list()
@@ -296,7 +308,13 @@ async def get_networks():
 
             network_list.append(attrs)
 
-        return network_list
+        total = len(network_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": network_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_network(network_form):
@@ -418,5 +436,5 @@ async def prune_resources(resource):
             elif resource == "networks":
                 return await docker.networks.prune()
         except Exception as e:
-            print(f"Error pruning {resource}: {e}")
+            logger.error("Error pruning %s: %s", resource, e)
             return {"count": 0, "space_reclaimed": 0}

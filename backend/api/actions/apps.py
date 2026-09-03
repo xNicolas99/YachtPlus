@@ -357,6 +357,11 @@ async def deploy_app(template: DeployForm):
             detail=getattr(exc, "explanation", None) or "Docker daemon error",
         )
     except (docker.errors.DockerException, aiodocker.exceptions.DockerError) as exc:
+        # deploy_app calls launch_app, which still runs the synchronous
+        # docker SDK inside a thread-pool executor. Synchronous client
+        # errors therefore bubble up alongside aiodocker errors. Keep the
+        # union catch so both paths are handled without leaking raw daemon
+        # details to the client.
         logger.warning("Deploy failed (docker error): %s", exc)
         raise HTTPException(
             status_code=getattr(exc, "status", 500) or 500,
@@ -595,7 +600,7 @@ async def _update_self(background_tasks):
 
 async def update_self_in_background(container_name):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
-        print("**** Updating " + container_name + "****")
+        logger.info("**** Updating %s ****", container_name)
         config = {
             "Image": "containrrr/watchtower:latest",
             "Cmd": ["--cleanup", "--run-once", container_name],

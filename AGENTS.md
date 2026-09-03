@@ -473,6 +473,11 @@ cd frontend
 npm run test
 ```
 
+Useful subsets:
+- `python -m pytest tests/test_smtp.py` — SMTP fixes and debounce.
+- `python -m pytest tests/test_compose_perms.py tests/test_compose_delete_path.py` — compose permission and path-safety gates.
+- `python -m pytest tests/test_image_inspect.py` — Docker Hub manifest/tag handling.
+
 Current baseline: **513 backend + 21 frontend tests, all green.**
 
 `backend/tests/conftest.py` also provides shared async `db` / `db_session`
@@ -508,7 +513,7 @@ migration, every test that touches the DB uses an `AsyncSession`;
 | `YACHT_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1]` | TrustedHostMiddleware list. |
 | `YACHT_CORS_ORIGINS` | localhost variants | CORS origin list. Startup fails fast if it contains `*` or an entry without scheme. |
 | `YACHT_TRUSTED_PROXIES` | `127.0.0.1,::1` | Comma-separated IPs / CIDRs whose `X-Real-IP` / `X-Forwarded-For` headers we honour. Default `["127.0.0.1", "::1"]` (loopback). Set to your reverse proxy's IP when running behind nginx / Traefik. |
-| `COMPOSE_DIR` | `/compose/` | Where compose project subdirectories live. Trailing slash is part of the contract — every call site does `settings.COMPOSE_DIR + name`. |
+| `COMPOSE_DIR` | `/compose/` | Where compose project subdirectories live. Newer code uses `pathlib.Path(...).resolve()` and `is_relative_to()` for traversal safety; legacy call sites still did string concatenation. Always prefer the `pathlib` form when touching compose paths. |
 | `DOCKER_HOST` | (unset → SDK default = `/var/run/docker.sock`) | Docker connection. Declared as `Optional[str]` on Settings; when set, **both** the async (`aiodocker`) and sync (`utils/docker_client`) paths honour it. |
 | `DOCKER_GID` | autodetect | Set if you hit socket permission errors. |
 | `DISABLE_AUTH` | `False` | **Dev only.** Bypasses every auth check. Never set in prod. |

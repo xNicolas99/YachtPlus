@@ -117,9 +117,8 @@ def _compose_action_sync(name, action):
     else:
         output = _run_compose_command([action], _cwd, full_env)
 
-    print(f"""Project {compose['name']} {action} successful.""")
-    print(f"""Output: """)
-    print(output)
+    logger.info("Project %s %s successful.", compose['name'], action)
+    logger.debug("Compose output: %s", output)
     return _get_compose_projects_sync()
 
 async def compose_action(name, action):
@@ -165,7 +164,7 @@ def _compose_app_action_sync(name, action, app):
          del full_env["clear_env"]
 
 
-    print("RUNNING: " + compose["path"] + " docker-compose " + " " + action + " " + app)
+    logger.debug("RUNNING: %s docker-compose %s %s", compose["path"], action, app)
 
     if action == "up":
         output = _run_compose_command(["up", "-d", app], _cwd, full_env)
@@ -176,9 +175,8 @@ def _compose_app_action_sync(name, action, app):
     else:
         output = _run_compose_command([action, app], _cwd, full_env)
 
-    print(f"""Project {compose['name']} App {name} {action} successful.""")
-    print(f"""Output: """)
-    print(output)
+    logger.info("Project %s App %s %s successful.", compose['name'], name, action)
+    logger.debug("Compose output: %s", output)
     return _get_compose_projects_sync()
 
 async def compose_app_action(name, action, app):
@@ -200,7 +198,7 @@ def _get_compose_projects_sync():
             with open(file, 'r') as compose:
                 loaded_compose = yaml.load(compose, Loader=yaml.SafeLoader)
         except Exception:
-            print("ERROR: " + file + " is invalid or empty!")
+            logger.warning("%s is invalid or empty!", file)
             continue
 
         if loaded_compose:
@@ -223,7 +221,7 @@ def _get_compose_projects_sync():
             }
             projects.append(_project)
         else:
-            print("ERROR: " + file + " is invalid or empty!")
+            logger.warning("%s is invalid or empty!", file)
     return projects
 
 async def get_compose_projects():
@@ -342,17 +340,20 @@ Deletes a compose project
 """
 def _delete_compose_sync(project_name):
     validate_compose_project_name(project_name)
-    if not os.path.exists("/" + get_settings().COMPOSE_DIR + project_name):
+
+    base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
+    target_dir = (base_dir / project_name).resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid compose project name.")
+
+    compose_file = target_dir / "docker-compose.yml"
+    if not target_dir.exists():
         raise HTTPException(404, "Project directory not found.")
-    elif not os.path.exists(
-        "/" + get_settings().COMPOSE_DIR + project_name + "/docker-compose.yml"
-    ):
+    if not compose_file.exists():
         raise HTTPException(404, "Project docker-compose.yml not found.")
-    else:
-        pass
 
     try:
-        shutil.rmtree("/" + get_settings().COMPOSE_DIR + project_name)
+        shutil.rmtree(target_dir)
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return _get_compose_projects_sync()

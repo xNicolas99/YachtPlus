@@ -42,16 +42,15 @@ const actions = {
         .get(url)
         .then(response => {
           const volumes = response.data;
-          commit("setLoading", false);
           commit("setVolumes", volumes);
           resolve(volumes);
-        })
-        .finally(() => {
-          commit("setLoading", false);
         })
         .catch(error => {
           commit("snackbar/setErr", error, { root: true });
           reject(error);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },

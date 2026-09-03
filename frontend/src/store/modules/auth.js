@@ -75,36 +75,33 @@ const actions = {
   },
 
   [AUTH_LOGOUT]: ({ commit }) => {
-    return new Promise(resolve => {
+    return new Promise(async (resolve, reject) => {
       commit(AUTH_REQUEST);
-      const url = "/auth/logout";
-      axios
-        .post(url, {}, { withCredentials: true })
-        .then(resp => {
-          let rurl = "/auth/logout/refresh";
-          axios
-            .post(
-              rurl,
-              {},
-              {
-                xsrfCookieName: "csrf_refresh_token",
-                xsrfHeaderName: "X-CSRF-TOKEN",
-                withCredentials: true
-              }
-            )
-            .then(resp => {
-              commit(AUTH_CLEAR, resp);
-              localStorage.removeItem("username");
-              router.push({ path: "/" });
-              resolve(resp);
-            });
-
-          resolve(resp);
-        })
-        .catch(error => {
-          console.error(error);
-          commit(AUTH_CLEAR);
-        });
+      try {
+        await axios.post("/auth/logout", {}, { withCredentials: true });
+        try {
+          await axios.post(
+            "/auth/logout/refresh",
+            {},
+            {
+              xsrfCookieName: "csrf_refresh_token",
+              xsrfHeaderName: "X-CSRF-TOKEN",
+              withCredentials: true
+            }
+          );
+        } catch (refreshErr) {
+          // Log but continue — user should still be logged out locally.
+          console.error("[AUTH_LOGOUT] Refresh logout failed:", refreshErr);
+        }
+        commit(AUTH_CLEAR);
+        localStorage.removeItem("username");
+        router.push({ path: "/" });
+        resolve();
+      } catch (error) {
+        console.error("[AUTH_LOGOUT] Logout failed:", error);
+        commit(AUTH_CLEAR);
+        reject(error);
+      }
     });
   },
   [AUTH_REFRESH]: ({ commit }) => {

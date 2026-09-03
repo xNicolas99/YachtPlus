@@ -320,7 +320,12 @@ async def delete_api_key(
 
 
 @router.get("/me", response_model=schemas.User)
-async def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("20/minute")
+async def get_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
     await auth_check(Authorize)
     if get_settings().DISABLE_AUTH:
         # Previous code mutated the schemas.User CLASS object directly,
@@ -346,14 +351,21 @@ async def get_user(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapp
 
 
 @router.post("/me", response_model=schemas.User)
+@limiter.limit("20/minute")
 async def update_user(
-    user: schemas.UserUpdate, # Updated schema
+    request: Request,
+    user: schemas.UserSelfUpdate,  # self-service schema: no perm_*/is_* fields
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
 ):
     await auth_check(Authorize)
     current_user = await Authorize.get_jwt_subject()
-    return await crud.update_user(db=db, user=user, current_user=current_user)
+    # crud.update_user expects the full UserUpdate shape (shared with the
+    # admin path). Build one from the self-update payload so privilege
+    # fields (perm_*, is_superuser, is_active) are always None and can
+    # never be self-assigned through this endpoint.
+    safe_update = schemas.UserUpdate(username=user.username, password=user.password)
+    return await crud.update_user(db=db, user=safe_update, current_user=current_user)
 
 
 @router.post("/logout")

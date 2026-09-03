@@ -46,16 +46,15 @@ const actions = {
         .get(url)
         .then(response => {
           const projects = response.data;
-          commit("setLoading", false);
           commit("setProjects", projects);
           resolve(projects);
-        })
-        .finally(() => {
-          commit("setLoading", false);
         })
         .catch(error => {
           commit("snackbar/setErr", error, { root: true });
           reject(error);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },
@@ -83,16 +82,15 @@ const actions = {
         .get(url)
         .then(response => {
           const project = response.data;
-          commit("setLoading", false);
           commit("setProject", project);
           resolve(project);
-        })
-        .finally(() => {
-          commit("setLoading", false);
         })
         .catch(error => {
           commit("snackbar/setErr", error, { root: true });
           reject(error);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },

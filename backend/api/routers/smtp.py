@@ -46,24 +46,28 @@ def _send_test_email_sync(settings, recipient: str) -> None:
     msg['From'] = settings.sender_email
     msg['To'] = recipient
 
+    server = None
     try:
+        server = smtplib.SMTP(settings.server, settings.port, timeout=10)
         if settings.use_tls:
-            server = smtplib.SMTP(settings.server, settings.port)
             server.starttls()
-        else:
-            server = smtplib.SMTP(settings.server, settings.port)
 
         if settings.username and settings.password:
             server.login(settings.username, settings.password)
 
         server.sendmail(settings.sender_email, recipient, msg.as_string())
-        server.quit()
     except Exception:
         logger.exception("SMTP test failed for recipient %s", recipient)
         raise HTTPException(
             status_code=500,
             detail="SMTP test failed. Check server logs for details.",
         )
+    finally:
+        if server is not None:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 @router.get("/", response_model=SMTPSettingsSchema)
@@ -86,10 +90,10 @@ async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = 
     result = await db.execute(select(SMTPSettings).limit(1))
     db_settings = result.scalars().first()
     if not db_settings:
-        db_settings = SMTPSettings(**settings.dict())
+        db_settings = SMTPSettings(**settings.model_dump())
         db.add(db_settings)
     else:
-        for key, value in settings.dict().items():
+        for key, value in settings.model_dump().items():
             setattr(db_settings, key, value)
     await db.commit()
     await db.refresh(db_settings)

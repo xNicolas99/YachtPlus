@@ -58,7 +58,7 @@ def conv_portlabels2data(data):
         if d.label and d.hport:
             labels.update({"local.yacht.port." + d.hport: d.label})
         elif d.label:
-            print("in order to have a label the hostport must be set")
+            logger.warning("in order to have a label the hostport must be set")
             return None
     return labels
 

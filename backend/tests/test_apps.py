@@ -39,14 +39,14 @@ def test_conv_portlabels2data():
         "local.yacht.port.8443": "Secure"
     }
 
-def test_conv_portlabels2data_no_hport(capsys):
+def test_conv_portlabels2data_no_hport(caplog):
     data = [
         PortData(cport="80", hport=None, proto="tcp", label="Web")
     ]
-    res = conv_portlabels2data(data)
+    with caplog.at_level("WARNING"):
+        res = conv_portlabels2data(data)
     assert res is None
-    captured = capsys.readouterr()
-    assert "in order to have a label the hostport must be set" in captured.out
+    assert "in order to have a label the hostport must be set" in caplog.text
 
 def test_conv_portlabels2data_empty():
     assert conv_portlabels2data([]) == {}

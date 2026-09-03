@@ -14,6 +14,32 @@ logger = logging.getLogger(__name__)
 stats_cache = {}
 CACHE_TTL = 5  # seconds
 
+
+def compute_cpu_percent(stats: dict) -> float:
+    """Compute container CPU% from a Docker stats frame, tolerating
+    missing/partial keys.
+
+    Freshly started containers often lack `precpu_stats` (and sometimes
+    parts of `cpu_stats`); direct indexing raised KeyError and killed the
+    SSE stream. Default everything to 0 and only divide when the deltas
+    are actually positive.
+    """
+    cpu_stats = stats.get("cpu_stats", {}) or {}
+    precpu_stats = stats.get("precpu_stats", {}) or {}
+    cpu_usage = cpu_stats.get("cpu_usage", {}) or {}
+    pre_cpu_usage = precpu_stats.get("cpu_usage", {}) or {}
+    total_usage = cpu_usage.get("total_usage", 0)
+    pre_total_usage = pre_cpu_usage.get("total_usage", 0)
+    system_cpu_usage = cpu_stats.get("system_cpu_usage", 0)
+    pre_system_cpu_usage = precpu_stats.get("system_cpu_usage", 0)
+    online_cpus = cpu_stats.get("online_cpus", 1)
+    cpu_delta = total_usage - pre_total_usage
+    system_delta = system_cpu_usage - pre_system_cpu_usage
+    if system_delta > 0 and cpu_delta > 0:
+        return (cpu_delta / system_delta) * online_cpus * 100.0
+    return 0.0
+
+
 async def get_containers():
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
@@ -46,10 +72,7 @@ async def stream_stats_generator(request, container_id: str):
                 mem_limit = stats.get("memory_stats", {}).get("limit", 1)
                 mem_percent = (mem_usage / mem_limit) * 100.0
 
-                cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
-                system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
-                online_cpus = stats["cpu_stats"].get("online_cpus", 1)
-                cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0 if system_delta > 0 else 0.0
+                cpu_percent = compute_cpu_percent(stats)
 
                 payload = {
                     "cpu_percent": round(cpu_percent, 2),

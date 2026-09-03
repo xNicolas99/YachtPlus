@@ -8,6 +8,9 @@ from api.settings import get_settings
 settings = get_settings()
 import json
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -36,10 +39,10 @@ async def generate_secret_key(db: AsyncSession):
         key = SecretKey(key=get_settings().SECRET_KEY)
         db.add(key)
         await db.commit()
-        print("Secret key generated")
+        logger.info("Secret key generated")
         return key.key
     else:
-        print("Secret key exists")
+        logger.debug("Secret key exists")
         return check.key
 
 

@@ -874,7 +874,7 @@ export default {
       ]
     };
   },
-  calculated: {
+  computed: {
     ...mapState("networks", ["networks"]),
     ...mapState("volumes", ["volumes"])
   },
@@ -1034,7 +1034,7 @@ export default {
 
       this.isLoading = true;
       this.conflictErrors = []; // Clear previous errors
-      const url = `/api/apps/deploy`;
+      const url = `/apps/deploy`;
       axios
         .post(url, payload)
         .then(() => {

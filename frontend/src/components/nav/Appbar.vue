@@ -108,7 +108,7 @@ export default {
     return {
       // Static placeholders matching the INDEX Overhaul mock. Wire to a real
       // hosts store once the multi-host backend lands.
-      hostLabel: 'prod-01',
+      hostLabel: window.location.hostname || 'localhost',
       hostMeta: window.location.hostname || '10.0.4.18',
       // Wired to a real source the day the notification feature lands.
       // Until then keep the badge off so it doesn't lie to the user.

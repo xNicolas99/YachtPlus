@@ -411,7 +411,8 @@ export default {
       if (this.logConnection) {
         this.logConnection.close();
       }
-      this.logConnection = new EventSource(`/api/apps/${appName}/logs`);
+      const origin = window.location.origin;
+      this.logConnection = new EventSource(`${origin}/api/apps/${appName}/logs`);
       this.logConnection.addEventListener("update", event => {
         this.logs.push(event.data);
       });
@@ -420,7 +421,8 @@ export default {
       if (this.statConnection) {
         this.statConnection.close();
       }
-      this.statConnection = new EventSource(`/api/apps/${appName}/stats`);
+      const origin = window.location.origin;
+      this.statConnection = new EventSource(`${origin}/api/apps/${appName}/stats`);
       this.statConnection.addEventListener("update", event => {
         let statsGroup = JSON.parse(event.data);
         this.stats.time.push(statsGroup.time);

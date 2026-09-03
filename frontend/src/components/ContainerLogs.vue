@@ -165,7 +165,8 @@ export default {
 
       if (!this.containerId) return;
 
-      const url = `/api/containers/${this.containerId}/logs?tail=${this.tailLines}&follow=true&timestamps=${this.timestamps}`;
+      const origin = window.location.origin;
+      const url = `${origin}/api/containers/${this.containerId}/logs?tail=${this.tailLines}&follow=true&timestamps=${this.timestamps}`;
 
       this.eventSource = new EventSource(url);
 

@@ -224,7 +224,7 @@ export default {
 
     deleteUser(item) {
       if (confirm("Are you sure you want to delete this user?")) {
-        axios.delete(`/api/auth/users/${item.id}`).then(() => {
+        axios.delete(`/auth/users/${item.id}`).then(() => {
           this.loadUsers();
           this.notify("User deleted", "success");
         });
@@ -243,7 +243,7 @@ export default {
       if (this.editedIndex > -1) {
         // Edit
         axios
-          .put(`/api/auth/users/${this.editedItem.id}`, this.editedItem)
+          .put(`/auth/users/${this.editedItem.id}`, this.editedItem)
           .then(() => {
             this.loadUsers();
             this.notify("User updated", "success");

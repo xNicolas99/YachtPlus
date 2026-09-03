@@ -36,6 +36,20 @@ class UserUpdate(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserSelfUpdate(BaseModel):
+    """Self-service profile update for POST /api/auth/me.
+
+    Deliberately excludes every privilege/state field (`perm_*`,
+    `is_superuser`, `is_active`). Accepting UserUpdate here let a
+    low-privilege user grant themselves `perm_delete` etc. — a
+    self-privilege-escalation vector. Extra fields are ignored
+    (Pydantic default), so crafted `perm_*` keys simply never apply.
+    """
+    username: Optional[str] = None
+    password: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+
 class User(UserBase):
     id: Optional[Union[int, str, UUID]] = None
     is_active: Optional[bool] = None

@@ -103,7 +103,10 @@ export default {
         if (response.data.login === "2fa_required") {
           this.requires2FA = true;
         } else if (response.data.login === "successful") {
-          this.$store.commit("auth/AUTH_SUCCESS", response);
+          await this.$store.dispatch("auth/AUTH_REQUEST", {
+            username: this.email,
+            password: this.password
+          });
           this.$router.push("/");
         }
       } catch (err) {
@@ -128,7 +131,10 @@ export default {
           { withCredentials: true }
         );
         if (response.data.login === "successful") {
-          this.$store.commit("auth/AUTH_SUCCESS", response);
+          await this.$store.dispatch("auth/AUTH_REQUEST", {
+            username: this.email,
+            password: this.password
+          });
           this.$router.push("/");
         }
       } catch (err) {

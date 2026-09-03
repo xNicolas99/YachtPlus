@@ -14,6 +14,9 @@ import pyotp
 import qrcode
 import io
 import base64
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -114,7 +117,7 @@ async def enable_2fa(
         else:
             raise HTTPException(status_code=400, detail="Invalid code")
     except Exception as e:
-        print(f"2FA Enable Error: {e}")
+        logger.error("2FA Enable Error: %s", e)
         raise HTTPException(
             status_code=400, detail="Invalid token or secret error"
         )

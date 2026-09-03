@@ -21,7 +21,8 @@ poolclass = StaticPool if "sqlite" in db_url else None
 engine = create_async_engine(
     db_url,
     connect_args=connect_args,
-    poolclass=poolclass
+    poolclass=poolclass,
+    pool_pre_ping=True,
 )
 
 SessionLocal = async_sessionmaker(

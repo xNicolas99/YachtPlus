@@ -161,8 +161,14 @@ async def all_sse_stats(
     return EventSourceResponse(stat_generator)
 
 @router.get("/{app_name}")
-async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_container_details(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    # get_app() returns the full container inspect payload, including
+    # Config.Env — container env vars regularly carry passwords and API
+    # keys. Gate behind perm_start (the read floor), same as logs/
+    # processes/stats, so a bare authenticated session can't scrape
+    # secrets out of every managed container.
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await actions.get_app(app_name=app_name)
 
 
@@ -216,6 +222,13 @@ async def container_actions(app_name, action, background_tasks: BackgroundTasks,
         await check_permission("perm_restart", Authorize, db)
     elif action == "kill" or action == "remove":
         await check_permission("perm_delete", Authorize, db)
+    elif action == "pause":
+        # Pause freezes a running workload — operationally equivalent to
+        # stopping it, so it requires the same gate as stop.
+        await check_permission("perm_stop", Authorize, db)
+    elif action == "unpause":
+        # Unpause resumes a workload — equivalent to starting it.
+        await check_permission("perm_start", Authorize, db)
 
     # Audit Log
     try:
@@ -247,7 +260,7 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
                 template = merge_template(template, db_template_item)
         except Exception as e:
             # If fetching template fails, we proceed with what we have, or log warning
-            print(f"Error merging template: {e}")
+            logger.warning("Error merging template: %s", e)
             pass
 
     # Ensure required fields are present after merge

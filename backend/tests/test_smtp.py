@@ -9,6 +9,8 @@ from sqlalchemy import select, func
 from api.db.database import Base
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import User
+import smtplib
+
 from api.routers.smtp import (
     SMTPSettingsSchema,
     TestEmailSchema as _TestEmailSchema,
@@ -188,7 +190,7 @@ async def test_send_test_email_with_tls_and_credentials(db, mock_settings_auth_e
 
         result = await send_test_email(None, email_data, db=db, Authorize=auth)
 
-    smtp_cls.assert_called_once_with("smtp.example.com", 587)
+    smtp_cls.assert_called_once_with("smtp.example.com", 587, timeout=10)
     server.starttls.assert_called_once()
     server.login.assert_called_once_with("u", "p")
     server.sendmail.assert_called_once()
@@ -245,6 +247,34 @@ async def test_send_test_email_smtp_failure_returns_500(db, mock_settings_auth_e
 
     assert exc.value.status_code == 500
     assert "SMTP test failed" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_send_test_email_quits_on_sendmail_failure(db, mock_settings_auth_enabled):
+    """Regression: SMTP connection must be closed even if sendmail fails."""
+    db.add(SMTPSettings(
+        server="smtp.example.com",
+        port=587,
+        username="u",
+        password="p",
+        sender_email="from@example.com",
+        use_tls=True,
+    ))
+    await db.commit()
+
+    auth = MockAuthValid()
+    email_data = EmailPayload(recipient="to@example.com")
+
+    with patch("api.routers.smtp.smtplib.SMTP") as smtp_cls:
+        server = MagicMock()
+        server.sendmail.side_effect = smtplib.SMTPException("boom")
+        smtp_cls.return_value = server
+
+        with pytest.raises(HTTPException) as exc:
+            await send_test_email(None, email_data, db=db, Authorize=auth)
+
+    assert exc.value.status_code == 500
+    server.quit.assert_called_once()
 
 
 @pytest.mark.asyncio

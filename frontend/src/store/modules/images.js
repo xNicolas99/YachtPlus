@@ -87,7 +87,7 @@ const actions = {
     commit("setLoading", true);
     const url = `/resources/images/${id}/pull`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const image = response.data;
         commit("setImage", image);

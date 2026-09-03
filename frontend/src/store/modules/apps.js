@@ -78,30 +78,29 @@ const actions = {
       });
   },
   async checkAppUpdate({ commit }, apps) {
-    await commit("setLoading", true);
-    await commit("setLoadingItems");
-    await commit("setAction", "Checking for updates...");
-    await Promise.all(
-      apps.map(async _app => {
-        let url = `/apps/${_app.name}/updates`;
-        await axios
-          .get(url)
-          .then(response => {
+    commit("setLoading", true);
+    commit("setLoadingItems");
+    commit("setAction", "Checking for updates...");
+    try {
+      await Promise.all(
+        apps.map(async _app => {
+          let url = `/apps/${_app.name}/updates`;
+          try {
+            const response = await axios.get(url);
             let app = response.data;
             commit("setLoadingItemCompleted", apps.length);
             commit("setApp", app);
-            commit("setLoading", true);
-          })
-          .catch(err => {
+          } catch (err) {
             console.error("Failed to check updates for " + _app.name);
             commit("snackbar/setErr", err, { root: true });
-          });
-      })
-    ).then(() => {
+          }
+        })
+      );
       console.log("Update check completed");
+    } finally {
       commit("setLoading", false);
       commit("setAction", "");
-    });
+    }
   },
   readApp({ commit }, Name) {
     const url = `/apps/${Name}`;
