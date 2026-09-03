@@ -93,10 +93,6 @@ RUN set -eux; \
         -o /usr/local/lib/docker/cli-plugins/docker-compose && \
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-# Install pre-built wheels from the python-deps stage. This keeps the
-# deploy image free of compilers and build headers.
-RUN pip3 install --upgrade pip setuptools wheel &&     pip3 install --no-cache --no-index --find-links=/deps/wheels -r /deps/requirements.txt
-
 # Create directories and set permissions for appuser. Pre-create the
 # scratch dirs nginx.conf points at — Dockerfile bake-time chown is more
 # reliable than runtime mkdir on overlay storage drivers that are tight
@@ -112,9 +108,16 @@ RUN mkdir -p /config \
     chown -R appuser:appuser /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx /var/cache/nginx /api
 
 # Copy pre-built wheels and the requirements manifest from the
-# python-deps stage, then copy the backend code.
+# python-deps stage BEFORE installing them. The previous Dockerfile had
+# the pip install RUN before these COPY lines, so /deps/requirements.txt
+# did not exist yet and the build failed with ENOENT.
 COPY --from=python-deps /deps/requirements.txt /deps/requirements.txt
 COPY --from=python-deps /deps/wheels /deps/wheels
+
+# Install pre-built wheels from the python-deps stage. This keeps the
+# deploy image free of compilers and build headers.
+RUN pip3 install --upgrade pip setuptools wheel && \
+    pip3 install --no-cache --no-index --find-links=/deps/wheels -r /deps/requirements.txt
 
 # Copy the backend code with correct ownership
 COPY --chown=appuser:appuser ./backend/ ./
