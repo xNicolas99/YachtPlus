@@ -29,6 +29,10 @@ class MockAuth:
     async def get_jwt_subject(self, allow_setup_pending=False):
         return "admin"
 
+    def is_api_key(self) -> bool:
+        # Mock: plain login session, not an API key.
+        return False
+
 
 @pytest.fixture(autouse=True)
 def _force_auth_on(monkeypatch):

@@ -9,6 +9,8 @@ from api.db.models.users import User
 from api.db.schemas.users import UserCreate, UserUpdate
 from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
 from api.utils.auth import get_db
+import jwt as pyjwt
+
 from api.auth.jwt import create_access_token, get_auth_wrapper
 from api.auth.auth import auth_check, auth_check_setup_pending
 from api.db.models.setup import SetupStatus
@@ -218,8 +220,32 @@ async def register_first_user(
     existing_user = await get_user_by_name(db, user.username)
 
     if existing_user:
-        # If user exists but setup not complete, we allow overwrite/update
-        # This handles the case where setup was aborted halfway
+        # B2: Overwrite is only safe when the caller already holds a valid
+        # setup_pending token for THIS username (the user who began
+        # registration). Without this gate an unauthenticated attacker who
+        # knows the username could rewrite admin credentials and finish
+        # setup themselves before the real admin finalizes.
+        cookie_token = request.cookies.get("access_token_cookie")
+        _owner_ok = False
+        if cookie_token:
+            try:
+                _payload = pyjwt.decode(
+                    cookie_token,
+                    get_settings().SECRET_KEY,
+                    algorithms=["HS256"],
+                    options={"verify_exp": False, "verify_aud": False},
+                )
+                _owner_ok = (
+                    _payload.get("setup_pending") is True
+                    and _payload.get("sub") == user.username
+                )
+            except Exception:
+                _owner_ok = False
+        if not _owner_ok:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin account already registered. Complete setup or log in."
+            )
         user_update = UserUpdate(
             username=user.username,
             password=user.password,

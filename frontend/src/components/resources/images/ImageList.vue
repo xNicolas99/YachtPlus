@@ -16,7 +16,7 @@
             <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on">
               <v-icon>mdi-plus</v-icon>
             </v-btn>
-            <v-tooltip bottom>
+            <v-tooltip location="bottom">
               <template v-slot:activator="{ on, attrs }">
                 <v-btn
                   class="ml-2"
@@ -205,6 +205,7 @@ import { mapActions, mapState } from "vuex";
 export default {
   data() {
     return {
+      pruning: false,
       selectedImage: null,
       deleteDialog: false,
       form: {
@@ -258,7 +259,7 @@ export default {
       }
     },
     pruneImages() {
-      this.$store.commit("snackbar/setLoading", true);
+      this.pruning = true;  // F18/F19: snackbar module has no setLoading mutation
       axios({
         url: "/settings/prune/images",
         method: "POST",
@@ -285,7 +286,7 @@ export default {
           this.$store.commit("snackbar/setErr", err);
         })
         .finally(() => {
-          this.$store.commit("snackbar/setLoading", false);
+          this.pruning = false;
         });
     }
   },

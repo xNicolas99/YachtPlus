@@ -109,7 +109,7 @@ export default {
       // Static placeholders matching the INDEX Overhaul mock. Wire to a real
       // hosts store once the multi-host backend lands.
       hostLabel: window.location.hostname || 'localhost',
-      hostMeta: window.location.hostname || '10.0.4.18',
+      hostMeta: window.location.hostname,  // F45: hardcoded fallback IP removed
       // Wired to a real source the day the notification feature lands.
       // Until then keep the badge off so it doesn't lie to the user.
       hasUnreadNotifications: false,

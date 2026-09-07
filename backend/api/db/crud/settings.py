@@ -1,10 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
+from sqlalchemy.orm import selectinload
 
 from api.db.models import containers as models
 from api.db.models.settings import SecretKey
 from datetime import datetime
 from api.settings import get_settings
+from fastapi import HTTPException
 settings = get_settings()
 import json
 import asyncio
@@ -16,7 +18,11 @@ logger = logging.getLogger(__name__)
 
 async def export_settings(db: AsyncSession):
     file_export = {}
-    result_t = await db.execute(select(models.Template))
+    # B4: eager-load Template.items — lazy load on AsyncSession during
+    # response_model serialization raises MissingGreenlet (export 500s).
+    result_t = await db.execute(
+        select(models.Template).options(selectinload(models.Template.items))
+    )
     file_export["templates"] = result_t.scalars().all()
     result_v = await db.execute(select(models.TemplateVariables))
     file_export["variables"] = result_v.scalars().all()
@@ -67,12 +73,22 @@ async def import_settings(db: AsyncSession, upload):
             created_at=datetime.fromisoformat(template["created_at"]),
         )
         for item in template["items"]:
-            _item = models.TemplateItem(**item)
+            # B19: whitelist fields — unknown/attacker keys in the upload
+            # raised TypeError (500) and could overwrite internal columns.
+            _allowed_item = {
+                k: v for k, v in item.items()
+                if k in getattr(models.TemplateItem, '__table__').columns.keys()
+            }
+            _item = models.TemplateItem(**_allowed_item)
             template_model.items.append(_item)
         _template_list.append(template_model)
 
     for variable in _variables:
-        variable_model = models.TemplateVariables(**variable)
+        _allowed_var = {
+            k: v for k, v in variable.items()
+            if k in getattr(models.TemplateVariables, '__table__').columns.keys()
+        }
+        variable_model = models.TemplateVariables(**_allowed_var)
         _var_list.append(variable_model)
 
     # Remove Existing
@@ -83,6 +99,12 @@ async def import_settings(db: AsyncSession, upload):
     # Add New
     db.add_all(_template_list)
     db.add_all(_var_list)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception as exc:
+        # B19: roll back the destructive replace-all on failure.
+        await db.rollback()
+        logger.exception("Settings import commit failed")
+        raise HTTPException(status_code=422, detail="Import failed: invalid payload or database error")
     response = {"success": "Import Successful"}
     return response

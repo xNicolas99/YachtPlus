@@ -215,6 +215,7 @@ Superusers bypass `check_permission`.
 | `/api/compose/{project}/edit` | `auth_check` + `perm_restart` — editing a compose file changes how the stack restarts |
 | `/api/compose/{project}/support` | superuser only |
 | `/api/templates` POST / DELETE / `/refresh` | superuser only via local `_require_superuser` helper (mutates the shared library + outbound URL fetch) |
+| `/api/containers/{id}/*` lifecycle (start/stop/restart/delete) | `auth_check` + perm + **API keys rejected** (FND-205) — same policy as apps router |
 | `/api/containers/{id}/exec` (WS) | shell-name whitelist → JWT decode → reject `setup_pending` → DB lookup (`is_active`) → `perm_start`. See section 5 below for the WS-specific contract. |
 | `/api/auth/users/{user_id}` DELETE | superuser only; refuses self-delete and refuses to zero out the superuser table |
 | `/api/auth/api/keys/{id}` DELETE | owner OR superuser; non-owner gets the same "Key not found" payload as a missing id (no IDOR id-existence leak) |
@@ -365,9 +366,9 @@ called from an `async def`, it must be isolated (async library or
 
 ### Known intentionally-sync exceptions (documented)
 
-- `api/utils/audit.py` `log_activity` is sync (`db.add`/`db.commit`); async
-  routers call it via `asyncio.to_thread`. Kept sync to avoid threading
-  concerns in the audit path.
+- `api/utils/audit.py` `log_activity` is **async** (`async def`, awaited
+  `db.commit`) — routers await it directly; no `asyncio.to_thread` needed.
+  (Updated from an older sync description; verified against current code.)
 - `api/actions/compose.py` `_compose_*_sync` / `_get_compose_sync` are sync
   (subprocess + YAML) and are always invoked via `await run_in_thread(...)`.
 - `api/db/crud/templates.py` `_fetch_template_payload_sync` /

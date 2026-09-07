@@ -11,7 +11,7 @@
       </v-fade-transition>
       <v-card-title class="primary font-weight-bold">
         Compose Stacks
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               class="ml-2"

@@ -235,8 +235,11 @@ export default {
     downloadLogs() {
       const element = document.createElement("a");
       const file = new Blob([this.logs.join("\n")], { type: "text/plain" });
-      element.href = URL.createObjectURL(file);
+      const objectUrl = URL.createObjectURL(file);
+      element.href = objectUrl;
       element.download = `${this.containerName}_logs.txt`;
+      // F30: revoke the blob URL after triggering the download.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
       document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);

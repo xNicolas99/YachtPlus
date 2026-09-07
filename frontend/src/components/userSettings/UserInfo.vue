@@ -185,7 +185,8 @@ export default {
         .delete(`/auth/api/keys/${key.id}`)
         .then(() => {
           let idx = this.apiKeys.findIndex(x => x.id === key.id);
-          this.apiKeys.splice(idx, 1);
+          // F60: splice(-1) would remove the wrong element.
+          if (idx !== -1) this.apiKeys.splice(idx, 1);
         })
         .finally(() => {
           this.isLoading = false;

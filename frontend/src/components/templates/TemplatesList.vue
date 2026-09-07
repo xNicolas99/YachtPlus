@@ -8,8 +8,8 @@
         <v-tab>Docker Online</v-tab>
       </v-tabs>
 
-      <v-tabs-items v-model="activeTab">
-        <v-tab-item>
+      <v-window v-model="activeTab">
+        <v-window-item>
           <v-card flat color="foreground">
             <v-fade-transition>
               <v-progress-linear
@@ -160,14 +160,14 @@
               </template>
             </v-data-table>
           </v-card>
-        </v-tab-item>
+        </v-window-item>
 
-        <v-tab-item>
+        <v-window-item>
           <v-card flat color="foreground" class="pa-4">
             <RegistryBrowser />
           </v-card>
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card>
 
     <!-- Upload JSON dialog -->

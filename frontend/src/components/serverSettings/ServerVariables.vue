@@ -68,7 +68,7 @@
             class="float-right"
             @click="submitFormData()"
             color="primary"
-            :disabled="!meta.valid"
+            :disabled="!fieldMeta.valid"  <!-- F17: scope has meta: fieldMeta -->
             >Save</v-btn
           >
         </form>

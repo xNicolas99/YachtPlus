@@ -4,9 +4,9 @@
       <v-col sm="12" md="6">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'ml-4 flex-grow-1 flex-shrink-0 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary">
@@ -39,23 +39,23 @@
       <v-col>
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mr-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Networking </v-card-title>
           <v-tabs
             background-color="tabs"
-            :show-arrows="$vuetify.breakpoint.smAndDown"
+            :show-arrows="$vuetify.display.smAndDown"
             show-arrows-on-hover
             v-model="network_tab"
           >
             <v-tab> Ports </v-tab>
             <v-tab> Networks </v-tab>
           </v-tabs>
-          <v-tabs-items class="foreground" v-model="network_tab">
-            <v-tab-item>
+          <v-window class="foreground" v-model="network_tab">
+            <v-window-item>
               <v-card-text
                 v-if="app.State.Status != 'running'"
                 class="foreground text-center px-5 py-5"
@@ -110,8 +110,8 @@
                   </tbody>
                 </template>
               </v-simple-table>
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <v-simple-table class="foreground px-0 text-center">
                 <template v-slot:default>
                   <thead>
@@ -156,17 +156,17 @@
                   </tbody>
                 </template>
               </v-simple-table>
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
       <v-col sm="12" md="6">
         <v-card
           v-if="app.Config.Env"
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'ml-4 flex-grow-1 flex-shrink-0 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Environment </v-card-title>
@@ -197,9 +197,9 @@
       <v-col sm="12" md="6">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mr-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Storage </v-card-title>
@@ -208,13 +208,13 @@
               {{ mount.Destination }}
             </v-tab>
           </v-tabs>
-          <v-tabs-items
+          <v-window
             class="foreground"
             v-model="storage_tab"
-            :show-arrows="$vuetify.breakpoint.smAndDown"
+            :show-arrows="$vuetify.display.smAndDown"
             show-arrows-on-hover
           >
-            <v-tab-item v-for="(mount, index) in app.Mounts" :key="index">
+            <v-window-item v-for="(mount, index) in app.Mounts" :key="index">
               <v-simple-table id="storage_table" class="foreground">
                 <template v-slot:default>
                   <tbody>
@@ -229,16 +229,16 @@
                   </tbody>
                 </template>
               </v-simple-table>
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
       <v-col cols="12">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mx-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary">
@@ -276,8 +276,8 @@
       >
         <v-card
           :class="{
-            'mx-4': $vuetify.breakpoint.smAndDown,
-            'mr-4 flex-grow-0 flex-shrink-1': $vuetify.breakpoint.mdAndUp
+            'mx-4': $vuetify.display.smAndDown,
+            'mr-4 flex-grow-0 flex-shrink-1': $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Advanced </v-card-title>
@@ -296,8 +296,8 @@
             <v-tab v-if="app.HostConfig.Sysctls">Sysctls</v-tab>
             <v-tab v-if="app.HostConfig.CapAdd">Capabilities</v-tab>
           </v-tabs>
-          <v-tabs-items class="foreground" v-model="advanced_tab">
-            <v-tab-item v-if="Array.isArray(app.Args) && app.Args.length">
+          <v-window class="foreground" v-model="advanced_tab">
+            <v-window-item v-if="Array.isArray(app.Args) && app.Args.length">
               <v-list class="foreground">
                 <v-list-item v-for="(arg, index) in app.Args" :key="index">
                   <v-list-item-content>
@@ -305,8 +305,8 @@
                   </v-list-item-content>
                 </v-list-item>
               </v-list>
-            </v-tab-item>
-            <v-tab-item
+            </v-window-item>
+            <v-window-item
               v-if="
                 app.HostConfig.Devices &&
                   Array.isArray(app.HostConfig.Devices) &&
@@ -314,8 +314,8 @@
               "
             >
               {{ app.HostConfig.Devices }}
-            </v-tab-item>
-            <v-tab-item v-if="app.HostConfig.Sysctls">
+            </v-window-item>
+            <v-window-item v-if="app.HostConfig.Sysctls">
               <v-simple-table class="foreground">
                 <template v-slot:default>
                   <thead>
@@ -341,8 +341,8 @@
                   </tbody>
                 </template>
               </v-simple-table>
-            </v-tab-item>
-            <v-tab-item v-if="app.HostConfig.CapAdd">
+            </v-window-item>
+            <v-window-item v-if="app.HostConfig.CapAdd">
               <v-list class="foreground">
                 <v-list-item
                   v-for="(item, index) in app.HostConfig.CapAdd"
@@ -353,8 +353,8 @@
                   </v-list-item-content>
                 </v-list-item>
               </v-list>
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
     </v-row>

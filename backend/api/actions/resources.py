@@ -1,4 +1,5 @@
 import aiodocker
+import json
 from fastapi import HTTPException
 import asyncio
 import logging
@@ -427,14 +428,22 @@ async def delete_network(network_id):
 async def prune_resources(resource):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
+            # B16: this aiodocker version exposes no prune() helpers on
+            # images/containers/volumes/networks — the previous calls raised
+            # AttributeError which the blanket except swallowed into an
+            # empty 200. Use the prune endpoints directly.
             if resource == "images":
-                return await docker.images.prune(filters={'dangling': ['false']})
+                return await docker._query_json(
+                    "images/prune",
+                    "POST",
+                    params={"filters": json.dumps({"dangling": ["false"]})},
+                )
             elif resource == "containers":
-                return await docker.containers.prune()
+                return await docker._query_json("containers/prune", "POST")
             elif resource == "volumes":
-                return await docker.volumes.prune()
+                return await docker._query_json("volumes/prune", "POST")
             elif resource == "networks":
-                return await docker.networks.prune()
+                return await docker._query_json("networks/prune", "POST")
         except Exception as e:
             logger.error("Error pruning %s: %s", resource, e)
             return {"count": 0, "space_reclaimed": 0}

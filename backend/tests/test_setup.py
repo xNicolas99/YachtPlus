@@ -165,6 +165,10 @@ def test_register_first_user_success_existing_user(override_db):
     updated_user = MagicMock()
     updated_user.username = "admin"
 
+    import jwt as pyjwt
+    from api.settings import get_settings
+    token = pyjwt.encode({"sub": "admin", "setup_pending": True}, get_settings().SECRET_KEY, algorithm="HS256")
+    client.cookies.set("access_token_cookie", token)
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
          patch("api.routers.setup.setup.get_user_by_name", new=AsyncMock(return_value=existing_user)), \
          patch("api.routers.setup.setup.update_user_by_id", new=AsyncMock(return_value=updated_user)), \

@@ -106,9 +106,12 @@ const actions = {
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
       })
+      .then(() => {
+        // F38: navigate only on success — finally also ran on errors.
+        router.push({ name: "Projects" });
+      })
       .finally(() => {
         commit("setLoading", false);
-        router.push({ name: "Projects" });
       });
   },
   ProjectAction({ commit, dispatch }, { Name, Action }) {

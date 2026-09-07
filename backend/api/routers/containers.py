@@ -80,6 +80,12 @@ async def start_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(
+            status_code=403,
+            detail="Container lifecycle actions are not available via API key",
+        )
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
     # Perform action
@@ -114,6 +120,12 @@ async def stop_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_stop", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(
+            status_code=403,
+            detail="Container lifecycle actions are not available via API key",
+        )
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
@@ -143,6 +155,12 @@ async def restart_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_restart", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(
+            status_code=403,
+            detail="Container lifecycle actions are not available via API key",
+        )
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
     docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
@@ -172,6 +190,11 @@ async def delete_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_delete", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(
+            status_code=403,
+            detail="Container lifecycle actions are not available via API key",
+        )
     container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
@@ -324,6 +347,17 @@ async def container_exec_websocket(
             await websocket.send_json({"error": "Unauthorized"})
             await websocket.close(code=1008)
             return
+
+        # B6: mirror verify_token API-key liveness — a deleted/disabled
+        # API key must not be able to open a container shell. Non
+        # API-key tokens are unaffected.
+        if claims.get("type") == "api_key":
+            from api.auth.jwt import _is_api_key_active
+            if not await _is_api_key_active(claims.get("jti")):
+                logger.warning("WebSocket exec rejected: inactive API key")
+                await websocket.send_json({"error": "Unauthorized: key revoked or disabled"})
+                await websocket.close(code=1008)
+                return
 
         auth_db = SessionLocal()
         try:

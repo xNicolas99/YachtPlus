@@ -1,4 +1,8 @@
 <template>
+  <!-- F54: guard against rendering before the record loads -->
+  <div v-if="!image && !network && !volume" class="pa-6">
+    <v-progress-circular indeterminate></v-progress-circular>
+  </div>
   <div class="page">
     <v-card color="foreground">
       <v-fade-transition>
@@ -114,7 +118,7 @@
             {{ $formatDate(network.Created) }}
           </v-list-item-content>
         </v-list-item>
-        <v-list-item v-if="Object.keys(network.Labels).length > 1">
+        <v-list-item v-if="network.Labels && Object.keys(network.Labels).length > 1"  <!-- F55 -->>
           <v-list-item-content>
             Labels
           </v-list-item-content>

@@ -32,6 +32,10 @@ class MockAuthValid:
     async def get_jwt_subject(self, allow_setup_pending=False):
         return self.user
 
+    def is_api_key(self) -> bool:
+        # Mock: plain login session, not an API key.
+        return False
+
 
 class MockAuthInvalid:
     async def jwt_required(self, allow_setup_pending=False):

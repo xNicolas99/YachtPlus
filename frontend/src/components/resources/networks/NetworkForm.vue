@@ -268,7 +268,7 @@ export default {
     submit() {
       const payload = { ...this.form };
       this.isLoading = true;
-      const url = `/api/resources/networks/`;
+      const url = `/resources/networks/`;
       axios
         .post(url, payload)
         .then(() => {

@@ -8,11 +8,11 @@
       This is where you can change settings related to your server.
     </v-card-text>
     <h2 class="font-weight-bold ml-5">Import</h2>
-    <Form ref="obs1" v-slot="{ invalid }">
+    <Form ref="obs1" v-slot="{ invalid, meta }">  <!-- F15: meta was missing from scope -->
       <validationProvider
         name="importFile"
         rules="required"
-        v-slot="{ errors, valid }"
+        v-slot="{ field, errorMessage }"
       >
         <v-file-input
           v-model="importFile"

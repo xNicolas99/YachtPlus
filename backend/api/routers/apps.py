@@ -137,8 +137,12 @@ async def index(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
 
 
 @router.get("/{app_name}/updates")
-async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    # B1: check_app_update() returns the full container inspect payload
+    # (incl. Config.Env -- secrets). Gate behind perm_start (read floor),
+    # same as GET /{app_name}.
     await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
     return await actions.check_app_update(app_name)
 
 

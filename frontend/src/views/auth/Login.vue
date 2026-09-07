@@ -106,7 +106,8 @@ export default {
           await this.$store.dispatch("auth/AUTH_REQUEST", {
             username: this.email,
             password: this.password
-          });
+          })
+            .catch(() => {});  // F14: cookie already set; best-effort store refresh
           this.$router.push("/");
         }
       } catch (err) {
@@ -134,9 +135,14 @@ export default {
           await this.$store.dispatch("auth/AUTH_REQUEST", {
             username: this.email,
             password: this.password
-          });
+          })
+            .catch(() => {});  // F14: cookie already set; best-effort store refresh
           this.$router.push("/");
-        }
+          } else if (response.data.login === "2fa_required") {
+            // F13: wrong OTP re-triggers 2fa_required - surface an error,
+            // otherwise the button appears dead.
+            this.error = "Ungültiger 2FA-Code, bitte erneut versuchen.";
+          }
       } catch (err) {
         this.error =
           (err.response && err.response.data && err.response.data.detail) ||

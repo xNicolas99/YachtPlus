@@ -136,9 +136,9 @@ const actions = {
         .then(resp => {
           localStorage.setItem("username", resp.data.username);
           commit(AUTH_SUCCESS, resp);
+          // F29: navigate only on success — finally also ran on error,
+          // sending the user to /user/info even when the change failed.
           resolve(resp);
-        })
-        .finally(() => {
           router.push({ path: `/user/info` });
         })
         .catch(err => {

@@ -18,7 +18,7 @@
         >
           <v-icon>mdi-plus</v-icon>
         </v-btn>
-        <v-tooltip bottom>
+        <v-tooltip location="bottom">
           <template v-slot:activator="{ on, attrs }">
             <v-btn
               class="ml-2"
@@ -179,6 +179,7 @@ import { mapActions, mapState } from "vuex";
 export default {
   data() {
     return {
+      pruning: false,
       selectedNetwork: null,
       deleteDialog: false,
       search: "",
@@ -224,7 +225,7 @@ export default {
       this.$router.push({ path: `/resources/networks/${networkid}` });
     },
     pruneNetworks() {
-      this.$store.commit("snackbar/setLoading", true);
+      this.pruning = true;  // F18/F19: snackbar module has no setLoading mutation
       axios({
         url: "/settings/prune/networks",
         method: "POST",
@@ -246,7 +247,7 @@ export default {
           this.$store.commit("snackbar/setErr", err);
         })
         .finally(() => {
-          this.$store.commit("snackbar/setLoading", false);
+          this.pruning = false;
         });
     }
   },

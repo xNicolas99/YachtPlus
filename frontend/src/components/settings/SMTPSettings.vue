@@ -91,7 +91,7 @@ export default {
   methods: {
     fetchSettings() {
       axios
-        .get("/settings/smtp/")
+        .get("/settings/email/")
         .then(response => {
           this.settings = response.data;
         })
@@ -102,7 +102,7 @@ export default {
     saveSettings() {
       this.isSaving = true;
       axios
-        .post("/settings/smtp/", this.settings)
+        .post("/settings/email/", this.settings)
         .then(() => {
           this.$emit("notify", {
             message: "SMTP Settings Saved",
@@ -125,7 +125,7 @@ export default {
     sendTest() {
       this.isTesting = true;
       axios
-        .post("/settings/smtp/test", { recipient: this.testRecipient })
+        .post("/settings/email/test", { recipient: this.testRecipient })
         .then(() => {
           this.$emit("notify", {
             message: "Test email sent",

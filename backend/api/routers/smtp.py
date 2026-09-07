@@ -1,6 +1,6 @@
 import time
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import smtplib
@@ -28,6 +28,9 @@ _test_mail_lock = asyncio.Lock()
 
 
 class SMTPSettingsSchema(BaseModel):
+    # B11: response_model serializes the ORM row; Pydantic v2 needs
+    # from_attributes for that. Without it the endpoint 500s.
+    model_config = ConfigDict(from_attributes=True)
     server: str
     port: int
     username: Optional[str] = None

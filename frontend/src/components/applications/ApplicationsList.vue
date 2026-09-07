@@ -15,11 +15,11 @@
 
       <v-card-title color="secondary">
         <v-btn class="ml-2" @click="checkUpdate(apps)" color="secondary" :loading="isCheckingUpdates" :disabled="isCheckingUpdates">
-          <span v-if="$vuetify.breakpoint.mdAndUp">Updates</span>
+          <span v-if="$vuetify.display.mdAndUp">Updates</span>
           <v-icon>mdi-update</v-icon>
         </v-btn>
         <v-btn class="ml-2" @click="refresh()" color="secondary" :loading="isRefreshing" :disabled="isRefreshing">
-          <span v-if="$vuetify.breakpoint.mdAndUp">Refresh</span>
+          <span v-if="$vuetify.display.mdAndUp">Refresh</span>
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
         <v-menu
@@ -30,7 +30,7 @@
         >
           <template v-slot:activator="{ on, attrs }">
             <v-btn color="secondary" v-bind="attrs" v-on="on" class="ml-2">
-              <span v-if="$vuetify.breakpoint.mdAndUp">Columns</span>
+              <span v-if="$vuetify.display.mdAndUp">Columns</span>
               <v-icon>mdi-border-all</v-icon>
             </v-btn>
           </template>

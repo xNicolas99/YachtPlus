@@ -16,8 +16,8 @@
         <small v-if="template.items">({{ template.items.length }})</small>
       </v-tab>
     </v-tabs>
-    <v-tabs-items v-model="tab" v-if="templates">
-      <v-tab-item v-for="template in templates" :key="template.id">
+    <v-window v-model="tab" v-if="templates">
+      <v-window-item v-for="template in templates" :key="template.id">
         <div>
           <v-card color="secondary">
             <v-fade-transition>
@@ -333,8 +333,8 @@
             </v-card>
           </v-dialog>
         </div>
-      </v-tab-item>
-    </v-tabs-items>
+      </v-window-item>
+    </v-window>
   </v-card>
 </template>
 

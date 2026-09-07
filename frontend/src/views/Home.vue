@@ -356,6 +356,8 @@ export default {
       }
     },
     formatBytes(bytes, decimals = 2) {
+      // F32: undefined/null/NaN must not produce "NaN undefined".
+      if (bytes === undefined || bytes === null || isNaN(bytes)) return "0 B";
       if (!+bytes) return '0 B';
       const k = 1024;
       const dm = decimals < 0 ? 0 : decimals;

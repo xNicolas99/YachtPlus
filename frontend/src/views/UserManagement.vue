@@ -227,6 +227,9 @@ export default {
         axios.delete(`/auth/users/${item.id}`).then(() => {
           this.loadUsers();
           this.notify("User deleted", "success");
+        }).catch(err => {
+          // F23: unhandled rejection fix.
+          this.notify("Error deleting user: " + (err.response?.data?.detail || err.message), "error");
         });
       }
     },
@@ -251,7 +254,7 @@ export default {
           })
           .catch(err => {
             this.notify(
-              "Error updating user: " + err.response.data.detail,
+              "Error updating user: " + err.response?.data?.detail,
               "error"
             );
           });
@@ -266,7 +269,7 @@ export default {
           })
           .catch(err => {
             this.notify(
-              "Error creating user: " + err.response.data.detail,
+              "Error creating user: " + err.response?.data?.detail,
               "error"
             );
           });

@@ -175,7 +175,7 @@ def conv_env2data(data, t_variables=None):
                     variable.default = new_var
                     break
         else:
-            if variable.default.startswith("!"):
+            if variable.default and variable.default.startswith("!"):
                 raise HTTPException(
                     400, "Unset template variable used: " + variable.default
                 )

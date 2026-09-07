@@ -9,19 +9,19 @@
           mobile-breakpoint="sm"
         >
           <v-tab class="text-left" @click="$router.go(-1)">
-            <v-icon left class="mr-1">mdi-arrow-left-bold-outline</v-icon> Back
+            <v-icon start class="mr-1">mdi-arrow-left-bold-outline</v-icon> Back
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-information-outline</v-icon>Info
+            <v-icon start class="mr-1">mdi-information-outline</v-icon>Info
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-view-list-outline</v-icon>Processes
+            <v-icon start class="mr-1">mdi-view-list-outline</v-icon>Processes
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-book-open-outline</v-icon>Logs
+            <v-icon start class="mr-1">mdi-book-open-outline</v-icon>Logs
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-gauge</v-icon>Stats
+            <v-icon start class="mr-1">mdi-gauge</v-icon>Stats
           </v-tab>
         </v-tabs>
         <v-fade-transition>
@@ -38,15 +38,15 @@
           <v-col xs="12" sm="12" md="6" class="flex-grow-1 flex-shrink-0">
             <v-card
               :class="{
-                'mx-4 primary': $vuetify.breakpoint.smAndDown,
+                'mx-4 primary': $vuetify.display.smAndDown,
                 'ml-4 primary flex-shrink-1 flex-grow-0':
-                  $vuetify.breakpoint.mdAndUp
+                  $vuetify.display.mdAndUp
               }"
             >
               <v-card-title>
                 {{ app.name }}
                 <v-spacer />
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       size="x-small"
@@ -64,7 +64,7 @@
                   </template>
                   <span>Download Support Bundle</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       size="x-small"
@@ -80,7 +80,7 @@
                   </template>
                   <span>Edit</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       size="x-small"
@@ -223,12 +223,12 @@
           <v-col sm="12" md="6" class="hidden-sm-and-down">
             <v-card
               :class="{
-                'mx-4 primary': $vuetify.breakpoint.smAndDown,
-                'mr-4 primary': $vuetify.breakpoint.mdAndUp
+                'mx-4 primary': $vuetify.display.smAndDown,
+                'mr-4 primary': $vuetify.display.mdAndUp
               }"
             >
               <v-card-title class="d-flex justify-space-between">
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       v-bind="{ attrs }"
@@ -247,7 +247,7 @@
                   </template>
                   <span>Start</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       v-bind="{ attrs }"
@@ -266,7 +266,7 @@
                   </template>
                   <span>Stop</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       v-bind="{ attrs }"
@@ -281,7 +281,7 @@
                   </template>
                   <span>Restart</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       v-bind="attrs"
@@ -300,7 +300,7 @@
                   </template>
                   <span>Kill</span>
                 </v-tooltip>
-                <v-tooltip bottom>
+                <v-tooltip location="bottom">
                   <template v-slot:activator="{ on, attrs }">
                     <v-btn
                       v-bind="attrs"
@@ -325,21 +325,21 @@
           leave-active-class="animated slideOutRight"
           mode="out-in"
         >
-          <v-tabs-items v-model="AppTab" touchless class="mt-3">
-            <v-tab-item> </v-tab-item>
-            <v-tab-item>
+          <v-window v-model="AppTab" touchless class="mt-3">
+            <v-window-item> </v-window-item>
+            <v-window-item>
               <Content :app="app" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Processes :app="app" :processes="processes" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Logs :app="app" :logs="logs" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Stats :app="app" :stats="stats" />
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </transition>
       </v-card>
     </v-container>
@@ -424,7 +424,14 @@ export default {
       const origin = window.location.origin;
       this.statConnection = new EventSource(`${origin}/api/apps/${appName}/stats`);
       this.statConnection.addEventListener("update", event => {
-        let statsGroup = JSON.parse(event.data);
+        let statsGroup;
+        try {
+          statsGroup = JSON.parse(event.data);
+        } catch (e) {
+          // F31: a malformed SSE chunk killed the whole stats stream.
+          console.warn("F31: skipping malformed stats chunk", e);
+          return;
+        }
         this.stats.time.push(statsGroup.time);
         this.stats.cpu_percent.push(Math.round(statsGroup.cpu_percent));
         this.stats.mem_percent.push(Math.round(statsGroup.mem_percent));

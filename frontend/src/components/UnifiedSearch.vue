@@ -3,18 +3,18 @@
     v-model="model"
     :items="items"
     :loading="isLoading"
-    :search-input.sync="search"
+    :search-input="search" @update:search-input="search = $event"
     hide-no-data
     hide-selected
-    item-text="title"
+    item-title="title"
     item-value="id"
     label="Search (Apps, Templates, DockerHub)"
     placeholder="Start typing to Search"
     prepend-icon="mdi-magnify"
     return-object
-    dense
+    density="comfortable"
     hide-details
-    solo-inverted
+    variant="solo-inverted"
     flat
     @change="handleSelect"
   >

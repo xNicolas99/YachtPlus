@@ -64,7 +64,7 @@ async def test_send_security_alert_with_admin_user(db):
 
         await send_security_alert(db, "1.2.3.4", "Test Reason", "testuser")
 
-    mock_smtp.assert_called_once_with("smtp.example.com", 587)
+    mock_smtp.assert_called_once_with("smtp.example.com", 587, timeout=10)
     mock_server.starttls.assert_called_once()
     mock_server.login.assert_called_once_with("user", "pass")
     mock_server.sendmail.assert_called_once()
@@ -97,7 +97,7 @@ async def test_send_security_alert_no_tls_no_auth(db):
 
         await send_security_alert(db, "1.2.3.4", "Test Reason")
 
-    mock_smtp.assert_called_once_with("smtp.example.com", 25)
+    mock_smtp.assert_called_once_with("smtp.example.com", 25, timeout=10)
     mock_server.starttls.assert_not_called()
     mock_server.login.assert_not_called()
     mock_server.sendmail.assert_called_once()

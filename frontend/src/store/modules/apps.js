@@ -49,8 +49,9 @@ const mutations = {
     state.updatable = updatable;
   },
   setUpdated(state, updated) {
-    let index = state.updatable.indexOf(updated);
-    state.updatable.splice(index, 1);
+    const index = state.updatable.indexOf(updated);
+    // F26: guard against index -1 (would remove the last element).
+    if (index !== -1) state.updatable.splice(index, 1);
   }
 };
 
@@ -110,7 +111,6 @@ const actions = {
         .get(url)
         .then(response => {
           const app = response.data;
-          commit("setLoading", false);
           commit("setApp", app);
           resolve(app);
         })
@@ -118,6 +118,9 @@ const actions = {
           console.error("Failed to read app " + Name);
           commit("snackbar/setErr", err, { root: true });
           reject(err);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },
@@ -161,7 +164,8 @@ const actions = {
       .post(url)
       .then(response => {
         const app = response.data;
-        commit("setApps", app);
+        // F1: response is a single app object, not the full list.
+        commit("setApp", app);
         console.log(Name + " updated successfully");
       })
       .catch(err => {
@@ -187,7 +191,8 @@ const actions = {
       .post(url)
       .then(response => {
         const app = response.data;
-        commit("setApps", app);
+        // F1: single app object, not the full list.
+        commit("setApp", app);
         console.log(Name + " " + Action + "ed successfully");
       })
       .catch(err => {

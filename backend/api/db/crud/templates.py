@@ -10,7 +10,7 @@ from fastapi import HTTPException
 from api.db.models import containers as models
 from api.utils.templates import conv_sysctls2dict, conv_ports2dict
 
-from datetime import datetime
+from datetime import datetime, timezone
 import http.client
 import urllib.request
 from urllib.parse import urlparse
@@ -205,6 +205,10 @@ async def delete_template(db: AsyncSession, template_id: int):
         select(models.Template).filter(models.Template.id == template_id)
     )
     _template = result.scalars().first()
+    # B9: refuse to delete a non-existent row instead of 500ing on
+    # db.delete(None).
+    if not _template:
+        raise HTTPException(status_code=404, detail="Template not found")
     await db.delete(_template)
     await db.commit()
     return _template
@@ -410,9 +414,10 @@ async def refresh_template(db: AsyncSession, template_id: id):
         if hasattr(exc, "code") and exc.code == 404:
             raise HTTPException(status_code=exc.code, detail="Template source not found")
         logger.error("Template refresh failed (ERR_001) for %s: %s", template.url, exc)
-        if hasattr(exc, "status_code"):
-            raise HTTPException(status_code=exc.status_code, detail="Failed to refresh template. Check server logs for details.")
-        raise HTTPException(status_code=400, detail="Failed to refresh template. Check server logs for details.")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to refresh template. Check server logs for details."
+        )
     else:
         template.updated_at = datetime.now(timezone.utc)
         template.items = items
@@ -424,7 +429,8 @@ async def refresh_template(db: AsyncSession, template_id: id):
             await db.rollback()
             logger.error("Template commit failed (ERR_002) for %s: %s", template.title, exc)
             raise HTTPException(
-                status_code=exc.response.status_code, detail=exc.explanation
+                status_code=exc.response.status_code if hasattr(exc, "response") else 502,
+                detail=exc.explanation if hasattr(exc, "explanation") else "Upstream template fetch failed"
             )
 
     return template
@@ -439,7 +445,8 @@ async def read_app_template(db: AsyncSession, app_id):
         return template_item
     except Exception as exc:
         raise HTTPException(
-            status_code=exc.response.status_code, detail=exc.explanation
+            status_code=exc.response.status_code if hasattr(exc, "response") else 502,
+            detail=exc.explanation if hasattr(exc, "explanation") else "Upstream template fetch failed"
         )
 
 
@@ -468,7 +475,7 @@ async def set_template_variables(db: AsyncSession, new_variables: models.Templat
 
     except IntegrityError as exc:
         logger.error("set_template_variables failed: %s", exc)
-        raise HTTPException(status_code=exc.status_code, detail=exc.explanation)
+        raise HTTPException(status_code=409, detail="Template variable conflict")
 
 
 async def read_template_variables(db: AsyncSession):

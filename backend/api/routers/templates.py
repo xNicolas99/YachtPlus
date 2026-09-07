@@ -65,6 +65,17 @@ async def match(
 
 
 @router.get(
+    "/app/{id}",
+    response_model=schemas.TemplateItem,
+)
+async def read_app_template(
+    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    await auth_check(Authorize)
+    return await crud.read_app_template(db=db, app_id=id)
+
+
+@router.get(
     "/{id}",
     response_model=schemas.TemplateItems,
 )
@@ -184,13 +195,3 @@ async def refresh_template(
     await _require_superuser(Authorize, db)
     return await crud.refresh_template(db=db, template_id=id)
 
-
-@router.get(
-    "/app/{id}",
-    response_model=schemas.TemplateItem,
-)
-async def read_app_template(
-    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    await auth_check(Authorize)
-    return await crud.read_app_template(db=db, app_id=id)

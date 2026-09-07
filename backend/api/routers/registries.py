@@ -2,13 +2,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.db.database import get_db
 from api.auth.jwt import get_auth_wrapper
+from api.auth.auth import auth_check
 from api.utils import registries as registry_utils
 
 router = APIRouter()
 
 @router.get("/")
 async def get_registries(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    await Authorize.jwt_required()
+    # B18: auth_check also verifies the underlying account (is_active).
+    await auth_check(Authorize)
     # Returns a list of supported registries.
     # This replaces the missing registry_utils.get_registries(db)
     return [
@@ -21,9 +23,11 @@ async def get_registries(db: AsyncSession = Depends(get_db), Authorize: get_auth
 async def search_registry(
     query: str,
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
-    await Authorize.jwt_required()
+    # B18: auth_check also verifies the underlying account (is_active).
+    await auth_check(Authorize)
     # Swapped arguments to match utils definition: search_registry(registry, query)
     return await registry_utils.search_registry(registry, query)
 
@@ -40,8 +44,10 @@ async def search_registry(
 async def popular_images(
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
-    await Authorize.jwt_required()
+    # B18: auth_check verifies token + account state.
+    await auth_check(Authorize)
     return await registry_utils.get_popular_images(registry)
 
 
@@ -50,8 +56,10 @@ async def image_tags(
     image: str,
     registry: str = Query("dockerhub", pattern="^(dockerhub|ghcr|linuxserver)$"),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
-    await Authorize.jwt_required()
+    # B18: auth_check verifies token + account state.
+    await auth_check(Authorize)
     if not image or not image.strip():
         return []
     return await registry_utils.get_image_tags(registry, image.strip())
@@ -61,13 +69,15 @@ async def image_tags(
 async def inspect_image(
     image: str,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
 ):
     """Best-effort metadata lookup for an image (mainly DockerHub's
     `short_description` / `description`). The deploy form uses this
     to pre-fill a notes field. Returns an empty dict if the registry
     couldn't be reached or the image is unknown — never a 500.
     """
-    await Authorize.jwt_required()
+    # B18: auth_check verifies token + account state.
+    await auth_check(Authorize)
     if not image or not image.strip():
         return {}
     image = image.strip()

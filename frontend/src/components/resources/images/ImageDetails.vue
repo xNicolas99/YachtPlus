@@ -1,4 +1,8 @@
 <template>
+  <!-- F54: guard against rendering before the record loads -->
+  <div v-if="!image && !network && !volume" class="pa-6">
+    <v-progress-circular indeterminate></v-progress-circular>
+  </div>
   <div class="page">
     <v-card color="foreground">
       <v-fade-transition>

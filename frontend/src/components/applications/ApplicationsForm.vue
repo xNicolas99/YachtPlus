@@ -974,9 +974,10 @@ export default {
     transform_env(envs) {
       let envlist = [];
       for (let env in envs) {
-        let _env = envs[env].split("=");
-        let name = _env[0];
-        let value = _env[1];
+        // F28: split("=") truncates values containing "=" (A=b=c -> c).
+        const _env = envs[env].split("=");
+        const name = _env[0];
+        const value = _env.slice(1).join("=");
         let env_entry = {
           label: name,
           name: name,

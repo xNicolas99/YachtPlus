@@ -58,7 +58,7 @@
               text-color="white"
               style="position: absolute; top: 10px; right: 10px; z-index: 2"
             >
-              <v-icon left x-small>{{ getBadgeIcon(image.source) }}</v-icon>
+              <v-icon start x-small>{{ getBadgeIcon(image.source) }}</v-icon>
               {{ getBadgeText(image.source) }}
             </v-chip>
           </div>

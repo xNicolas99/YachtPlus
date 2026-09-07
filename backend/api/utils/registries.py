@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 #   'search_query_registry': { 'data': [...], 'timestamp': ... }
 # }
 REGISTRY_CACHE = {}
+# B17: bound the cache - search keys accumulated without limit and
+# enabled a memory-DoS via /api/search (attacker-controlled keys,
+# no eviction). Max-size cap with oldest-first eviction on write.
+_CACHE_MAX_ENTRIES = 512
 CACHE_DURATION_POPULAR = timedelta(minutes=60) # Increased to 1 hour
 CACHE_DURATION_SEARCH = timedelta(minutes=10)
 
@@ -44,6 +48,10 @@ async def get_popular_images(registry: str) -> List[Dict]:
             'data': data,
             'timestamp': now
         }
+        # B17: enforce cache bound (evict oldest when over cap).
+        while len(REGISTRY_CACHE) > _CACHE_MAX_ENTRIES:
+            _oldest = min(REGISTRY_CACHE, key=lambda k: REGISTRY_CACHE[k]['timestamp'])
+            del REGISTRY_CACHE[_oldest]
     elif cache_key in REGISTRY_CACHE:
          # Return stale data if fetch failed
          logger.warning(f"Returning stale cache for {registry} popular images")

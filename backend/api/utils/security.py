@@ -51,22 +51,27 @@ def _send_security_alert_sync(settings_row, ip_address: str, reason: str, userna
     msg['From'] = settings_row.sender_email
     msg['To'] = recipient
 
+    server = None
     try:
+        # B12: hard timeout so a hanging SMTP relay cannot block a
+        # threadpool worker forever.
+        server = smtplib.SMTP(settings_row.server, settings_row.port, timeout=10)
         if settings_row.use_tls:
-            server = smtplib.SMTP(settings_row.server, settings_row.port)
             server.starttls()
-        else:
-            server = smtplib.SMTP(settings_row.server, settings_row.port)
-
         if settings_row.username and settings_row.password:
             server.login(settings_row.username, settings_row.password)
-
         server.sendmail(settings_row.sender_email, recipient, msg.as_string())
-        server.quit()
     except Exception as e:
         # Log the exception class but not its full text — smtplib errors can
         # embed the AUTH exchange, leaking credentials into container logs.
         logger.error("Failed to send security alert (%s)", type(e).__name__)
+    finally:
+        # B12: close the connection even on failure (leak fix).
+        if server:
+            try:
+                server.quit()
+            except Exception:
+                pass
 
 
 async def send_security_alert(db: AsyncSession, ip_address: str, reason: str, username: str = None):

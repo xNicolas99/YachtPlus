@@ -88,6 +88,8 @@ async def update_user(db: AsyncSession, user: schemas.UserUpdate, current_user: 
         _user.perm_start = user.perm_start
     if user.perm_stop is not None:
         _user.perm_stop = user.perm_stop
+    if user.perm_restart is not None:
+        _user.perm_restart = user.perm_restart
     if user.perm_delete is not None:
         _user.perm_delete = user.perm_delete
 
@@ -121,6 +123,8 @@ async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas
         db_user.perm_start = user_update.perm_start
     if user_update.perm_stop is not None:
         db_user.perm_stop = user_update.perm_stop
+    if user_update.perm_restart is not None:
+        db_user.perm_restart = user_update.perm_restart
     if user_update.perm_delete is not None:
         db_user.perm_delete = user_update.perm_delete
 
