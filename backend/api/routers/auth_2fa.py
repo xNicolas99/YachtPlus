@@ -110,7 +110,7 @@ async def enable_2fa(
 
         # Verify code
         totp = pyotp.TOTP(secret)
-        if totp.verify(payload.code):
+        if totp.verify(payload.code, valid_window=1):
             user.is_2fa_enabled = True
             await db.commit()
             return {"message": "2FA enabled successfully"}
@@ -159,7 +159,7 @@ async def disable_2fa(
         try:
             secret = decrypt(user.otp_secret)
             totp = pyotp.TOTP(secret)
-            if not totp.verify(payload.code):
+            if not totp.verify(payload.code, valid_window=1):
                 raise HTTPException(status_code=400, detail="Invalid 2FA code")
         except HTTPException:
             raise
