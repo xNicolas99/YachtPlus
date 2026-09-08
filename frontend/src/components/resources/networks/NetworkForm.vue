@@ -88,40 +88,40 @@
             <v-card-text> IPv4 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <!-- <Field v-bind="field"
+                <Field
                   name="IPv4 Subnet"
                   v-slot="{ field, errors, meta: fieldMeta }"
-                > -->
+                >
                 <v-text-field
                   label="Subnet"
                   placeholder="10.0.200.0/24"
                   v-bind="field"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
               <v-col>
-                <!-- <Field v-bind="field"
+                <Field
                   name="IPv4 Gateway"
                   v-slot="{ field, errors, meta: fieldMeta }"
-                > -->
+                >
                 <v-text-field
                   label="Gateway"
                   placeholder="10.0.200.1"
                   v-bind="field"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <!-- <Field v-bind="field" name="IP Range" v-slot="{ field, errors, meta: fieldMeta }"> -->
+                <Field name="IP Range" v-slot="{ field, errors, meta: fieldMeta }"> -->
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
                   placeholder="10.0.200.0/24"
                   v-bind="field"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
             </v-row>
           </div>
@@ -133,38 +133,38 @@
             <v-card-text> IPv6 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <!-- <Field v-bind="field"
+                <Field
                   name="IPv6 Subnet"
                   v-slot="{ field, errors, meta: fieldMeta }"
-                > -->
+                >
                 <v-text-field
                   label="Subnet"
                   placeholder="2001:db8::/32"
                   v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
               <v-col>
-                <!-- <Field v-bind="field"
+                <Field
                   name="IPv6 Gateway"
                   v-slot="{ field, errors, meta: fieldMeta }"
-                > -->
+                >
                 <v-text-field
                   label="Gateway"
                   placeholder="2001:db8::1"
                   v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <!-- <Field v-bind="field"
+                <Field
                   name="IPv6 Gateway"
                   v-slot="{ field, errors, meta: fieldMeta }"
-                > -->
+                >
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
@@ -172,7 +172,7 @@
                   v-bind="field"
                   :disabled="!form.ipv6_enabled"
                 />
-                <!-- </Field> -->
+                </Field>
               </v-col>
             </v-row>
           </div>

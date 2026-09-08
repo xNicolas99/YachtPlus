@@ -88,7 +88,7 @@
         :search="search"
         @click:row="handleRowClick"
       >
-        <template slot="no-data">
+        <template v-slot:no-data>
           <div>
             No Images available.
           </div>

@@ -237,7 +237,12 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
         key_name=key_name, user=user.id, hashed_key=_hashed_key, jti=jti, expires=expires_at
     )
     db.add(db_key)
-    await db.commit()
+    try:
+        await db.commit()
+    except Exception:
+        # B26: roll back on failure so the session is not left dirty.
+        await db.rollback()
+        raise
     await db.refresh(db_key)
     db_key.token = api_key
     return db_key.__dict__

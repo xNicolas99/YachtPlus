@@ -363,7 +363,7 @@ export default {
       if (!templ) {
         return [];
       }
-      if (this.search.length === "") {
+      if (this.search === "") {
         return this.items;
       }
       return templ.items.filter(this.filterByTitle);

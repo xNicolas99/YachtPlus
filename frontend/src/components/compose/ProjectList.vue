@@ -50,7 +50,7 @@
         :search="search"
         @click:row="handleRowClick"
       >
-        <template slot="no-data">
+        <template v-slot:no-data>
           <div>
             No Compose available.
           </div>
@@ -69,16 +69,16 @@
               </template>
               <v-list color="foreground" dense>
                 <v-list-group prepend-icon="mdi-gamepad">
-                  <template slot="activator">
+                  <template v-slot:activator="{ active }">
                     <v-list-item-title>Controls </v-list-item-title></template
                   >
                   <v-list color="background" dense>
                     <v-list-item
                       @click="ProjectAction({ Name: item.name, Action: 'up' })"
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-arrow-up-bold</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Up</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -86,9 +86,9 @@
                         ProjectAction({ Name: item.name, Action: 'down' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-arrow-down-bold</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Down</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -97,9 +97,9 @@
                         ProjectAction({ Name: item.name, Action: 'start' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-play</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Start</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -107,9 +107,9 @@
                         ProjectAction({ Name: item.name, Action: 'stop' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-stop</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Stop</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -117,9 +117,9 @@
                         ProjectAction({ Name: item.name, Action: 'restart' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-refresh</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Restart</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -128,9 +128,9 @@
                         ProjectAction({ Name: item.name, Action: 'pull' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-update</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Pull</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -138,9 +138,9 @@
                         ProjectAction({ Name: item.name, Action: 'create' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-plus-box-multiple</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Create</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -149,32 +149,32 @@
                         ProjectAction({ Name: item.name, Action: 'kill' })
                       "
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-fire</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Kill</v-list-item-title>
                     </v-list-item>
 
                     <v-list-item
                       @click="ProjectAction({ Name: item.name, Action: 'rm' })"
                     >
-                      <v-list-item-icon>
+                      <template #prepend><v-icon>
                         <v-icon>mdi-delete</v-icon>
-                      </v-list-item-icon>
+                      </v-icon></template>
                       <v-list-item-title>Remove</v-list-item-title>
                     </v-list-item>
                   </v-list>
                 </v-list-group>
                 <v-list-item @click="projectDetails(item.name)">
-                  <v-list-item-icon>
+                  <template #prepend><v-icon>
                     <v-icon>mdi-eye</v-icon>
-                  </v-list-item-icon>
+                  </v-icon></template>
                   <v-list-item-title>View</v-list-item-title>
                 </v-list-item>
                 <v-list-item @click="editProject(item.name)">
-                  <v-list-item-icon>
+                  <template #prepend><v-icon>
                     <v-icon>mdi-file-document-edit-outline</v-icon>
-                  </v-list-item-icon>
+                  </v-icon></template>
                   <v-list-item-title>Edit</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -184,9 +184,9 @@
                     deleteDialog = true;
                   "
                 >
-                  <v-list-item-icon>
+                  <template #prepend><v-icon>
                     <v-icon>mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </v-icon></template>
                   <v-list-item-title>Delete</v-list-item-title>
                 </v-list-item>
               </v-list>

@@ -29,9 +29,11 @@ def conv_ports2dict(data: List[str]) -> List[Dict[str, str]]:
         for port_data in data:
             for label, port in port_data.items():
                 if not re.match(REGEXP_PORT_ASSIGN, port, flags=re.IGNORECASE):
+                    # B28: do not echo the raw port payload (info leak);
+                    # 422 Unprocessable Entity statt 500.
                     raise HTTPException(
-                        status_code=500,
-                        detail="Malformed port assignment." + str(port_data),
+                        status_code=422,
+                        detail="Malformed port assignment in template.",
                     )
 
                 hport, cport = None, port

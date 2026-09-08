@@ -2,6 +2,7 @@ import axios from "axios";
 import router from "@/router/index";
 
 const state = {
+  templateVariables: [],  // F73: was committed but never declared
   templates: [],
   isLoading: false
 };
@@ -75,18 +76,21 @@ const actions = {
       .get(url)
       .then(response => {
         const templates = response.data;
-        templates.forEach(function(template) {
-          let temp_url = `/templates/${template.id}`;
-          axios
-            .get(temp_url)
-            .then(response => {
+        // F39: fan out item fetches and wait for all of them, so the
+        // loading state is only cleared when every template has its items.
+        return Promise.all(
+          templates.map(template =>
+            axios.get(`/templates/${template.id}`).then(response => {
               commit("setTemplate", response.data);
             })
-            .catch(err => {
-              commit("snackbar/setErr", err, { root: true });
-            });
-        });
-        commit("setTemplates", templates);
+          )
+        )
+          .then(() => {
+            commit("setTemplates", templates);
+          })
+          .catch(err => {
+            commit("snackbar/setErr", err, { root: true });
+          });
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });

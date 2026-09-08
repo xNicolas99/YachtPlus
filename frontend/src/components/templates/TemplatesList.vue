@@ -68,7 +68,7 @@
               :search="search"
               @click:row="handleRowClick"
             >
-              <template slot="no-data">
+              <template v-slot:no-data>
                 <div>
                   No templates available. <a href="/#/templates/new">Add</a> one
                   to view information and launch apps from here.

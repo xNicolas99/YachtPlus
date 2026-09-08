@@ -533,10 +533,7 @@
           <v-btn
             text
             color="error"
-            @click="
-              ProjectAction({ Name: selectedProject.name, Action: 'delete' });
-              postDelete();
-            "
+            @click="confirmDelete"
           >
             Delete
           </v-btn>
@@ -568,6 +565,13 @@ export default {
     }
   },
   methods: {
+    async confirmDelete() {
+      // F77: delete + postDelete ran concurrently — navigation
+      // happened before the action finished.
+      await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
+      await this.postDelete();
+    },
+
     ...mapActions({
       readProject: "projects/readProject",
       projectAppAction: "projects/ProjectAppAction",

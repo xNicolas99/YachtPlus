@@ -15,7 +15,7 @@
         <div
           v-for="container in runningContainers"
           :key="container.id"
-          @click="navigateTo(`/apps/${container.name}/info`)"
+          @click="navigateTo(appPath(container))"
           class="search-item"
         >
           <span class="item-icon">🟢</span>
@@ -134,6 +134,8 @@ export default {
         }
       }, 300)
     }
+
+    const appPath = (c) => `/apps/${ (c?.name || "").replace(/^\//, "") }/info`;
 
     const navigateTo = (path) => {
       router.push({ path }).catch(() => {})

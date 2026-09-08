@@ -72,7 +72,7 @@ def _acquire_leader_lock() -> bool:
     os.makedirs(lock_dir, exist_ok=True)
     lock_path = os.path.join(lock_dir, ".watchtower_leader.lock")
     try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR)
+        fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
         fcntl.flock(fd, fcntl.LOCK_NB | fcntl.LOCK_EX)
         # Keep fd open for the process lifetime; register a cleanup.
         atexit.register(lambda: (fcntl.flock(fd, fcntl.LOCK_UN), os.close(fd)))

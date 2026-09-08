@@ -53,7 +53,7 @@
                       color="secondary"
                       v-bind="attrs"
                       v-on="on"
-                      :href="`/api/apps/${app.name}/support`"
+                      :href="supportHref(app)"
                       target="_blank"
                       download
                       class="mx-1 my-1 hidden-sm-and-down"
@@ -120,7 +120,7 @@
                       <v-list-item-title>Edit</v-list-item-title>
                     </v-list-item>
                     <v-list-item
-                      :href="`/api/apps/${app.name}/support`"
+                      :href="supportHref(app)"
                       target="_blank"
                       color="primary"
                       download
@@ -387,6 +387,12 @@ export default {
     }
   },
   methods: {
+    supportHref(app) {
+      // F34: strip leading "/" from store app names.
+      const name = (app?.name || "").replace(/^\//, "");
+      return `/api/apps/${name}/support`;
+    },
+
     ...mapActions({
       readApp: "apps/readApp",
       readAppProcesses: "apps/readAppProcesses",

@@ -9,23 +9,23 @@
     </v-card-text>
     <h2 class="font-weight-bold ml-5">Import</h2>
     <Form ref="obs1" v-slot="{ invalid, meta }">  <!-- F15: meta was missing from scope -->
-      <validationProvider
+      <Field
         name="importFile"
         rules="required"
         v-slot="{ field, errorMessage }"
       >
         <v-file-input
-          v-model="importFile"
+          :model-value="field.value"
+          @update:model-value="field.value = $event"
           ref="importFile"
           label="Import export.json"
-          :error-messages="errors"
-          :success="valid"
+          :error-messages="errorMessage"
           required
           show-size
           accept=".json"
           class="mx-5"
         />
-      </validationProvider>
+      </Field>
       <v-btn
         class="mx-5"
         color="primary"
