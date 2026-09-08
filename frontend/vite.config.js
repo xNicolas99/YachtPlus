@@ -43,7 +43,9 @@ export default defineConfig({
     },
   },
   define: {
-    'process.env': {}
+    'process.env': {},
+    // F46: runtime-exposed app version (falls back to "dev")
+    __APP_VERSION__: JSON.stringify(process.env.VITE_VERSION || "dev"),
   },
   server: {
     port: 8080,

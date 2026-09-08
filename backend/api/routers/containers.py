@@ -274,7 +274,14 @@ async def container_exec_websocket(
     shell: str = Query(default="/bin/bash"),
 ):
     await websocket.accept()
-    container_id = _validate_container_id(container_id)
+    # B30: HTTPException inside a WS route surfaces as a raw ASGI error
+    # instead of a clean close frame. Validate inline and close(1008).
+    try:
+        container_id = _validate_container_id(container_id)
+    except HTTPException:
+        await websocket.send_json({"error": "Forbidden: invalid container id"})
+        await websocket.close(code=1008)
+        return
 
     # Whitelist the requested shell before doing any auth work, so token
     # probing attempts get no signal from the docker daemon.
@@ -390,11 +397,15 @@ async def container_exec_websocket(
     finally:
         await audit_db.close()
 
-    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
+    # B30c: construct the Docker client inside try — if the constructor
+    # fails (e.g. bad DOCKER_HOST config), the finally-close path would
+    # otherwise close an object that never got assigned.
+    docker = None
     exec_id = None
     stream = None
 
     try:
+        docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
         # Create exec instance
         # Ensure container exists
         try:

@@ -2,7 +2,6 @@
   <v-dialog
     v-model="dialog"
     fullscreen
-    hide-overlay
     transition="dialog-bottom-transition"
     @keydown.esc="close"
   >

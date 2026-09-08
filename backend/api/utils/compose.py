@@ -47,6 +47,8 @@ def validate_compose_project_name(name):
 def find_yml_files(path):
     """
     find docker-compose.yml files in path
+    (B23: sync os.walk — must be called via run_in_thread/to_thread from
+    async contexts, see the wrappers in actions/compose.py)
     """
     matches = {}
     for root, _, filenames in os.walk(path, followlinks=True):

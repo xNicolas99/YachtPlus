@@ -57,9 +57,8 @@ export default {
       this.isLoading = true;
       axios({
         url: "/settings/check/update",
-        method: "POST",
-        responseType: "text/json"
-      })
+        method: "POST"
+        })
         .then(response => {
           this.isLoading = false;
           this.updatable = response.data;
@@ -73,9 +72,8 @@ export default {
       this.isLoading = true;
       axios({
         url: "/settings/update",
-        method: "POST",
-        responseType: "text/json"
-      })
+        method: "POST"
+        })
         .then(() => {
           this.isLoading = false;
           this.setMessage(

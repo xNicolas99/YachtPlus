@@ -142,7 +142,9 @@
                     <a
                       :href="
                         'https://' +
-                          'hub.docker.com/r/' +
+                          (selectedApp.image.startsWith('ghcr.io/')
+                            ? 'github.com/' + selectedApp.image.split(':')[0].replace('ghcr.io/', 'orgs/') + '/packages'
+                            : 'hub.docker.com/r/') +
                           selectedApp.image.split(':')[0]
                       "
                       >{{ selectedApp.image }}</a

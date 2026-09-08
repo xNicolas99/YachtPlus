@@ -9,7 +9,6 @@
             <div>
               <v-tabs
                 v-model="SettingsTab"
-                mobile-breakpoint="sm"
               >
                 <v-tab class="text-left" @click="$router.go(-1)">
                   <v-icon start class="mr-1">mdi-arrow-left-bold-outline</v-icon>
@@ -85,7 +84,7 @@
       <v-snackbar
         v-model="snackbar.show"
         :color="snackbar.color"
-        timeout="3000"
+:timeout="3000"
       >
         {{ snackbar.message }}
       </v-snackbar>

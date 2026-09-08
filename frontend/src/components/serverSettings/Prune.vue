@@ -112,9 +112,8 @@ export default {
       this.loadingResource = resource;
       axios({
         url: "/settings/prune/" + resource,
-        method: "POST",
-        responseType: "text/json"
-      })
+        method: "POST"
+        })
         .then(response => {
           let action = Object.keys(response.data)[0];
           if (response.data[action] != null) {

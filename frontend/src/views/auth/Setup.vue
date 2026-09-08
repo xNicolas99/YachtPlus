@@ -60,7 +60,7 @@
                 <v-text-field
                   v-model="token"
                   label="Verification Code"
-                  outlined
+                  variant="outlined"
                   class="mt-4"
                   prepend-icon="mdi-two-factor-authentication"
                   maxlength="6"

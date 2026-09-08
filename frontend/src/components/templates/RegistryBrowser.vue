@@ -293,6 +293,10 @@ export default {
       }
     },
     async fetchImages() {
+      // F72: out-of-order responses — a slower older request could
+      // overwrite newer results. Each fetch bumps a sequence number;
+      // only the newest is allowed to write state.
+      const seq = (this._fetchSeq = (this._fetchSeq || 0) + 1);
       this.loading = true;
       this.images = []; // Clear immediately
       try {
@@ -312,11 +316,14 @@ export default {
 
           // Sort by pull count (descending)
           allImages.sort((a, b) => (b.pull_count || 0) - (a.pull_count || 0));
+          if (seq !== this._fetchSeq) return;  // F72: stale response
           this.images = allImages;
 
         } else {
           // Single Registry Search
-          this.images = await this.fetchRegistryImages(registry, this.search);
+          const single = await this.fetchRegistryImages(registry, this.search);
+          if (seq !== this._fetchSeq) return;  // F72: stale response
+          this.images = single;
         }
       } catch (error) {
         console.error("Error fetching images:", error);

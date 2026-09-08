@@ -228,9 +228,8 @@ export default {
       this.pruning = true;  // F18/F19: snackbar module has no setLoading mutation
       axios({
         url: "/settings/prune/networks",
-        method: "POST",
-        responseType: "text/json"
-      })
+        method: "POST"
+        })
         .then(response => {
           let action = Object.keys(response.data)[0];
           let deletedNumber = 0;

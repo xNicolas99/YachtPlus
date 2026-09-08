@@ -11,7 +11,7 @@
       <div class="yp-brand-mark" aria-hidden="true"></div>
       <template v-if="!rail">
         <div class="yp-brand-name">YachtPlus</div>
-        <div class="yp-brand-ver">v2.4</div>
+        <div class="yp-brand-ver">{{ version }}</div>
       </template>
       <v-btn
         icon="mdi-chevron-left"
@@ -64,7 +64,7 @@
         <span class="yp-side-ind" aria-hidden="true"></span>
         <div class="yp-col" style="gap:1px;">
           <span class="yp-side-host">docker.sock</span>
-          <span class="yp-mono yp-side-meta">v25.0.3 · linux</span>
+          <span class="yp-mono yp-side-meta">{{ runtimeInfo }}</span>
         </div>
       </div>
       <div class="yp-side-foot is-rail" v-else>
@@ -88,6 +88,9 @@ import { mapActions } from 'vuex';
 export default {
   data() {
     return {
+      // F46: hardcoded versions removed
+      version: __APP_VERSION__ || "dev",
+      runtimeInfo: "linux",
       drawer: true,
       rail: false,
       groups: [

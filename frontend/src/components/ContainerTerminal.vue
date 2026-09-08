@@ -7,7 +7,7 @@
     @keydown.esc="close"
   >
     <v-card class="d-flex flex-column" style="height: 100vh;">
-      <v-toolbar dark color="primary" dense>
+      <v-toolbar density="compact" color="primary">
         <v-toolbar-title>{{ containerName }} - Terminal</v-toolbar-title>
         <v-spacer></v-spacer>
 
@@ -20,9 +20,9 @@
             '/bin/zsh',
             '/usr/bin/fish'
           ]"
-          dense
+          density="compact"
           hide-details
-          outlined
+          variant="outlined"
           class="mr-4"
           style="max-width: 150px;"
           label="Shell"
