@@ -509,10 +509,15 @@ async def app_action(app_name, action, background_tasks=None):
         c_short_id = c_id[:12]
 
         if self_id and (c_id == self_id or c_short_id in self_id) and action == "restart":
+            # B14: the previous code passed the aiodocker Container object
+            # to the background task. Its Docker client closes when this
+            # `async with` block returns, so the restart always failed on
+            # a closed client. Restart-by-name opens its own client and
+            # therefore survives the request lifecycle.
             if background_tasks:
-                 background_tasks.add_task(app.restart, timeout=10)
+                 background_tasks.add_task(_restart_by_name, app_name)
             else:
-                 asyncio.create_task(app.restart(timeout=10))
+                 asyncio.create_task(_restart_by_name(app_name))
 
             return await get_apps()
 
@@ -535,6 +540,21 @@ async def app_action(app_name, action, background_tasks=None):
             raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
     return await get_apps()
+
+
+async def _restart_by_name(container_name: str, timeout: int = 10) -> None:
+    """B14: restart a container by NAME with its own aiodocker client.
+    Must not depend on any client created inside a request handler —
+    those are closed as soon as the handler returns.
+    """
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
+        try:
+            container = await docker.containers.get(container_name)
+            await container.restart(timeout=timeout)
+            logger.info("Self-restart of %s completed.", container_name)
+        except Exception as exc:
+            logger.error("Self-restart of %s failed: %s", container_name, exc)
+
 
 async def app_update(app_name):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
