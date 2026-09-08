@@ -166,6 +166,36 @@ async def update_user_admin(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
+    # B22: Last-Admin / Self-Lockout protection on UPDATE (delete_user had
+    # this gate, the update path did not). Mirror the delete_user rules:
+    # a superuser cannot demote/deactivate himself, and the last
+    # superuser cannot be demoted or deactivated.
+    target_user = await crud.get_user(db, user_id)
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target_user.id == current_user.id and (
+        user_update.is_superuser is False or user_update.is_active is False
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="You cannot demote or deactivate your own account.",
+        )
+    if target_user.is_superuser and (
+        user_update.is_superuser is False or user_update.is_active is False
+    ):
+        res = await db.execute(
+            select(models.User).filter(
+                models.User.is_superuser == True,  # noqa: E712
+                models.User.id != target_user.id,
+            )
+        )
+        remaining_admins = len(res.scalars().all())
+        if remaining_admins == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot demote or deactivate the last administrator.",
+            )
+
     db_user = await crud.update_user_by_id(db, user_id, user_update)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")

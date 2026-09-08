@@ -127,7 +127,7 @@
         </v-card-text>
 
         <v-card-actions>
-          <v-btn text :href="getRegistryUrl(selectedImage)" target="_blank">
+          <v-btn text :href="getRegistryUrl(selectedImage)" target="_blank" rel="noopener noreferrer">
             View on Registry <v-icon x-small>mdi-open-in-new</v-icon>
           </v-btn>
           <v-spacer></v-spacer>
