@@ -19,6 +19,34 @@ the lie.
 
 ---
 
+## Doku-Sync — PFLICHT bei JEDEM Durchlauf (Run)
+
+- Ein Run ohne Doku-Eintrag gilt als nicht abgeschlossen, auch wenn der Code funktioniert.
+- **Definition Run:** eine abgeschlossene Arbeitseinheit mit eigenem Commit, also Implementierung, Bugfix, Refactoring, Analyse, Build- oder Testlauf oder Doku-Änderung.
+- **Pflichtschritte am Ende jedes Runs in dieser Reihenfolge:**
+  1. Aufräumen von Caches und Wegwerf-Artefakten.
+  2. Verifizieren durch Tests oder Build mit echtem belegtem Ergebnis, ohne erfundene Zahlen.
+  3. `CHANGELOG.md` fortschreiben mit einem neuen Eintrag oben direkt unter der Changelog-Überschrift, neueste zuerst, alte Einträge nie umsortieren oder kürzen.
+  4. `AGENTS.md` aktualisieren, wenn sich Baseline, Struktur, Routen, Pfade, Konventionen, Env-Variablen oder Risikoflächen geändert haben.
+  5. Run-Protokoll ergänzen, also eine Zeile in der Tabelle Run-Protokoll am Dateiende.
+  6. Commit nur der fachlich geänderten Dateien, und kein `git add -A`, wenn fremde Änderungen im Arbeitsverzeichnis liegen.
+  7. Push und danach prüfen, dass Remote-Hash und lokaler HEAD übereinstimmen.
+
+Format eines `CHANGELOG.md`-Eintrags:
+
+```
+## JJJJ-MM-TT HH:MM — Run R-0NN: kurze Bezeichnung
+- Commit: <kurz-hash>
+- Geändert: <Dateien/Themen>
+- Ergebnis: <Tests/Build mit belegten Zahlen>
+- Aufgeräumt: <Caches/Artefakte>
+- Offen: <optional>
+```
+
+**Verboten:** erfundene Testzahlen, Prosa-Romane, Umsortieren alter Einträge, Doku-Änderung ohne zugehörigen Run-Eintrag.
+
+---
+
 ## 1. What this repo is
 
 YachtPlus is a self-hosted container management UI for Docker / Docker Compose,
@@ -479,7 +507,7 @@ Useful subsets:
 - `python -m pytest tests/test_compose_perms.py tests/test_compose_delete_path.py` — compose permission and path-safety gates.
 - `python -m pytest tests/test_image_inspect.py` — Docker Hub manifest/tag handling.
 
-Current baseline: **513 backend + 21 frontend tests, all green.**
+Current baseline: **543 backend + 21 frontend tests, all green** (Stand Run R-020).
 
 `backend/tests/conftest.py` also provides shared async `db` / `db_session`
 fixtures (in-memory `sqlite+aiosqlite`, `StaticPool`). After the async
@@ -656,7 +684,9 @@ authoritative orientation now.
 
 ---
 
-## 18. Offene Audit-Befunde (2026-09-10)
+## 18. Audit-Befunde (2026-09-10) — behoben in Run R-020
+
+> **Status:** Stand Run R-020, Commit `aed5e1f`; alle 28 Befunde der Tabellen 18.1 bis 18.3 sind umgesetzt und verifiziert (Backend 543 Tests, Frontend 21 Tests, Vite-Build grün, beide GitHub-Workflows grün); bewusst offen bleiben M13 (Vuetify-3-Migration der `v-list-item`-Elemente) und L3 (`plugins/notifications.js` bleibt toter Code, weil der Toast direkt in `main.js` registriert wurde); weitere Restpunkte in Abschnitt 18.6; die Tabellen 18.1 bis 18.4 bleiben als historischer Befundstand erhalten.
 
 Ergebnis einer Code-Analyse (zwei Subagenten, Modell DeepSeek 4.1 Flash). **Jeder**
 Eintrag unten wurde vom Hauptagenten anschließend gegen den echten Code verifiziert
@@ -726,7 +756,7 @@ Diese Punkte wurden vom Hauptagenten geprüft und als **nicht zutreffend** einge
 | „`GET /settings/deployment` gehört superuser-gated" | FALSCH — laut eigenem Docstring bewusst für alle authentifizierten Operatoren freigegeben (FND-501 / S7). |
 | „`v-slot`-Fix F20 in NetworkDetails ist erledigt" | FALSCH — die Template-Zeile 27 nutzt weiter `router.push` (siehe H7); der damalige Fix traf eine andere Stelle. |
 
-### 18.5 Empfohlene Reihenfolge
+### 18.5 Empfohlene Reihenfolge (abgearbeitet in Run R-020)
 
 1. **H1–H4** (kaputte Kernfunktionen: Dashboard-Stats, Container-Aktionen, Update-Prüfung, Listen-Navigation)
 2. **H5–H8** (Render-Fehler in Formularen/Import)
@@ -738,3 +768,45 @@ Diese Punkte wurden vom Hauptagenten geprüft und als **nicht zutreffend** einge
 (Speicherplatz-Regel). Vor Fix-Verifikation müssen sie neu errichtet werden:
 `python -m venv venv && venv/bin/pip install -r requirements.txt` (backend) bzw.
 `npm ci` (frontend).
+
+### 18.6 Restpunkte (offen nach R-020)
+
+| Nummer | Stelle | Severity | Rest | Empfehlung |
+|---|---|---|---|---|
+| M13 | `frontend/src`, 382 Fundstellen | medium | `v-list-item-content`, `v-list-item-icon`, `v-list-item-avatar` und `v-list-item-action` sind Vuetify-2-Elemente und rendern in Vuetify 3 nicht korrekt | Migration auf `prepend`-, `append`- und `title`-Slots in einem eigenen Run, da nur mit Komponententests sicher verifizierbar |
+| L3 | `frontend/src/plugins/notifications.js` | low | Modul ist toter Code, weil M11 direkt in `main.js` gelöst wurde | Datei löschen oder in `main.js` registrieren |
+| Rest-dense | `frontend/src/components` | low | `dense` und `outlined` auf `v-data-table`, `v-alert`, `v-item-group` und `v-text-field` sind weiterhin Vuetify-2-Reste, außerhalb des Auftrags von R-020 | bei nächster UI-Berührung auf `density` und `variant` umstellen |
+| Rest-status | `backend/api/actions/apps.py` Zeilen 358 und 369 | low | dort steht noch ein `getattr`-Aufruf statt `safe_http_status`, dadurch ist der Sentinel 900 möglich | auf `safe_http_status` umstellen |
+| Rest-pwd | `backend/api/routers/auth_2fa.py` Zeile 131 | low | Feld `password` ohne Byte-Obergrenze, ein Wert über 72 Byte liefe in bcrypt, praktisch unerreichbar | optional `field_validator` wie in `schemas/users.py` |
+
+---
+
+## Run-Protokoll
+
+Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wird bei jedem Run ergänzt und nie umgeschrieben; Details stehen im jeweiligen Commit und in der `CHANGELOG.md`.
+
+| Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
+|---|---|---|---|---|
+| R-021 | 2026-09-10 | Doku-Sync-Commit | Doku-Sync: Run-Protokoll und CHANGELOG-Pflichtregel, Status Abschnitt 18, Baseline von 513 auf 543 | 543/21 |
+| R-020 | 2026-09-10 | aed5e1f | Audit-Befunde Abschnitt 18 behoben, H1 bis H10, M1 bis M14, L1 bis L4, Backend und Frontend | 543/21 |
+| R-019 | 2026-09-08 | 5924edc | Kosmetik-Rest: F72 Race-Guard, B30 WS-Close-Frame, F41 bis F50, F59 bis F70 | 539/21 |
+| R-018 | 2026-09-08 | 55636b8 | B14: Self-Restart mit eigenem aiodocker-Client plus drei Tests | 539/21 |
+| R-017 | 2026-09-08 | 84d5f09 | Rest-Batch: F16 vee-validate v4, F34 bis F39, F56, F68, F69, F73, F77, B26 bis B28 | 536/21 |
+| R-016 | 2026-09-08 | 627fe0d | B22 Last-Admin-Update-Gate, F33 Port-Links protokollbewusst, F71 noopener | 536/21 |
+| R-015 | 2026-09-07 | 41a4750 | TOTP valid_window gleich eins, CI-Flakiness an der Fenstergrenze behoben | 536/21 |
+| R-014 | 2026-09-07 | e5214b6 | Subagenten-Bug-Batch B1 bis B24 und F1 bis F78, plus Analyse in Abschnitt 18 | 536/21 |
+| R-013 | 2026-09-03 | 7e1808c | Dockerfile: COPY der Wheels vor pip install, CI-Build wieder grün | CI grün |
+| R-012 | 2026-09-03 | 4f8a063 | P0/P1-Security-Fixes und P2-Verbesserungen, Backend und Frontend | 536/21 |
+| R-011 | 2026-08-21 | e5443dc | Doku: Docker-Socket-Proxy Least-Privilege-Matrix, N-01 und N-02 | keine |
+| R-010 | 2026-08-21 | 3091545 | B-07: Leader-Lock für Watchtower plus Test | keine |
+| R-009 | 2026-08-21 | a46a412 | N-13: SMTP Rate-Limit und Debounce für Test-Mail plus Tests | keine |
+| R-008 | 2026-08-21 | 5b90f0b | B-09: API-Keys erfordern aktiven APIKEY-Datensatz plus Tests | keine |
+| R-007 | 2026-08-21 | 5671807 | N-11: timezone-aware DateTime und Alembic env.py repariert | keine |
+| R-006 | 2026-08-21 | ac1134f | N-12: request.client gleich None sicher behandelt | keine |
+| R-005 | 2026-08-21 | 6588add | N-09: Token-Ablauf auf ACCESS_TOKEN_EXPIRE_MINUTES konsolidiert | keine |
+| R-004 | 2026-08-21 | 1d1c0a2 | N-06: race-sichere SECRET_KEY-Erzeugung plus Multiprozess-Test | keine |
+| R-003 | 2026-08-21 | 06f317f | Test-Import normalize_username korrigiert | keine |
+| R-002 | 2026-08-21 | a72f5ba | P1: B-05 Docker CLI und Compose, B-08 slowapi, B-13 Login-Auth | keine |
+| R-001 | 2026-08-21 | bfbc1c2 | Tests und Specs in git aufgenommen | keine |
+
+**Hinweis:** die Spalte Tests nennt den Stand am Ende des Runs; `keine` bedeutet, dass in diesem Run keine Suiten liefen; exakte Uhrzeiten stehen in der `CHANGELOG.md`.
