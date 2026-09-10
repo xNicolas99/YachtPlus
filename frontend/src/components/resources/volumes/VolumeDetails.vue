@@ -15,12 +15,12 @@
       </v-fade-transition>
       <v-card-title>
         <v-menu close-on-click close-on-content-click offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Volume Actions" title="Volume Actions">
+          <template v-slot:activator="{ props }">
+            <v-btn icon size="small" v-bind="props" aria-label="Volume Actions" title="Volume Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
-          <v-list color="foreground" dense>
+          <v-list color="foreground" density="compact">
             <v-list-item @click="deleteVolume(volume.Name)">
               <v-list-item-icon
                 ><v-icon>mdi-trash-can-outline</v-icon></v-list-item-icon
@@ -47,7 +47,7 @@
       <v-card-title>
         Volume Details
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
           <v-list-item-content>
             Name
@@ -93,8 +93,8 @@
             Labels
           </v-list-item-content>
           <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table dense>
+            <v-card variant="outlined" tile>
+              <v-table density="compact">
                 <tbody>
                   <tr v-for="(value, key, index) in volume.Labels" :key="index">
                     <td style="min-width:20%;" class="align-self-center">
@@ -108,7 +108,7 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
           </v-list-item-content>
         </v-list-item>

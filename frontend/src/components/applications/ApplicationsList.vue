@@ -28,8 +28,8 @@
           offset-y
           color="secondary"
         >
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn color="secondary" v-bind="attrs" v-on="on" class="ml-2">
+          <template v-slot:activator="{ props }">
+            <v-btn color="secondary" v-bind="props" class="ml-2">
               <span v-if="$vuetify.display.mdAndUp">Columns</span>
               <v-icon>mdi-border-all</v-icon>
             </v-btn>
@@ -70,9 +70,7 @@
         :headers="selectedHeaders"
         :items="apps"
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
         single-select
@@ -95,12 +93,12 @@
               :close-on-content-click="true"
               offset-y
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn icon size="small" v-bind="attrs" v-on="on" class="" aria-label="Application Actions" title="Application Actions">
+              <template v-slot:activator="{ props }">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Application Actions" title="Application Actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <!-- Inspect Group -->
                 <v-subheader>Inspect</v-subheader>
                 <v-list-item @click="viewLogs(item)">
@@ -111,8 +109,8 @@
                 </v-list-item>
 
                 <v-tooltip left v-if="item.State.Status !== 'running'">
-                  <template v-slot:activator="{ on, attrs }">
-                    <div v-bind="attrs" v-on="on">
+                  <template v-slot:activator="{ props }">
+                    <div v-bind="props">
                       <v-list-item disabled>
                         <v-list-item-icon>
                           <v-icon>mdi-console</v-icon>
@@ -244,11 +242,10 @@
               color="primary"
               class="mb-2"
             >
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-avatar
                   class="ml-1"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                   color="primary"
                   size="6"
                 ></v-avatar>
@@ -276,10 +273,9 @@
             style="text-decoration: none;"
           >
             <v-tooltip top transition="scale-transition">
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-chip
-                  v-on="on"
-                  v-bind="attrs"
+                  v-bind="props"
                   class="mx-1"
                   v-show="port.hip != '::'"
                   v-if="port.hip == '0.0.0.0'"
@@ -296,8 +292,7 @@
                   }}</v-chip
                 >
                 <v-chip
-                  v-on="on"
-                  v-bind="attrs"
+                  v-bind="props"
                   class="ma-1"
                   v-else
                   color="primary"
@@ -423,8 +418,8 @@ export default {
       Update: "apps/AppUpdate",
       checkUpdateStore: "apps/checkAppUpdate"
     }),
-    handleRowClick(appName) {
-      this.$router.push({ path: `/apps${appName.Name}` });
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/apps/${item.name}` });
     },
     editClick(appName) {
       this.$router.push({ path: `/apps/edit/${appName.Name}` });

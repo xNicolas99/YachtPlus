@@ -57,7 +57,7 @@ export default {
       this.isLoading = true;
       axios({
         url: "/settings/check/update",
-        method: "POST"
+        method: "GET"
         })
         .then(response => {
           this.isLoading = false;

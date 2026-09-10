@@ -11,8 +11,8 @@
     <h2 class="font-weight-bold ml-5">
       API Keys
       <v-dialog id="keyModal" v-model="keyDialog" max-width="500">
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn color="primary" v-bind="attrs" v-on="on">
+        <template v-slot:activator="{ props }">
+          <v-btn color="primary" v-bind="props">
             <v-icon>mdi-plus</v-icon>
           </v-btn>
         </template>

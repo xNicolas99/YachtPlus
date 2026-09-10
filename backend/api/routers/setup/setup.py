@@ -261,8 +261,11 @@ async def register_first_user(
         user.is_active = False
         try:
             new_user = await create_user(db=db, user=user)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error creating user: {str(e)}")
+        except Exception:
+            # /setup/register is unauthenticated — do not leak raw DB/backend
+            # error text. Full details only in the server log.
+            logger.exception("Failed to create first user during setup")
+            raise HTTPException(status_code=400, detail="Could not create user.")
 
     access_token = create_access_token(
         data={"sub": new_user.username, "setup_pending": True},

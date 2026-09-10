@@ -16,7 +16,7 @@
       >
         <v-file-input
           :model-value="field.value"
-          @update:model-value="field.value = $event"
+          @update:model-value="onImportFileUpdate(field, $event)"
           ref="importFile"
           label="Import export.json"
           :error-messages="errorMessage"
@@ -75,6 +75,12 @@ export default {
 
         fileLink.click();
       });
+    },
+    onImportFileUpdate(field, value) {
+      // H8: keep the vee-validate field value (validation/meta) and the
+      // legacy data property consumed by the import button in sync.
+      field.value = value;
+      this.importFile = value;
     },
     import_settings(importFile) {
       let formData = new FormData();

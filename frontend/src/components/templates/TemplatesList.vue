@@ -62,9 +62,7 @@
               :headers="headers"
               :items="templates"
               :items-per-page="25"
-              :footer-props="{
-                'items-per-page-options': [15, 25, 50, -1]
-              }"
+              :items-per-page-options="[15, 25, 50, -1]"
               :search="search"
               @click:row="handleRowClick"
             >
@@ -78,12 +76,12 @@
                 <div class="namecell">
                   <span class="nametext">{{ item.title }}</span>
                   <v-menu close-on-click close-on-content-click offset-y>
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Template Actions" title="Template Actions">
+                    <template v-slot:activator="{ props }">
+                      <v-btn icon size="small" v-bind="props" aria-label="Template Actions" title="Template Actions">
                         <v-icon>mdi-dots-horizontal</v-icon>
                       </v-btn>
                     </template>
-                    <v-list color="foreground" dense>
+                    <v-list color="foreground" density="compact">
                       <v-list-item @click="templateDetails(item.id)">
                         <v-list-item-icon>
                           <v-icon>mdi-eye</v-icon>
@@ -349,8 +347,8 @@ export default {
       readTemplates: "templates/readTemplates",
       updateTemplate: "templates/updateTemplate"
     }),
-    handleRowClick(value) {
-      this.$router.push({ path: `/templates/${value.id}` });
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/templates/${item.id}` });
     },
     templateDetails(templateId) {
       this.$router.push({ path: `/templates/${templateId}` });

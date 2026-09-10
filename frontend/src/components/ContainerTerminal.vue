@@ -30,8 +30,8 @@
         ></v-select>
 
         <v-tooltip location="bottom">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="reconnect" v-bind="attrs" v-on="on" aria-label="Reconnect terminal">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="reconnect" v-bind="props" aria-label="Reconnect terminal">
               <v-icon>mdi-refresh</v-icon>
             </v-btn>
           </template>
@@ -39,8 +39,8 @@
         </v-tooltip>
 
         <v-tooltip location="bottom">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="pasteFromClipboard" v-bind="attrs" v-on="on" aria-label="Paste from clipboard">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="pasteFromClipboard" v-bind="props" aria-label="Paste from clipboard">
               <v-icon>mdi-content-paste</v-icon>
             </v-btn>
           </template>

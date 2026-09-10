@@ -42,12 +42,11 @@
       Prune Volumes
     </v-btn>
     <v-dialog max-width="290" v-model="containerDialog">
-      <template v-slot:activator="{ on, attrs }">
+      <template v-slot:activator="{ props }">
         <v-btn
           class="mx-5 mb-5"
           color="warning"
-          v-bind="attrs"
-          v-on="on"
+          v-bind="props"
           :loading="loadingResource === 'containers'"
           :disabled="isLoading"
         >

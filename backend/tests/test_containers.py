@@ -9,6 +9,8 @@ from api.routers.containers import (
     list_containers as get_containers,
     get_container_logs,
     get_container_stats,
+    get_all_container_stats,
+    router as containers_router,
     start_container,
     stop_container,
     restart_container,
@@ -243,3 +245,32 @@ async def test_start_container_unauthorized(db, mock_auth_enabled):
     with pytest.raises(HTTPException) as exc:
         await start_container(MagicMock(), "abc", db=db, Authorize=MockAuthInvalid())
     assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_all_container_stats_returns_action_result(mock_auth_enabled):
+    expected = {"web": {"cpu_percent": 1.0, "memory_percent": 2.0}}
+    request = MagicMock()
+    with patch(
+        "api.routers.containers.actions.get_all_stats",
+        new=AsyncMock(return_value=expected),
+    ) as get_all:
+        result = await get_all_container_stats(
+            request=request,
+            Authorize=MockAuthValid(),
+            db=MagicMock(),
+        )
+
+    assert result == expected
+    get_all.assert_awaited_once_with()
+
+
+def test_aggregate_stats_route_registered_before_dynamic_routes():
+    """GET /stats must be matched before /{container_id}/stats.
+
+    FastAPI resolves routes in registration order; if the aggregate route
+    came after the dynamic one, a request for "/stats" would be interpreted
+    as container_id="stats" and never reach the aggregate handler.
+    """
+    paths = [r.path for r in containers_router.routes]
+    assert paths.index("/stats") < paths.index("/{container_id}/stats")

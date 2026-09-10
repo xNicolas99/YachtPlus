@@ -189,7 +189,7 @@
         :stats="stats[app.name]"
         @click="handleAppClick(app.name)"
         @logs="handleLogs(app.name)"
-        @action="(action) => handleContainerAction(action, app.name)"
+        @action="(action) => sendContainerAction(action, app.name)"
         class="cursor-pointer"
       />
     </div>
@@ -343,10 +343,20 @@ export default {
     handleLogs(appName) {
       this.$router.push({ path: `/apps/${appName}/logs` });
     },
-    async handleContainerAction(action, appName) {
+    async sendContainerAction(action, appName) {
+      // H2: backend only accepts POST /containers/{id}/start|stop|restart,
+      // removal is DELETE /containers/{id}. The old GET returned 405.
+      const isRemove = action === "remove";
+      const url = isRemove
+        ? `/containers/${appName}`
+        : `/containers/${appName}/${action}`;
       try {
         this.loading = true;
-        await axios.get(`/containers/${appName}/${action}`);
+        if (isRemove) {
+          await axios.delete(url);
+        } else {
+          await axios.post(url);
+        }
         setTimeout(() => { this.refresh(); }, 1000);
         this.$store.commit('snackbar/setMessage', `Container ${action}ed successfully.`, { root: true });
       } catch (err) {

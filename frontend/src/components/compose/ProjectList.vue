@@ -12,13 +12,12 @@
       <v-card-title class="primary font-weight-bold">
         Compose Stacks
         <v-tooltip location="bottom">
-          <template v-slot:activator="{ on, attrs }">
+          <template v-slot:activator="{ props }">
             <v-btn
               class="ml-2"
               color="secondary"
               to="/projects/_/edit"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="props"
             >
               <v-icon>mdi-plus</v-icon>
             </v-btn>
@@ -44,9 +43,7 @@
         :headers="headers"
         :items="projects"
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
@@ -62,17 +59,17 @@
               :close-on-content-click="false"
               offset-y
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn icon size="small" v-bind="attrs" v-on="on" class="" aria-label="Project Actions" title="Project Actions">
+              <template v-slot:activator="{ props }">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Project Actions" title="Project Actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-group prepend-icon="mdi-gamepad">
                   <template v-slot:activator="{ active }">
                     <v-list-item-title>Controls </v-list-item-title></template
                   >
-                  <v-list color="background" dense>
+                  <v-list color="background" density="compact">
                     <v-list-item
                       @click="ProjectAction({ Name: item.name, Action: 'up' })"
                     >
@@ -301,7 +298,7 @@ export default {
       readProjects: "projects/readProjects",
       ProjectAction: "projects/ProjectAction"
     }),
-    handleRowClick(item) {
+    handleRowClick(event, { item }) {
       this.$router.push({ path: `/projects/${item.name}` });
     },
     editProject(projectname) {

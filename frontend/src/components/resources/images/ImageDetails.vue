@@ -15,12 +15,12 @@
       </v-fade-transition>
       <v-card-title>
         <v-menu close-on-click close-on-content-click offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Image Actions" title="Image Actions">
+          <template v-slot:activator="{ props }">
+            <v-btn icon size="small" v-bind="props" aria-label="Image Actions" title="Image Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
-          <v-list color="foreground" dense>
+          <v-list color="foreground" density="compact">
             <v-list-item
               v-if="image.RepoTags[0]"
               @click="updateImage(image.Id)"
@@ -55,7 +55,7 @@
       <v-card-title>
         Image Details
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
           <v-list-item-content>
             Tag
@@ -119,7 +119,7 @@
       <v-card-title>
         Container Details
       </v-card-title>
-      <v-list dense color="foreground">
+      <v-list density="compact" color="foreground">
         <v-list-item v-if="getCMD(image.ContainerConfig.Cmd)">
           <v-list-item-content style="max-width:20%">
             Command
@@ -154,8 +154,8 @@
             Labels
           </v-list-item-content>
           <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table dense>
+            <v-card variant="outlined" tile>
+              <v-table density="compact">
                 <tbody>
                   <tr
                     v-for="(value, key, index) in image.ContainerConfig.Labels"
@@ -172,7 +172,7 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
           </v-list-item-content>
         </v-list-item>
@@ -181,8 +181,8 @@
             ENV
           </v-list-item-content>
           <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table>
+            <v-card variant="outlined" tile>
+              <v-table>
                 <tbody>
                   <tr
                     v-for="(key, index) in image.ContainerConfig.Env"
@@ -196,7 +196,7 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
           </v-list-item-content>
         </v-list-item>

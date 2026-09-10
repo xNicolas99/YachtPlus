@@ -642,3 +642,99 @@ Past audit reports (`AUDIT_REPORT_*.md`, `SECURITY_AUDIT_REPORT_2025.md`,
 `migration_plan.md`) have been removed as they described long-resolved
 states and contained inaccuracies. The README + this file are the
 authoritative orientation now.
+
+## Speicherplatz — Pflicht bei JEDEM Durchlauf
+
+- **Nach jedem Lauf: Build-/Test-Artefakte und Caches löschen** — der
+  Speicherplatz in der Container-Umgebung ist SEHR knapp.
+- Minimum: `cargo clean` bzw. `rm -rf target/ node_modules/.cache dist/build`
+  je nach Projekt, tmp-/Log-Dateien entfernen, Werkzeug-Caches (Zig, pip,
+  npm) leeren, wenn nicht mehr gebraucht.
+- Neue Dateien/Downloads nur innerhalb des Projektordners; nichts auf
+  Root-/Systemebene ablegen.
+
+
+---
+
+## 18. Offene Audit-Befunde (2026-09-10)
+
+Ergebnis einer Code-Analyse (zwei Subagenten, Modell DeepSeek 4.1 Flash). **Jeder**
+Eintrag unten wurde vom Hauptagenten anschließend gegen den echten Code verifiziert
+(Zeilennummer, Bibliotheks-API, Laufzeitverhalten). Falschmeldungen der Subagenten
+sind in Abschnitt 18.4 separat aufgelistet — diese bitte NICHT erneut jagen.
+
+Legende: Sev = Severity (critical / high / medium / low). "ungeprüft" heißt: am Code
+belegt, aber nicht zur Laufzeit bestätigt (venv/node_modules wurden aus
+Speicherplatzgründen entfernt, daher war kein Build/Test möglich).
+
+### 18.1 High — funktionsbrechend
+
+| # | Stelle | Sev | Befund | Fix |
+|---|--------|-----|--------|-----|
+| H1 | `frontend/src/views/Home.vue:285` | high | `axios.get("/containers/stats")` — diese Route existiert NICHT (der Router bietet nur `/`, `/{id}/stats`, `/{id}/logs`). Jeder Poll in `pollAll()` läuft auf 404, die Dashboard-Kacheln bleiben dauerhaft leer. | Aggregat-Route `GET /containers/stats` im Backend ergänzen ODER auf `GET /dashboard/stats` umstellen. |
+| H2 | `frontend/src/views/Home.vue:349` | high | Container-Aktionen gehen als `axios.get(\`/containers/${appName}/${action}\`)` raus. Das Backend verlangt `POST /containers/{id}/start|stop|restart`; `remove` ist `DELETE`. Ergebnis: 405, keine Aktion wirkt. | `axios.post` für start/stop/restart, `axios.delete` für remove. |
+| H3 | `frontend/src/components/serverSettings/ServerUpdate.vue:61` | high | `checkUpdate()` sendet `POST /settings/check/update`; im Backend (`app_settings.py:152`) ist die Route `@router.get`. → 405, `updatable` bleibt `false`, der Update-Button ist dauerhaft gesperrt. | `method: "GET"` setzen. |
+| H4 | 7 Listen-Komponenten (siehe Fix) | high | Vuetify 3 ruft den `@click:row`-Handler mit `(event, { item, index })` auf. Alle Handler lesen Argument 1 als Item → `item.Id` ist `undefined` → Navigation nach `/…/undefined`. Betroffen: `ImageList.vue:242`, `VolumeList.vue:278`, `NetworkList.vue:221`, `NetworkDetails.vue:334`, `TemplatesList.vue:352`, `ProjectList.vue:304`, `ApplicationsList.vue:426`. | Signatur auf `handleRowClick(event, { item })` umstellen (7 Stellen). |
+| H5 | `frontend/src/components/resources/networks/NetworkForm.vue:187` | high | `:disabled="!meta.valid"` steht im Scope von `<Form v-slot="{ invalid }">` (Zeile 4) — `meta` ist dort nicht destrukturiert → `undefined` beim Rendern, Formular „Create Network" bricht ab. | `v-slot="{ invalid, meta }"` oder `:disabled="invalid"`. |
+| H6 | `frontend/src/components/serverSettings/ServerVariables.vue:71` | high | `:disabled="!fieldMeta.valid"` steht AUSSERHALB des `<Field>`-Slots (der Save-Button liegt auf Form-Ebene). `fieldMeta` ist dort nicht definiert → Render-Fehler. Der frühere „F17"-Fix hat nur `meta` in `fieldMeta` umbenannt und damit nichts behoben. | `:disabled="invalid"` (Form-Scope) verwenden. |
+| H7 | `frontend/src/components/resources/networks/NetworkDetails.vue:27` | high | Template ruft `router.push({ name: 'Networks' })`; es gibt weder eine `data`-Property `router` noch ist der globale Bezeichner in Vue-3-Templates auflösbar → TypeError. | `this.$router.push(...)` über eine Methode (wie `goBackToNetworks` in derselben Datei). |
+| H8 | `frontend/src/components/serverSettings/ServerInfo.vue:33` | high | Der Import-Button ruft `import_settings(importFile)`, wobei `importFile` die `data()`-Property ist (nie gesetzt, bleibt `null`). Der File-Input ist inzwischen an `field.value` gebunden, der Klick-Handler aber nicht → `formData.append("upload", null)` sendet den String „null". | Feldwert an den Handler geben (`field.value`) oder die Property mitpflegen. |
+| H9 | `backend/api/db/database.py:9-13` | high | `db_url.startswith("sqlite")` + `replace("sqlite:///", "sqlite+aiosqlite:///")` verdoppelt bereits async-fähige URLs: `sqlite+aiosqlite:///x` → `sqlite+aiosqlite+aiosqlite:///x` (der Teilstring `sqlite:///` steckt in `aiosqlite:///`) → `NoSuchModuleError` beim Start. Verifiziert per Python-Ausdruck. Greift, sobald jemand die in AGENTS.md §11 dokumentierte async-Form setzt. | Prefix exakt prüfen (`startswith("sqlite:///")`) und nur dann ersetzen; für `postgresql`/`mysql` analog. |
+| H10 | `backend/api/routers/smtp.py:76` | high | `GET /api/settings/email` ist nur mit `auth_check` geschützt, liefert aber `SMTPSettingsSchema` inklusive `password` im Klartext an JEDEN authentifizierten Nutzer (POST/`/test` nutzen dagegen `require_superuser`). | `require_superuser` ergänzen und `password` aus dem Response-Modell nehmen. |
+
+### 18.2 Medium
+
+| # | Stelle | Sev | Befund | Fix |
+|---|--------|-----|--------|-----|
+| M1 | `backend/api/routers/containers.py:477` | medium | `docker.executes.object(exec_id)` — das Attribut `executes` existiert in aiodocker nicht (Sub-APIs sind u.a. `containers`, `images`, `volumes`, `networks`, `system`). Der `AttributeError` wird vom umgebenden `except Exception: pass` geschluckt, der Resize Aufruf ist toter Code (kein Crash, `docker.close()` läuft). | `exec_obj = docker.containers.exec(exec_id)` (laut aiodocker-API: „Return Exec instance for already created exec object"). |
+| M2 | `backend/api/auth/auth.py:44-92` | medium | Weder `check_permission` noch `require_superuser` prüfen `User.is_active`. Ein deaktivierter Nicht-Admin behält seine Rechte bis zum Token-Ablauf. Nur `/auth/refresh` und der WS-Exec-Pfad prüfen das Flag. | `is_active` in beiden Gates erzwingen (403/401). |
+| M3 | `backend/api/utils/security.py:147` | medium | `X-Real-IP` wird bei vertrauenswürdigem Proxy ungeprüft als Client-IP übernommen (kein `ip_address()`-Parsing), anders als die XFF-Auswertung daneben. Ein frei wählbarer String landet im Rate-Limit-Schlüssel und in den Fail2Ban-Zählern. | Headerwert parsen; bei ungültigem Wert auf Direkt-Peer/XFF zurückfallen. |
+| M4 | `backend/api/utils/security.py:221` | medium | `await send_security_alert(...)` läuft inline in `check_ip_restriction`, also im Login-Pfad. DNS + SMTP blockieren damit den Request (daher der 10-s-Timeout), und jeder Login von öffentlicher IP erzeugt eine Mail. | Alert per `asyncio.create_task`/BackgroundTask absetzen und pro IP/Zeitfenster throtteln. |
+| M5 | `backend/api/main.py:192` | medium | `hostname = host_header.split(":")[0]` zerstört IPv6-Hosts: `::1` → `""`, `[::1]:8080` → `"["`. Der dokumentierte Default-Eintrag `[::1]` in `YACHT_ALLOWED_HOSTS` kann dadurch niemals matchen → 400 für IPv6-Clients. | `urllib.parse` verwenden bzw. bei nicht geklammerter IPv6 korrekt trennen. |
+| M6 | `backend/api/db/crud/settings.py:45` | medium | `generate_secret_key` schreibt `get_settings().SECRET_KEY` (den JWT-Signing-Key) im Klartext in die DB-Tabelle `secret_key`. | Persistierung entfernen oder nur nach `SECRET_KEY_FILE` schreiben. |
+| M7 | `backend/api/utils/registries.py:351` | medium | `…get('tags', [])` liefert `None`, wenn eine GHCR-Version den Key `tags` mit Wert `None` hat; anschließend `flat_tags.extend(None)` → `TypeError`, vom `except` verschluckt → `/api/registries/tags` antwortet still mit `[]`. | `…get('tags') or []`. |
+| M8 | `backend/api/actions/apps.py:211` | medium | `raise HTTPException(status_code=503, detail=f"Docker Connection Error: {str(e)}")` gibt rohe Exception-Texte (inkl. Daemon-URL/Pfade) an den Client, obwohl alle anderen Docker-Pfade bewusst gesäubert sind. | Generische Meldung, Details nur serverseitig loggen. |
+| M9 | `frontend/src/store/modules/volumes.js:100` | medium | `router.push({ name: "Volumes" })` steht im `finally` → Navigation auch bei Fehlschlag. Inkonsistent zum bereits behobenen Muster in `projects.js`/`images.js`/`networks.js` (dort via `then`). | `router.push` in den `then`-Zweig verschieben. |
+| M10 | `frontend/src/store/modules/templates.js:139` | medium | Analog zu M9: `router.push({ name: "View Templates" })` im `finally`. | Wie M9. |
+| M11 | `frontend/src/main.js:52` | medium | Es wird nur `$notify` (console.log-Stub) registriert, aber KEIN `$toast`. Damit sind alle `if (this.$toast) …`-Fehlermeldungen in `ContainerLogs.vue`, `RegistryBrowser.vue`, `DockerHubTemplates.vue` faktisch still — Fehler erreichen den Nutzer nie. | `$toast` als globalProperty registrieren, an den `snackbar`-Store gebunden. |
+| M12 | 34 Fundstellen in `frontend/src/**/*.vue` | medium | `v-simple-table` wurde in Vuetify 3 zu `v-table` umbenannt; das alte Element ist kein gültiger Baustein mehr → Tabellen in Detailseiten rendern nicht (u.a. `ImageDetails.vue:157`, `VolumeDetails.vue:96`, `NetworkDetails.vue:127/200`). | `v-simple-table` → `v-table`. |
+| M13 | 363 Fundstellen in `frontend/src/**/*.vue` | medium | `v-list-item-content`, `v-list-item-icon`, `v-list-item-avatar`, `v-list-item-action` existieren in Vuetify 3 nicht mehr (dort `prepend`/`append`/`title`-Slots) → Listen-Layout und Slot-Inhalte brechen (u.a. `ImageDetails.vue:60`, `ApplicationsList.vue:106`, `UnifiedSearch.vue:22`). | Auf die Vuetify-3-Slot-Struktur umbauen. |
+| M14 | `backend/api/db/schemas/users.py:14` | medium | `password: str` hat keine Längen-/Mindestgrenze. bcrypt schneidet jenseits von 72 Bytes still ab, Passwörter mit gleichem Präfix werden damit akzeptiert. | `Field(min_length=8, max_length=72)`. |
+
+### 18.3 Low
+
+| # | Stelle | Sev | Befund | Fix |
+|---|--------|-----|--------|-----|
+| L1 | `backend/api/db/crud/settings.py:34` | low | `select(models.SecretKey)` — `models` ist hier `api.db.models.containers`, dort existiert kein `SecretKey` → `AttributeError`. Aktuell ohne Aufrufer (latent, toter Code). | `from api.db.models.settings import SecretKey` benutzen (wie `generate_secret_key`). |
+| L2 | `backend/api/routers/setup/setup.py` (Register) | low | `raise HTTPException(400, f"Error creating user: {str(e)}")` gibt rohe DB-/Backend-Fehler an einen UNAUTHENTIFIZIERTEN Aufrufer. | Generische 400-Meldung, Exception nur loggen. |
+| L3 | `frontend/src/plugins/notifications.js` | low | Nach dem Vue-3-Rewrite exportiert das Modul Funktionen, wird aber nirgends importiert — Toter Code, solange M11 nicht umgesetzt ist. | Entweder in `main.js` registrieren oder löschen. |
+| L4 | `frontend/src/components/compose/ProjectEditor.vue:92` | low | `this.$vuetify.theme.dark` existiert in Vuetify 3 nicht → immer `undefined`, der Ace-Editor nutzt dauerhaft das Twilight-Theme. | `this.$vuetify.theme.global.current.dark`. |
+
+### 18.4 Falschmeldungen der Subagenten — NICHT erneut untersuchen
+
+Diese Punkte wurden vom Hauptagenten geprüft und als **nicht zutreffend** eingestuft:
+
+| Behauptung | Prüfergebnis |
+|---|---|
+| „`create_key` hat kein `await db.commit()`" | FALSCH — `db/crud/users.py` committet in einem try/except mit Rollback (B26). |
+| „`Authorize.is_api_key()` fehlt im containers-Router" | FALSCH — vorhanden in Zeilen 83/123/158/193 plus API-Key-Liveness im WS-Pfad (Zeile 362, B6). |
+| „`docker._query_json` existiert nicht, daher ist `prune_resources` kaputt" | FALSCH — `_query_json` ist eine dokumentierte Methode auf `aiodocker.Docker` (Quelle: aiodocker-Doku/Quelltext). Der B16-Fix ist korrekt. |
+| „`docker.containers.create(config=…, Cmd=…)` sendet `Cmd` als `Entrypoint`" | FALSCH — `Cmd` im `config`-Dict ist die offizielle, dokumentierte Aufrufweise (aiodocker-Doku-Beispiel). |
+| „`update_self_in_background` ohne `name=` erzeugt einen Container-Leak" | FALSCH — der Container hat `AutoRemove: true` und läuft mit `--run-once`; ohne Namen vergibt Docker einen Zufallsnamen. Kein Leck. |
+| „`database.py` verdoppelt auch `postgresql+asyncpg://`" | Teilweise falsch — nur der SQLite-Zweig ist betroffen (siehe H9); `postgresql+asyncpg://` bleibt unverändert. |
+| „`_host_allowed` lässt den Basishost `example.com` bei `*.example.com` durch" | FALSCH — `endswith(".example.com")` matcht `example.com` gerade NICHT. |
+| „`GET /settings/deployment` gehört superuser-gated" | FALSCH — laut eigenem Docstring bewusst für alle authentifizierten Operatoren freigegeben (FND-501 / S7). |
+| „`v-slot`-Fix F20 in NetworkDetails ist erledigt" | FALSCH — die Template-Zeile 27 nutzt weiter `router.push` (siehe H7); der damalige Fix traf eine andere Stelle. |
+
+### 18.5 Empfohlene Reihenfolge
+
+1. **H1–H4** (kaputte Kernfunktionen: Dashboard-Stats, Container-Aktionen, Update-Prüfung, Listen-Navigation)
+2. **H5–H8** (Render-Fehler in Formularen/Import)
+3. **H9–H10** (Startup-Crash-Risiko, SMTP-Passwort-Exposition)
+4. **M1–M14**, dann **L1–L4**
+5. Vor dem Verifizieren der Vuetify-Punkte (M12/M13) `npm ci && npx vite build` laufen lassen.
+
+**Hinweis:** `venv/` und `frontend/node_modules/` waren zum Analysezeitpunkt entfernt
+(Speicherplatz-Regel). Vor Fix-Verifikation müssen sie neu errichtet werden:
+`python -m venv venv && venv/bin/pip install -r requirements.txt` (backend) bzw.
+`npm ci` (frontend).

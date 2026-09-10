@@ -30,7 +30,7 @@ async def export_settings(db: AsyncSession):
 
 
 async def get_secret_key(db: AsyncSession):
-    result = await db.execute(select(models.SecretKey).limit(1))
+    result = await db.execute(select(SecretKey).limit(1))
     check = result.scalars().first()
     if check:
         return True
@@ -39,17 +39,12 @@ async def get_secret_key(db: AsyncSession):
 
 
 async def generate_secret_key(db: AsyncSession):
-    result = await db.execute(select(SecretKey).limit(1))
-    check = result.scalars().first()
-    if check is None:
-        key = SecretKey(key=get_settings().SECRET_KEY)
-        db.add(key)
-        await db.commit()
-        logger.info("Secret key generated")
-        return key.key
-    else:
-        logger.debug("Secret key exists")
-        return check.key
+    # The JWT signing key is intentionally NOT persisted here: writing the
+    # plaintext key into the DB would duplicate a secret that already lives
+    # in settings.SECRET_KEY / SECRET_KEY_FILE and expose it to every DB
+    # read/backup. settings is the single source of truth.
+    logger.debug("Returning in-memory secret key")
+    return get_settings().SECRET_KEY
 
 
 async def import_settings(db: AsyncSession, upload):

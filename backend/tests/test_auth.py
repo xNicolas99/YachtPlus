@@ -153,7 +153,9 @@ async def test_check_permission_user_not_found(mock_settings):
 @pytest.mark.asyncio
 async def test_check_permission_superuser(mock_settings):
     mock_auth = MockAuth(username="testuser")
-    mock_user = User(username="testuser", is_superuser=True)
+    # is_active must be explicit: column defaults are only applied on flush,
+    # and these tests never persist the in-memory User stub.
+    mock_user = User(username="testuser", is_superuser=True, is_active=True)
     mock_db = _make_async_db_mock(user=mock_user)
     result = await check_permission("perm_start", mock_auth, mock_db)
     assert result is True
@@ -164,6 +166,7 @@ async def test_check_permission_user_has_permission(mock_settings):
     mock_auth = MockAuth(username="normaluser")
 
     class DummyUser:
+        is_active = True
         is_superuser = False
         some_permission = True
 
@@ -177,6 +180,7 @@ async def test_check_permission_user_lacks_permission(mock_settings):
     mock_auth = MockAuth(username="normaluser")
 
     class DummyUser:
+        is_active = True
         is_superuser = False
         some_permission = False
 
@@ -185,6 +189,20 @@ async def test_check_permission_user_lacks_permission(mock_settings):
         await check_permission("some_permission", mock_auth, mock_db)
     assert excinfo.value.status_code == 403
     assert "User lacks permission: some_permission" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_check_permission_inactive_user_rejected(mock_settings):
+    """A deactivated account must lose its permissions immediately (M2)."""
+    mock_auth = MockAuth(username="disabled")
+    disabled = User(
+        username="disabled", is_superuser=False, perm_start=True, is_active=False
+    )
+    mock_db = _make_async_db_mock(user=disabled)
+    with pytest.raises(HTTPException) as excinfo:
+        await check_permission("perm_start", mock_auth, mock_db)
+    assert excinfo.value.status_code == 403
+    assert "disabled" in excinfo.value.detail
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +235,7 @@ async def test_require_superuser_user_not_found(mock_settings):
 @pytest.mark.asyncio
 async def test_require_superuser_non_superuser(mock_settings):
     mock_auth = MockAuth(username="testuser")
-    mock_user = User(username="testuser", is_superuser=False)
+    mock_user = User(username="testuser", is_superuser=False, is_active=True)
     mock_db = _make_async_db_mock(user=mock_user)
     with pytest.raises(HTTPException) as excinfo:
         await require_superuser(mock_auth, mock_db)
@@ -226,9 +244,21 @@ async def test_require_superuser_non_superuser(mock_settings):
 
 
 @pytest.mark.asyncio
+async def test_require_superuser_inactive_admin_rejected(mock_settings):
+    """A deactivated superuser must not keep admin access (M2)."""
+    mock_auth = MockAuth(username="admin")
+    mock_user = User(username="admin", is_superuser=True, is_active=False)
+    mock_db = _make_async_db_mock(user=mock_user)
+    with pytest.raises(HTTPException) as excinfo:
+        await require_superuser(mock_auth, mock_db)
+    assert excinfo.value.status_code == 403
+    assert "disabled" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
 async def test_require_superuser_success(mock_settings):
     mock_auth = MockAuth(username="admin")
-    mock_user = User(username="admin", is_superuser=True)
+    mock_user = User(username="admin", is_superuser=True, is_active=True)
     mock_db = _make_async_db_mock(user=mock_user)
     user = await require_superuser(mock_auth, mock_db)
     assert user == mock_user

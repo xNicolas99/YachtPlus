@@ -47,12 +47,11 @@
                 {{ app.name }}
                 <v-spacer />
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       :href="supportHref(app)"
                       target="_blank"
                       download
@@ -65,12 +64,11 @@
                   <span>Download Support Bundle</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       class="mx-1 my-1 hidden-sm-and-down"
                       @click="editClick({ Name: app.name })"
                     >
@@ -81,12 +79,11 @@
                   <span>Edit</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       @click="refresh()"
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       aria-label="Refresh Application Details"
                       title="Refresh Application Details"
@@ -101,18 +98,17 @@
                   offset-y
                   class="hidden-md-and-up"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       class="hidden-md-and-up mx-1"
                     >
                       <v-icon>mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
-                  <v-list color="foreground" class="hidden-md-and-up" dense>
+                  <v-list color="foreground" class="hidden-md-and-up" density="compact">
                     <v-list-item @click="editClick({ Name: app.name })">
                       <v-list-item-icon>
                         <v-icon>mdi-file-document-edit-outline</v-icon>
@@ -229,10 +225,9 @@
             >
               <v-card-title class="d-flex justify-space-between">
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -248,10 +243,9 @@
                   <span>Start</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -267,10 +261,9 @@
                   <span>Stop</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="AppAction({ Name: app.name, Action: 'restart' })"
@@ -282,10 +275,9 @@
                   <span>Restart</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -301,10 +293,9 @@
                   <span>Kill</span>
                 </v-tooltip>
                 <v-tooltip location="bottom">
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="removeDialog = true"

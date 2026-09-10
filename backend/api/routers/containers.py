@@ -20,6 +20,7 @@ from api.db.database import SessionLocal
 from api.db.models.users import User
 from api.db.models.settings import TokenBlacklist
 from api.utils.audit import log_activity
+from api.utils.error_handler import safe_http_status
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,22 @@ async def list_containers(
     return await actions.get_containers()
 
 
+# Aggregate stats for all containers, keyed by container name. This route
+# MUST stay registered before the dynamic `/{container_id}/...` routes below:
+# FastAPI matches in registration order, so otherwise a request for "/stats"
+# would be captured as container_id="stats" by GET /{container_id}/stats.
+@router.get("/stats")
+@limiter.limit("60/minute")
+async def get_all_container_stats(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
+    return await actions.get_all_stats()
+
+
 @router.post("/{container_id}/start")
 @limiter.limit("30/minute")
 async def start_container(
@@ -101,7 +118,7 @@ async def start_container(
         # of collapsing everything to 500 with the raw message — which
         # could echo internal paths / daemon details back to the client.
         logger.error("Error starting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to start container")
     except Exception as e:
         logger.exception("Unexpected error starting container %s", container_id)
@@ -136,7 +153,7 @@ async def stop_container(
         return {"message": "Container stopped"}
     except DockerError as e:
         logger.error("Error stopping container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to stop container")
     except Exception:
         logger.exception("Unexpected error stopping container %s", container_id)
@@ -171,7 +188,7 @@ async def restart_container(
         return {"message": "Container restarted"}
     except DockerError as e:
         logger.error("Error restarting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to restart container")
     except Exception:
         logger.exception("Unexpected error restarting container %s", container_id)
@@ -210,7 +227,7 @@ async def delete_container(
         # "you deleted something that never existed" from "the docker
         # daemon is unreachable".
         logger.error("Error deleting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         if status_code == 404:
             raise HTTPException(status_code=404, detail="Container not found")
         raise HTTPException(status_code=status_code, detail="Failed to delete container")
@@ -415,30 +432,39 @@ async def container_exec_websocket(
             await websocket.close(code=1008, reason="Container not found")
             return
 
+        # aiodocker's DockerContainer.exec takes the command as positional
+        # `cmd` plus keyword flags (stdout/stderr/stdin/tty). The old
+        # docker-py-style dict was sent as `Cmd` verbatim and rejected by the
+        # daemon.
         exec_instance = await container.exec(
-            {
-                "AttachStdin": True,
-                "AttachStdout": True,
-                "AttachStderr": True,
-                "Tty": True,
-                "Cmd": [shell.strip(), "-i", "-l"],
-            }
+            [shell.strip(), "-i", "-l"],
+            stdout=True,
+            stderr=True,
+            stdin=True,
+            tty=True,
         )
-        exec_id = exec_instance.get("Id")
+        # Exec exposes its id via the `id` property, not dict access.
+        exec_id = exec_instance.id
         if not exec_id:
             logger.error("No exec ID returned")
             await websocket.close(code=1011, reason="Failed to create exec instance")
             return
 
-        stream = await exec_instance.start(detach=False, Tty=True, stdin=True)
+        # With detach=False `start` is a plain method returning an aiodocker
+        # Stream — it must NOT be awaited.
+        stream = exec_instance.start(detach=False)
 
         async def docker_to_ws():
             try:
-                async for msg in stream:
-                    if isinstance(msg, bytes):
-                        await websocket.send_bytes(msg)
+                # Stream delivers messages via read_out(); None signals EOF.
+                while True:
+                    msg = await stream.read_out()
+                    if msg is None:
+                        break
+                    if isinstance(msg.data, bytes):
+                        await websocket.send_bytes(msg.data)
                     else:
-                        await websocket.send_text(str(msg))
+                        await websocket.send_text(str(msg.data))
             except Exception as e:
                 logger.error(f"Docker to WS error: {e}")
 
@@ -451,7 +477,8 @@ async def container_exec_websocket(
                         continue
                     # Convert CRLF to LF for terminal consistency
                     data = data.replace("\r\n", "\n").replace("\r", "\n")
-                    await stream.send(data.encode("utf-8"))
+                    # aiodocker Stream writes stdin through write_in().
+                    await stream.write_in(data.encode("utf-8"))
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected for container %s", container_id)
             except Exception as e:
@@ -473,8 +500,14 @@ async def container_exec_websocket(
                 pass
         if exec_id:
             try:
-                exec_obj = docker.executes.object(exec_id)
+                # aiodocker exposes the exec sub-API under `containers`, not
+                # the non-existent `executes` attribute (the old call raised
+                # AttributeError and was silently swallowed by except-pass).
+                exec_obj = docker.containers.exec(exec_id)
                 await exec_obj.resize(h=24, w=80)
             except Exception:
                 pass
-        await docker.close()
+        # docker stays None if the constructor raises above; closing it would
+        # itself raise AttributeError and mask the real error.
+        if docker is not None:
+            await docker.close()

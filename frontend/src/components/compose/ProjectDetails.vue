@@ -18,12 +18,12 @@
               :close-on-content-click="true"
               offset-y
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn icon size="small" v-bind="attrs" v-on="on" class="" aria-label="Project Details Actions" title="Project Details Actions">
+              <template v-slot:activator="{ props }">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Project Details Actions" title="Project Details Actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'up' })"
                 >
@@ -133,7 +133,7 @@
     </v-card>
     <v-card color="foreground" class="mt-2">
       <v-card-title> Project Details </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
           <v-list-item-content> Name </v-list-item-content>
           <v-list-item-content>
@@ -276,7 +276,7 @@
                   </v-btn>
                 </v-item-group>
               </div>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item v-if="project.services[service].container_name">
                   <v-list-item-content> Container Name </v-list-item-content>
                   <v-list-item-content>
@@ -348,8 +348,8 @@
                 <v-list-item v-if="project.services[service].volumes">
                   <v-list-item-content> Volumes </v-list-item-content>
                   <v-list-item-content>
-                    <v-card outlined tile>
-                      <v-simple-table class="secondary" dense>
+                    <v-card variant="outlined" tile>
+                      <v-table class="secondary" density="compact">
                         <thead>
                           <tr>
                             <th>Host</th>
@@ -370,15 +370,15 @@
                             </td>
                           </tr>
                         </tbody>
-                      </v-simple-table>
+                      </v-table>
                     </v-card>
                   </v-list-item-content>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].environment">
                   <v-list-item-content> Environment </v-list-item-content>
                   <v-list-item-content>
-                    <v-card outlined tile>
-                      <v-simple-table class="secondary" dense>
+                    <v-card variant="outlined" tile>
+                      <v-table class="secondary" density="compact">
                         <thead>
                           <tr>
                             <th>Variable</th>
@@ -421,15 +421,15 @@
                             </td>
                           </tr>
                         </tbody>
-                      </v-simple-table>
+                      </v-table>
                     </v-card>
                   </v-list-item-content>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].labels">
                   <v-list-item-content> Labels </v-list-item-content>
                   <v-list-item-content>
-                    <v-card outlined tile>
-                      <v-simple-table class="secondary" dense>
+                    <v-card variant="outlined" tile>
+                      <v-table class="secondary" density="compact">
                         <thead>
                           <tr>
                             <th>Label</th>
@@ -450,15 +450,15 @@
                             </td>
                           </tr>
                         </tbody>
-                      </v-simple-table>
+                      </v-table>
                     </v-card>
                   </v-list-item-content>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].command">
                   <v-list-item-content> Command </v-list-item-content>
                   <v-list-item-content>
-                    <v-card outlined tile>
-                      <v-simple-table class="secondary" dense>
+                    <v-card variant="outlined" tile>
+                      <v-table class="secondary" density="compact">
                         <tbody
                           v-if="
                             Array.isArray(project.services[service].command)
@@ -481,7 +481,7 @@
                             </td>
                           </tr>
                         </tbody>
-                      </v-simple-table>
+                      </v-table>
                     </v-card>
                   </v-list-item-content>
                 </v-list-item>

@@ -115,7 +115,7 @@
               General
             </v-card-title>
             <v-divider />
-            <v-list class="secondary" dense>
+            <v-list class="secondary" density="compact">
               <v-list-item>
                 <v-list-item-content
                   ><v-list-item-title
@@ -195,7 +195,7 @@
               Ports
             </v-card-title>
             <v-divider />
-            <v-list dense class="secondary">
+            <v-list density="compact" class="secondary">
               <v-list-item>
                 <v-list-item-content
                   ><v-list-item-title
@@ -241,7 +241,7 @@
               Volumes
             </v-card-title>
             <v-divider />
-            <v-list dense class="secondary">
+            <v-list density="compact" class="secondary">
               <v-list-item>
                 <v-list-item-content
                   ><v-list-item-title
@@ -280,7 +280,7 @@
               Env Variables
             </v-card-title>
             <v-divider />
-            <v-list dense class="secondary">
+            <v-list density="compact" class="secondary">
               <v-list-item>
                 <v-list-item-content
                   ><v-list-item-title

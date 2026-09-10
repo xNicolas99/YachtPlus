@@ -1,7 +1,7 @@
 <template lang="html">
   <div class="networks-list component" style="max-width: 90%">
     <v-card color="foreground">
-      <Form ref="general" v-slot="{ invalid }">
+      <Form ref="general" v-slot="{ invalid, meta }">
         <v-fade-transition>
           <v-progress-linear
             indeterminate
@@ -114,7 +114,7 @@
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <Field name="IP Range" v-slot="{ field, errors, meta: fieldMeta }"> -->
+                <Field name="IP Range" v-slot="{ field, errors, meta: fieldMeta }">
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"

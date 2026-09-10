@@ -12,7 +12,7 @@
           <v-card-title class="primary">
             {{ app.Config.Image.split(":")[0] }}
           </v-card-title>
-          <v-simple-table class="foreground">
+          <v-table class="foreground">
             <template v-slot:default>
               <tbody>
                 <tr>
@@ -33,7 +33,7 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col>
@@ -62,7 +62,7 @@
               >
                 Start the app to view ports
               </v-card-text>
-              <v-simple-table v-else class="foreground px-0 text-center">
+              <v-table v-else class="foreground px-0 text-center">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -109,10 +109,10 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
+              </v-table>
             </v-window-item>
             <v-window-item>
-              <v-simple-table class="foreground px-0 text-center">
+              <v-table class="foreground px-0 text-center">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -155,7 +155,7 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
+              </v-table>
             </v-window-item>
           </v-window>
         </v-card>
@@ -170,7 +170,7 @@
           }"
         >
           <v-card-title class="primary"> Environment </v-card-title>
-          <v-simple-table
+          <v-table
             style="max-height: 500px;overflow-y: auto;"
             class="foreground px-0 text-center"
           >
@@ -191,7 +191,7 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col sm="12" md="6">
@@ -215,7 +215,7 @@
             show-arrows-on-hover
           >
             <v-window-item v-for="(mount, index) in app.Mounts" :key="index">
-              <v-simple-table id="storage_table" class="foreground">
+              <v-table id="storage_table" class="foreground">
                 <template v-slot:default>
                   <tbody>
                     <tr v-for="(property, pindex) in mount" :key="pindex">
@@ -228,7 +228,7 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
+              </v-table>
             </v-window-item>
           </v-window>
         </v-card>
@@ -244,7 +244,7 @@
           <v-card-title class="primary">
             Labels
           </v-card-title>
-          <v-simple-table class="foreground px-0 text-center">
+          <v-table class="foreground px-0 text-center">
             <template v-slot:default>
               <thead>
                 <tr>
@@ -262,7 +262,7 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col
@@ -316,7 +316,7 @@
               {{ app.HostConfig.Devices }}
             </v-window-item>
             <v-window-item v-if="app.HostConfig.Sysctls">
-              <v-simple-table class="foreground">
+              <v-table class="foreground">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -340,7 +340,7 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
+              </v-table>
             </v-window-item>
             <v-window-item v-if="app.HostConfig.CapAdd">
               <v-list class="foreground">

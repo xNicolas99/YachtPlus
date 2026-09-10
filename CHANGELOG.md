@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-10 13:08 — Code-Analyse (2 Subagenten, DeepSeek 4.1 Flash) + Verifikation
+- Geändert: AGENTS.md (neuer Abschnitt 18 "Offene Audit-Befunde" mit 10 High, 14 Medium, 4 Low sowie 9 widerlegten Falschmeldungen)
+- Ergebnis: 28 verifizierte Befunde dokumentiert; 9 Subagenten-Behauptungen als falsch eingestuft und dokumentiert. Keine Produktivdatei verändert. Analyse rein lesend.
+- Aufgeräumt: nichts (keine Artefakte erzeugt)
+- Offen: venv/ und frontend/node_modules/ fehlen — vor Fix-Verifikation neu errichten.
+
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

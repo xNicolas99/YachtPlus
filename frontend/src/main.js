@@ -54,6 +54,36 @@ app.config.globalProperties.$notify = function(args) {
   console.log('Notification:', args)
 }
 
+// M11: $toast was never registered, so every `if (this.$toast)` guard in the
+// UI was a silent no-op and errors never reached the user. Bind the four
+// levels to the existing snackbar mutations, constructing the payload each
+// mutation actually expects (see store/modules/snackbar.js): setErr reads
+// err.response/err.message, setSuccess/setInfo read statusText + data.*.
+app.config.globalProperties.$toast = {
+  success(message) {
+    store.commit('snackbar/setSuccess', {
+      statusText: 'Success',
+      data: { success: message }
+    })
+  },
+  error(message) {
+    // setErr extracts err.message, so a plain string must be wrapped.
+    store.commit('snackbar/setErr', new Error(message))
+  },
+  warning(message) {
+    store.commit('snackbar/setInfo', {
+      statusText: 'Warning',
+      data: { info: message }
+    })
+  },
+  info(message) {
+    store.commit('snackbar/setInfo', {
+      statusText: 'Info',
+      data: { info: message }
+    })
+  }
+}
+
 // Axios Configuration
 const protocol = window.location.protocol;
 const hostname = window.location.hostname;

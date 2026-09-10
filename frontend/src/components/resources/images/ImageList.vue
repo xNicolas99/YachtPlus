@@ -12,17 +12,16 @@
       <v-card-title class="primary font-weight-bold">
         Images
         <v-dialog v-model="pullDialog" max-width="290">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on">
+          <template v-slot:activator="{ props }">
+            <v-btn class="ml-2" color="secondary" v-bind="props">
               <v-icon>mdi-plus</v-icon>
             </v-btn>
             <v-tooltip location="bottom">
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-btn
                   class="ml-2"
                   color="warning"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                   @click="pruneImages"
                 >
                   <v-icon>mdi-broom</v-icon>
@@ -82,9 +81,7 @@
         :headers="headers"
         :items="images"
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
@@ -110,18 +107,17 @@
               >Unused</v-chip
             >
             <v-menu close-on-click close-on-content-click offset-y>
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-btn
                   icon
                   class="align-streatch"
                   size="small"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                 >
                   <v-icon>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item @click="imageDetails(item.Id)">
                   <v-list-item-icon>
                     <v-icon>mdi-eye</v-icon>
@@ -239,7 +235,7 @@ export default {
       deleteImage: "images/deleteImage",
       writeImage: "images/writeImage"
     }),
-    handleRowClick(item) {
+    handleRowClick(event, { item }) {
       this.$router.push({ path: `/resources/images/${item.Id}` });
     },
     imageDetails(imageid) {

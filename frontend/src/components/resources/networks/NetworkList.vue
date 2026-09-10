@@ -19,12 +19,11 @@
           <v-icon>mdi-plus</v-icon>
         </v-btn>
         <v-tooltip location="bottom">
-          <template v-slot:activator="{ on, attrs }">
+          <template v-slot:activator="{ props }">
             <v-btn
               class="ml-2"
               color="warning"
-              v-bind="attrs"
-              v-on="on"
+              v-bind="props"
               @click="pruneNetworks"
             >
               <v-icon>mdi-broom</v-icon>
@@ -48,9 +47,7 @@
         :headers="headers"
         :items="networks"
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
@@ -76,18 +73,17 @@
               >Unused</v-chip
             >
             <v-menu close-on-click close-on-content-click offset-y>
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-btn
                   icon
                   class="align-streatch"
                   size="small"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                 >
                   <v-icon>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item @click="networkDetails(item.Id)">
                   <v-list-item-icon>
                     <v-icon>mdi-eye</v-icon>
@@ -218,7 +214,7 @@ export default {
       deleteNetwork: "networks/deleteNetwork",
       writeNetwork: "networks/writeNetwork"
     }),
-    handleRowClick(item) {
+    handleRowClick(event, { item }) {
       this.$router.push({ path: `/resources/networks/${item.Id}` });
     },
     networkDetails(networkid) {

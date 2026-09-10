@@ -152,7 +152,9 @@ def test_register_first_user_error_creating_user(override_db):
          patch("api.routers.setup.setup.create_user", side_effect=boom):
         response = client.post("/api/setup/register", json={"username": "admin", "password": "password"})
     assert response.status_code == 400
-    assert response.json() == {"detail": "Error creating user: DB error"}
+    # Generic client-facing message; the raw exception text must not leak to
+    # an unauthenticated caller (only the server log keeps it).
+    assert response.json() == {"detail": "Could not create user."}
 
 
 def test_register_first_user_success_existing_user(override_db):

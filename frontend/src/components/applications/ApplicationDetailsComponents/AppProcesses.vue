@@ -9,7 +9,7 @@
     >
       Start the app to view processes
     </v-card-text>
-    <v-simple-table class="foreground" v-else-if="processes">
+    <v-table class="foreground" v-else-if="processes">
       <template v-slot:default>
         <thead>
           <tr>
@@ -28,7 +28,7 @@
           </tr>
         </tbody>
       </template>
-    </v-simple-table>
+    </v-table>
     <v-card-text v-else>
       Something Broke >:(
     </v-card-text>

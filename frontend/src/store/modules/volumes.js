@@ -94,13 +94,14 @@ const actions = {
       .then(response => {
         const volumes = response.data;
         commit("setVolumes", volumes);
+        // M9: navigate only on success — finally also ran on errors.
+        router.push({ name: "Volumes" });
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
         commit("setLoading", false);
-        router.push({ name: "Volumes" });
       });
   },
   deleteVolume({ commit }, id) {

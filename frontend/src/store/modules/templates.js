@@ -29,14 +29,6 @@ const mutations = {
     }
     state.templates.splice(idx, 1);
   },
-  setApp(state, app) {
-    const idx = state.apps.findIndex(x => x.id === app.id);
-    if (idx < 0) {
-      state.apps.push(app);
-    } else {
-      state.apps.splice(idx, 1, app);
-    }
-  },
   setLoading(state, loading) {
     state.isLoading = loading;
   },
@@ -123,13 +115,14 @@ const actions = {
       .then(response => {
         const template = response.data;
         commit("addTemplate", template);
+        // M10: navigate only on success — finally also ran on errors.
+        router.push({ name: "View Templates" });
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
         commit("setLoading", false);
-        router.push({ name: "View Templates" });
       });
   },
   updateTemplate({ commit }, id) {

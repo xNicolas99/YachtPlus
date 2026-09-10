@@ -15,16 +15,16 @@
       </v-fade-transition>
       <v-card-title>
         <v-menu close-on-click close-on-content-click offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Network Actions" title="Network Actions">
+          <template v-slot:activator="{ props }">
+            <v-btn icon size="small" v-bind="props" aria-label="Network Actions" title="Network Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
-          <v-list color="foreground" dense>
+          <v-list color="foreground" density="compact">
             <v-list-item
               @click="
                 deleteNetwork(network.Name);
-                router.push({ name: 'Networks' });
+                goBackToNetworks();
               "
             >
               <v-list-item-icon
@@ -53,7 +53,7 @@
       <v-card-title>
         Network Information
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
           <v-list-item-content>
             Name
@@ -118,13 +118,13 @@
             {{ $formatDate(network.Created) }}
           </v-list-item-content>
         </v-list-item>
-        <v-list-item v-if="network.Labels && Object.keys(network.Labels).length > 1"  <!-- F55 -->>
+        <v-list-item v-if="network.Labels && Object.keys(network.Labels).length > 1"> <!-- F55 -->
           <v-list-item-content>
             Labels
           </v-list-item-content>
           <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table class="foreground" dense>
+            <v-card variant="outlined" tile>
+              <v-table class="foreground" density="compact">
                 <tbody>
                   <tr
                     v-for="(value, key, index) in network.Labels"
@@ -141,7 +141,7 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
           </v-list-item-content>
         </v-list-item>
@@ -152,7 +152,7 @@
       <v-card-title>
         Network Details
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
           <v-list-item-content style="max-width: 30%">
             IPV4 Subnet
@@ -196,8 +196,8 @@
             Options
           </v-list-item-content>
           <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table dense>
+            <v-card variant="outlined" tile>
+              <v-table density="compact">
                 <tbody>
                   <tr
                     v-for="(value, key, index) in network.Options"
@@ -214,7 +214,7 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
           </v-list-item-content>
         </v-list-item>
@@ -331,8 +331,11 @@ export default {
 
       return container_list;
     },
-    handleRowClick(app) {
-      this.$router.push({ path: `/apps/${app.Name}/info` });
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/apps/${item.Name}/info` });
+    },
+    goBackToNetworks() {
+      this.$router.push({ name: "Networks" });
     }
   },
   created() {

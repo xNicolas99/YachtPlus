@@ -206,9 +206,11 @@ async def get_apps():
 
     except HTTPException:
         raise
-    except Exception as e:
-         logger.error(f"Critical error in get_apps: {e}")
-         raise HTTPException(status_code=503, detail=f"Docker Connection Error: {str(e)}")
+    except Exception:
+         # Log the full traceback server-side; never echo raw daemon/connection
+         # details (daemon URL, host paths) back to the client.
+         logger.exception("Critical error in get_apps (Docker connection)")
+         raise HTTPException(status_code=503, detail="Docker daemon unavailable")
 
     return apps_list
 

@@ -348,7 +348,9 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
                     resp = await client.get(url, timeout=10.0)
                     if resp.status_code == 200:
                         data = resp.json()
-                        raw_tags = [t.get('metadata', {}).get('container', {}).get('tags', []) for t in data]
+                        # `tags` may be present but null; `or []` keeps
+                        # extend(None) from raising TypeError.
+                        raw_tags = [t.get('metadata', {}).get('container', {}).get('tags') or [] for t in data]
                         flat_tags = []
                         for tlist in raw_tags:
                             flat_tags.extend(tlist)

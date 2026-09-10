@@ -165,6 +165,14 @@ async def get_password_hash(password) -> str:
     """
     if isinstance(password, str):
         password = password.encode('utf-8')
+    # Defense in depth: bcrypt >= 4 raises ValueError for input over 72 bytes.
+    # The request schemas already reject that with a 422, but a direct or
+    # programmatic caller must not turn it into an unhandled 500 either.
+    if len(password) > 72:
+        raise HTTPException(
+            status_code=422,
+            detail="Password must be at most 72 bytes when UTF-8 encoded",
+        )
     hashed = await asyncio.to_thread(bcrypt.hashpw, password, bcrypt.gensalt(rounds=13))
     return hashed.decode('utf-8')
 

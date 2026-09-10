@@ -6,8 +6,8 @@
         <v-icon> {{ link.icon }}</v-icon>
       </v-btn>
       <v-menu top offset-y v-else>
-        <template v-slot:activator="{ on, attrs }">
-          <v-btn active-class="primary--text" v-bind="attrs" v-on="on">
+        <template v-slot:activator="{ props }">
+          <v-btn active-class="primary--text" v-bind="props">
             <span>{{ link.text }}</span>
             <v-icon>{{ link.icon }}</v-icon>
           </v-btn>

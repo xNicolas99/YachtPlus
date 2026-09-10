@@ -89,7 +89,7 @@ export default {
       // Ace modes/themes are imported at the top
     },
     editorTheming() {
-      if (this.$vuetify.theme.dark == false) {
+      if (this.$vuetify.theme.global.current.dark == false) {
         return "textmate";
       } else {
         return "twilight";
