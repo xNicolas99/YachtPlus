@@ -1,19 +1,23 @@
 # AGENTS.md — orientation for coding agents
 
-Verified candidate 3.0.2, runs R-023–R-025 (2026-10-02), source commit
-`93fa8da2332cbd22c59f27d6871ea67828bcb17b`: **884 backend + 217 frontend +
-44 Linux release/security-script tests passed**, plus production frontend/
-bundle gates, SQLite migrations and Linux image build/content/startup.
-[PR CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339253)
-and [push CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37010332100)
-passed backend, frontend, Ruff and the real fail2ban ban/unban/persistence/
-protection-recovery stack. [CodeQL](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339245)
-passed Python/JavaScript analysis and results check `110848620953`
-("No new alerts", zero annotations). `dist/version.json` is exactly 3.0.2.
-Live PostgreSQL/MySQL, multiarch and live browser/Docker terminal workflows
-remain unverified. Merge/publication requires successful checks for the actual
-final HEAD through the PR/Actions; this recorded source verification does not
-assert a completed merge or registry publication.
+Current candidate: **3.0.3, run R-026 (2026-10-02)**. The development lock is
+`backend/requirements-dev-lock.txt` so GitHub can discover included requirements;
+all 84 dependency pins, markers and hashes are preserved. Hash-enforced pip
+dry-run, 884 backend and 217 frontend tests, production build/bundle gates and
+fresh SQLite migration passed; `dist/version.json` is exactly 3.0.3.
+Its merge/publication requires successful
+checks for the actual final HEAD; renewed master Dependency Graph processing
+must also succeed before that discovery correction is considered verified.
+
+Version **3.0.2** was merged through [PR #260](https://github.com/xNicolas99/YachtPlus/pull/260)
+into master `9fdf21a` after successful final checks. [Master CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417257),
+including image publication, and [master CodeQL](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417245)
+including result processing passed: **884 backend + 217 frontend + all 44
+Linux release/security-script tests**, build/migration/image and real fail2ban
+ban/unban/persistence/protection recovery. The separate [Dependency Graph run](https://github.com/xNicolas99/YachtPlus/actions/runs/37011423472)
+failed to discover the former `.lock` include, prompting 3.0.3. Live
+PostgreSQL/MySQL, multiarch and live browser/Docker terminal workflows remain
+unverified.
 See [the remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md).
 `frontend/src/utils/containerLinks.js` centralizes browser-origin-aware,
 IPv6-safe port URLs; settings tabs synchronize with child-route deep links.
@@ -119,7 +123,7 @@ backend/
   requirements.txt         # Runtime dependency input, excludes test tools
   requirements.lock        # Exact runtime versions with distribution hashes
   requirements-dev.txt     # Runtime inputs plus pytest tooling
-  requirements-dev.lock    # Hashed development resolution constrained by runtime lock
+  requirements-dev-lock.txt # Hashed development resolution constrained by runtime lock
 frontend/
   src/
     main.js                # App bootstrap; DOMPurify allowlist; axios interceptor + 401 → refresh
@@ -724,7 +728,7 @@ never echoed back). Both live in `api/utils/error_handler.py`.
 ```bash
 cd backend
 python -m venv .venv && source .venv/bin/activate   # or .venv\Scripts\Activate.ps1 on Windows
-pip install --require-hashes -r requirements-dev.lock
+pip install --require-hashes -r requirements-dev-lock.txt
 # uvloop is skipped automatically on Windows by its dependency marker.
 
 export DATABASE_URL="sqlite:///./local.db"   # avoid /config/yacht.db
@@ -892,10 +896,15 @@ migration, every test that touches the DB uses an `AsyncSession`;
   worker; changing the process count without shared storage multiplies limits.
 - **Runtime dependencies are locked.** `requirements.txt` is the input,
   `requirements.lock` is the hashed runtime resolution; regenerate the lock
-  when dependencies change. `requirements-dev.lock` is a separate hashed
+  when dependencies change. `requirements-dev-lock.txt` is a separate hashed
   development resolution constrained by the runtime lock; pytest tooling
   and test sources are excluded from the image. CI uses the development lock,
   Docker uses the runtime lock and installs its exact built wheels offline.
+- **Included development locks need a discoverable suffix.** Keep the `.txt`
+  filename and matching local/CI references: Dependabot's Python fetcher only
+  collects `.txt`/`.in` children of `-r` includes. Preserve exact pins, markers,
+  hashes and `--require-hashes`; check the separate Dependency Graph workflow
+  as well as CI and CodeQL after merging.
 - **Healthy fail2ban plus app 503 can mean unreadable state.** Fail2ban 1.0.2
   uses umask 077 in actions; mkdir's requested 0755 is insufficient. Keep the
   explicit `bans.chmod(0o755)` and verify JSON/directory access as app UID 1000,
@@ -1184,6 +1193,7 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
+| R-026 | 2026-10-02 | dieser Commit; neue Lieferung 3.0.3 | Dev-Lock für Dependency Graph nach requirements-dev-lock.txt umbenannt; lokale/CI-/Doku-Verweise synchronisiert; 3.0.2-Master-Merge und Publikation belegt | lokal 884/217; 84 Requirements unverändert; Hash-pip-Dry-run, Build/Bundle und frische SQLite-Migration bestanden; finale HEAD-/Graph-Nachweise erforderlich |
 | R-025 | 2026-10-02 | dieser Doku-Folgecommit; gleiche Lieferung 3.0.2 | Abschließende CI-/CodeQL-Nachweise auf 93fa8da dokumentiert; keine zusätzliche Version; letzte HEAD-Checks bestimmen Merge/Publikation | CI 884/217 und alle 44 Linux-Skripte; Build/Migration/Image/Schutzstack/Ruff/CodeQL inklusive Results erfolgreich |
 | R-024 | 2026-10-02 | 93fa8da; Fortsetzung von 3.0.2 | Drei High-CodeQL-Befunde mit linearem GHCR-Parser/exakten Fixture-Vergleichen korrigiert; erster grüner Linux-Schutzstack auf ac869d7 belegt | lokal 884/217, Build/Bundle und Migration grün; ac869d7 alle 44 Linux-Skripte/Image/Schutzstack grün; damalige ausstehende HEAD-CI/CodeQL-Prüfung abgeschlossen in R-025 |
 | R-023 | 2026-10-02 | ac869d7 | Kandidat 3.0.2: Fail2ban-Ban-Verzeichnis trotz umask 077 für App UID 1000 lesbar; Proxy-/run-tmpfs, Regressionen und sichere Startdiagnosen | 860/217; Build/Bundle und SQLite-Upgrade grün; lokal Skripte 43 bestanden, 1 POSIX-Prüfung auf Windows übersprungen; Linux-Nachweis in R-024 |

@@ -279,12 +279,16 @@ result instead of returning success while the job is still pending.
 cd backend
 python -m venv .venv && source .venv/bin/activate    # Linux/macOS
 # .\.venv\Scripts\Activate.ps1                       # Windows / PowerShell
-pip install --require-hashes -r requirements-dev.lock
+pip install --require-hashes -r requirements-dev-lock.txt
 # On Windows, uvloop is skipped automatically by its dependency marker.
 
 # Backend listens on :8000
 uvicorn api.main:app --reload --port 8000
 ```
+
+`requirements-dev-lock.txt` is the hashed development lock, constrained by
+the runtime lock. Its `.txt` suffix lets GitHub's Dependency Graph discover
+the file included by `requirements-local.txt`; retain `--require-hashes`.
 
 The default `DATABASE_URL` points to `/config/yacht.db`, which doesn't exist outside the container. For local dev set:
 
@@ -361,7 +365,7 @@ backend/
   requirements.txt           # Runtime dependency input
   requirements.lock          # Exact hashed runtime resolution
   requirements-dev.txt       # Runtime input plus test tooling
-  requirements-dev.lock      # Hashed development resolution
+  requirements-dev-lock.txt  # Hashed development resolution; GitHub-discoverable
 frontend/
   src/
     main.js                  # App bootstrap, DOMPurify allowlist, axios interceptor

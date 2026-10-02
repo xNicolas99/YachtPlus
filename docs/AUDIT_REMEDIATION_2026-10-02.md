@@ -3,14 +3,20 @@
 Ursprünglicher Prüfstand: 2026-10-02, lokaler YachtPlus-Arbeitsstand,
 Version 3.0.1. Die historischen Zwischenstände sind unten erhalten.
 
-Aktueller belegter Stand: **Version 3.0.2 als verifizierter Kandidat**,
-Quellencommit `93fa8da2332cbd22c59f27d6871ea67828bcb17b`:
-884 Backend-, 217 Frontend- und alle 44 Linux-Skriptprüfungen bestanden;
-Image-/Start-, Migrations-, echter Schutzstack- und CodeQL-Nachweis in R-025.
-Die früheren Schutzstack-Startfehler und drei High-CodeQL-Befunde sind in
-diesem Stand korrigiert. Merge/Publikation richten sich nach den Pflichtchecks
-des tatsächlichen letzten HEAD über PR/Actions. Dieser Bericht behauptet
-keinen ausgeführten Merge oder eine Registry-Publikation.
+Belegter freigegebener Stand: **Version 3.0.2**, nach erfolgreichen finalen
+Prüfungen über PR #260 als `9fdf21a` nach master gemerged; Master-CI samt
+Publisher und Master-CodeQL samt Ergebnisverarbeitung bestanden. 884 Backend-,
+217 Frontend- und alle 44 Linux-Skriptprüfungen sowie Image-/Start-, Migrations-
+und echter Schutzstack-Nachweis sind belegt. Die früheren Startfehler und drei
+High-CodeQL-Befunde sind korrigiert; Links und Historie stehen unten.
+
+Aktuelle Nachkorrektur: **Kandidat 3.0.3, Run R-026** behebt die davon getrennte
+Dependency-Graph-Dateierkennung. Der neue Lockdateiname erhält alle 84 Pins,
+Marker und Hashes; Hash-pip-Dry-run, 884 Backend- und 217 Frontend-Tests,
+Build und frische SQLite-Migration bestanden. Neue finale HEAD-Checks und
+erneute Master-Graph-Verarbeitung sind
+für die Bestätigung dieser Korrektur erforderlich; ein Graph-Erfolg wird hier
+noch nicht behauptet.
 
 Die Prüfung bezog vorhandene lokale Änderungen ein. Bereits korrigierte
 Punkte wurden erneut am aktuellen Code geprüft; zusätzliche Fehler erhielten
@@ -200,3 +206,30 @@ tatsächlichen letzten HEAD über PR/Actions; Nachweise eines älteren Commits
 werden nicht übertragen. Live-PostgreSQL/MySQL, Multiarch und echte Browser-/
 Docker-Terminal-Abläufe bleiben ungeprüft. Ein ausgeführter Merge oder eine
 Registry-Publikation wird mit diesem Bericht nicht behauptet.
+
+## Master-Freigabe und Dependency-Graph-Nachkorrektur (Run R-026)
+
+Nach dem historischen R-025-Stand wurde [PR #260](https://github.com/xNicolas99/YachtPlus/pull/260)
+nach vollständig grünen finalen CI-/CodeQL-Prüfungen als `9fdf21a` nach master
+gemerged. [Master-CI 37011417257](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417257)
+einschließlich Image-Publisher und [Master-CodeQL 37011417245](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417245)
+einschließlich Upload und Ergebnisverarbeitung wurden erfolgreich abgeschlossen.
+
+Der separate automatische [Dependency-Graph-Lauf 37011423472](https://github.com/xNicolas99/YachtPlus/actions/runs/37011423472)
+scheiterte daran, dass `requirements-local.txt` die Entwicklungssperrdatei
+mit der Endung `.lock` einband. Dependabots [offizieller Python-Fetcher](https://github.com/dependabot/dependabot-core/blob/main/python/lib/dependabot/python/shared_file_fetcher.rb#L22)
+sammelt `.txt`/`.in`-Dateien und entsprechende `-r`-Kinder. R-026 benennt die
+Datei deshalb nach `requirements-dev-lock.txt` um und passt lokale/CI-/Doku-
+Verweise an. Der Parser-Abgleich bestätigt alle **84 Requirements mit exakt
+identischen Pins, Markern und Hashes**; der Hash-pip-Dry-run bestand ebenfalls.
+
+Diese technische Nachkorrektur nach der Freigabe ist die eigene Patch-Lieferung
+**3.0.3**. Lokal bestanden 884 Backend- und 217 Frontend-Tests, Produktionsbuild/Bundle-Grenzen
+und die frische SQLite-Migration auf `20261001_0001`; `dist/version.json`
+enthält exakt `3.0.3`; Backend-Nachweis `report/audit-r026-backend.txt`. Finale
+HEAD-Pflichtchecks bestimmen Merge/Publikation; der erneute Master-Graph-Lauf
+muss die Dateierkennung tatsächlich bestätigen. Live-PostgreSQL/MySQL,
+Multiarch und echte Browser-/Docker-Terminal-Abläufe bleiben ungeprüft.
+
+Nur die eigene temporäre Migrationsdatenbank wurde entfernt; Nachweislogs und
+die wiederverwendbare Entwicklungsumgebung bleiben erhalten.

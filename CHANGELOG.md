@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.3] - 2026-10-02 15:23 — Run R-026: Dependency-Graph-Erkennung
+
+- Commit: dieser Commit; neue Patch-Lieferung nach dem Merge und der
+  Veröffentlichung von `3.0.2`. Paket, Lockfile und `dist/version.json`
+  stimmen auf `3.0.3` überein.
+- Befund: Der separate [Dependency-Graph-Lauf 37011423472](https://github.com/xNicolas99/YachtPlus/actions/runs/37011423472)
+  auf master konnte den `.lock`-Include aus `requirements-local.txt` nicht
+  sammeln. Der [offizielle Python-Fetcher](https://github.com/dependabot/dependabot-core/blob/main/python/lib/dependabot/python/shared_file_fetcher.rb#L22)
+  erkennt dafür `.txt`/`.in`-Dateien.
+- Geändert: Entwicklungssperrdatei nach `requirements-dev-lock.txt`
+  umbenannt; lokale Requirements, CI und Dokumentation verwenden denselben
+  Dateinamen. Alle 84 Requirements behalten exakt ihre Pins, Marker und
+  Hashes; `--require-hashes` bleibt verbindlich.
+- Ergebnis: Hash-pip-Dry-run, 884 Backend- und 217 Frontend-Tests,
+  Produktionsbuild/Bundle-Grenzen und frisches SQLite-Upgrade auf
+  `20261001_0001` bestanden; Backend-Log `report/audit-r026-backend.txt`.
+  Neue Pflichtchecks müssen am finalen HEAD erfolgreich sein,
+  der erneute Master-Dependency-Graph-Lauf muss die Erkennung bestätigen.
+- Aufgeräumt: eigene temporäre Migrationsdatenbank entfernt;
+  Nachweislogs und wiederverwendbare Entwicklungsumgebung behalten.
+- Ausgangsstand: [PR #260](https://github.com/xNicolas99/YachtPlus/pull/260)
+  wurde als `9fdf21a` nach master gemerged. [Master-CI 37011417257](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417257)
+  einschließlich Publisher und [Master-CodeQL 37011417245](https://github.com/xNicolas99/YachtPlus/actions/runs/37011417245)
+  einschließlich Ergebnisverarbeitung bestanden für `3.0.2`.
+
 ## [3.0.2] - 2026-10-02 14:44 — Run R-023: Schutzstack-Startfehler — verified candidate
 
 - Commit: dieser Commit
