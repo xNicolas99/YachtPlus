@@ -25,7 +25,7 @@ async def _is_jti_revoked(jti: str) -> bool:
         from api.db.database import SessionLocal
         from api.db.models.settings import TokenBlacklist
     except Exception:
-        return False
+        raise HTTPException(503, "Authentication service unavailable") from None
     try:
         async with SessionLocal() as db:
             row = await db.execute(
@@ -34,18 +34,14 @@ async def _is_jti_revoked(jti: str) -> bool:
             row = row.scalars().first()
             return bool(row and row.revoked)
     except Exception:
-        # The blacklist check is a secondary guard. If the DB is unavailable
-        # or the table doesn't exist, do not fail the whole token validation
-        # path — treat the token as not revoked so an outage doesn't lock
-        # everyone out. (Real revocations are re-checked once the DB returns.)
-        return False
+        # Authentication fails closed when revocation cannot be checked.
+        raise HTTPException(503, "Authentication service unavailable") from None
 
 
-async def revoke_token(token: str) -> None:
+async def revoke_token(token: str, require_new=False) -> None:
     """Insert the token's jti into the blacklist with the token's exp as
-    its TTL. Called from /logout. Tolerates malformed / already-revoked
-    tokens — the caller is asking us to forget the token, so anything
-    short of "we wrote a row" should still leave the user logged out.
+    its TTL. Logout tolerates malformed/already-revoked tokens; database
+    failures remain visible. Refresh requires a previously unrevoked token.
     """
     if not token:
         return
@@ -85,13 +81,19 @@ async def revoke_token(token: str) -> None:
             )
             existing = existing.scalars().first()
             if existing:
+                if require_new:
+                    raise HTTPException(401, "Session was already refreshed or revoked")
                 existing.revoked = True
                 existing.expires = expires_at
             else:
                 db.add(TokenBlacklist(jti=jti, expires=expires_at, revoked=True))
             await db.commit()
+        except HTTPException:
+            await db.rollback()
+            raise
         except Exception:
             await db.rollback()
+            raise HTTPException(503, "Token revocation failed") from None
 
 # Schemas
 class Token(BaseModel):
@@ -102,6 +104,7 @@ class TokenData(BaseModel):
     username: Optional[str] = None
     setup_pending: bool = False
     token_type: Optional[str] = None
+    auth_version: Optional[str] = None
     # Add other claims if needed
 
 ALGORITHM = "HS256"
@@ -179,6 +182,7 @@ async def verify_token(token: str, credentials_exception):
             username=username,
             setup_pending=setup_pending,
             token_type=token_type,
+            auth_version=payload.get("av"),
         )
         return token_data
     except jwt.PyJWTError:
@@ -210,6 +214,26 @@ async def get_current_user(token: str = Depends(get_current_user_token)):
 
     return await verify_token(token, credentials_exception)
 
+
+def account_claims(user, **extra):
+    return {"sub": user.username, "av": user.auth_version, **extra}
+
+
+async def validate_account(token_data, allow_setup_pending=False):
+    from api.db.database import SessionLocal
+    from api.db.models.users import User
+    try:
+        async with SessionLocal() as db:
+            user = (await db.execute(select(User).where(User.username == token_data.username))).scalars().first()
+            if (not user or not token_data.auth_version or
+                    user.auth_version != token_data.auth_version or
+                    (not user.is_active and not (allow_setup_pending and token_data.setup_pending))):
+                raise HTTPException(401, "Account is inactive or credentials have changed")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(503, "Authentication service unavailable") from None
+
 class AuthWrapper:
     def __init__(self, request: Request):
         self.request = request
@@ -218,6 +242,9 @@ class AuthWrapper:
     async def jwt_required(self, allow_setup_pending: bool = False):
         token = get_current_user_token(self.request)
         token_data = await get_current_user(token)
+        if settings.DISABLE_AUTH:
+            self.user = TokenData(username="admin")
+            return self.user
 
         # Enforce setup_pending logic here
         if isinstance(token_data, TokenData) and token_data.setup_pending and not allow_setup_pending:
@@ -226,7 +253,15 @@ class AuthWrapper:
                 detail="Setup is pending, restricted access"
             )
 
+        await validate_account(token_data, allow_setup_pending)
+        if token_data.token_type == "api_key":
+            # API keys are read-only and cannot be exchanged for sessions or
+            # access account credentials. Enforce once for every HTTP router.
+            path = self.request.url.path
+            if self.request.method not in {"GET", "HEAD"} or path.startswith("/api/auth"):
+                raise HTTPException(403, "API keys allow read-only data access")
         self.user = token_data
+        self.request.scope["audit_user"] = token_data.username
         return self.user
 
     async def get_jwt_subject(self, allow_setup_pending: bool = False):
@@ -251,6 +286,7 @@ class AuthWrapper:
         # path must match the one used in set_access_cookies, else the
         # browser keeps the original cookie around (silent /logout no-op).
         response.delete_cookie("access_token_cookie", path="/")
+        response.delete_cookie("csrf_access_token", path="/")
 
     def _resolve_secure_flag(self) -> bool:
         """Decide whether to mark the access-token cookie Secure.
@@ -286,6 +322,10 @@ class AuthWrapper:
         return False
 
     def set_access_cookies(self, token, response, max_age=None):
+        try:
+            self.request.scope["audit_user"] = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])["sub"]
+        except (jwt.PyJWTError, KeyError, TypeError, AttributeError):
+            pass
         response.set_cookie(
             key="access_token_cookie",
             value=token,
@@ -294,6 +334,11 @@ class AuthWrapper:
             samesite=settings.SAME_SITE_COOKIES,
             secure=self._resolve_secure_flag(),
             path="/",  # explicit so it's sent on every API path, not just /api/setup/*
+        )
+        response.set_cookie(
+            key="csrf_access_token", value=_secrets.token_urlsafe(32), httponly=False,
+            max_age=max_age or (int(settings.ACCESS_TOKEN_EXPIRE_MINUTES) * 60),
+            samesite=settings.SAME_SITE_COOKIES, secure=self._resolve_secure_flag(), path="/",
         )
 
 def get_auth_wrapper(request: Request):

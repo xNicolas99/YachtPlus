@@ -28,7 +28,7 @@
                   autocomplete="current-password"
                   required
                 />
-                <v-alert v-if="error" type="error" dense class="mt-2">
+                <v-alert v-if="error" type="error" density="compact" class="mt-2">
                   {{ error }}
                 </v-alert>
               </v-form>
@@ -41,11 +41,11 @@
                   v-model="otpToken"
                   prepend-icon="mdi-shield-key"
                   required
-                  outlined
+                  variant="outlined"
                   autofocus
                   autocomplete="one-time-code"
                 />
-                <v-alert v-if="error" type="error" dense class="mt-2">
+                <v-alert v-if="error" type="error" density="compact" class="mt-2">
                   {{ error }}
                 </v-alert>
               </v-form>
@@ -103,12 +103,7 @@ export default {
         if (response.data.login === "2fa_required") {
           this.requires2FA = true;
         } else if (response.data.login === "successful") {
-          await this.$store.dispatch("auth/AUTH_REQUEST", {
-            username: this.email,
-            password: this.password
-          })
-            .catch(() => {});  // F14: cookie already set; best-effort store refresh
-          this.$router.push("/");
+          await this.completeLogin();
         }
       } catch (err) {
         this.error =
@@ -132,17 +127,10 @@ export default {
           { withCredentials: true }
         );
         if (response.data.login === "successful") {
-          await this.$store.dispatch("auth/AUTH_REQUEST", {
-            username: this.email,
-            password: this.password
-          })
-            .catch(() => {});  // F14: cookie already set; best-effort store refresh
-          this.$router.push("/");
-          } else if (response.data.login === "2fa_required") {
-            // F13: wrong OTP re-triggers 2fa_required - surface an error,
-            // otherwise the button appears dead.
-            this.error = "Ungültiger 2FA-Code, bitte erneut versuchen.";
-          }
+          await this.completeLogin();
+        } else if (response.data.login === "2fa_required") {
+          this.error = "Invalid 2FA code. Please try again.";
+        }
       } catch (err) {
         this.error =
           (err.response && err.response.data && err.response.data.detail) ||
@@ -150,6 +138,16 @@ export default {
       } finally {
         this.loading = false;
       }
+    },
+    async completeLogin() {
+      // login_cookie has already authenticated the user and set the HttpOnly
+      // cookie. A second password login here would fail for 2FA accounts
+      // because it has no OTP, and would consume another rate-limit slot.
+      const authenticated = await this.$store.dispatch("auth/AUTH_CHECK");
+      if (!authenticated) {
+        throw new Error("Could not load the authenticated session.");
+      }
+      await this.$router.push("/");
     }
   }
 };

@@ -80,6 +80,7 @@ class UserSelfUpdate(BaseModel):
     """
     username: Optional[str] = None
     password: Optional[str] = None
+    current_password: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
     @field_validator("password")

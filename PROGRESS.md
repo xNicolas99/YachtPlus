@@ -1,5 +1,27 @@
 # PROGRESS.md — Code-Audit & Vollüberarbeitung YachtPlus
 
+> Historisches Arbeitsjournal zum Audit-Baseline-Commit `ee7fe6e` vom
+> 2026-08-21. Die Tabellen, Commit-Verweise und Testzahlen darunter beschreiben
+> diesen früheren Arbeitsstand, keine aktuelle Freigabe oder offene Aufgabenliste.
+> Aktueller Abgleich am 2026-10-02: siehe `AGENTS.md`, `README.md` und den
+> [aktuellen Behebungsbericht](docs/AUDIT_REMEDIATION_2026-10-02.md).
+> Lokale Tests ersetzen weder einen
+> laufenden Docker-Stack noch aktuelle GitHub-Checks.
+
+## Präzisierungen zum aktuellen Checkout
+
+- Vuex 4 ist alleiniger Store; Pinia ist weder installiert noch parallel aktiv.
+  Die alte R1-Aufgabe ist damit keine notwendige Fehlerbehebung und keine
+  zugesagte Migration. i18n/A11Y-Vorschläge unten bleiben historische Ideen.
+- API-Keys sind GET/HEAD-only für Daten, mit bestehenden Benutzerrechten.
+  Account-, Settings-, Docker-/Compose-Mutationen und Terminal sind gesperrt.
+  Gespeichert werden JTI/Expiry und SHA-256(JTI), kein bcrypt-Hash des JWT.
+- Audit-Logging ist asynchron und durch Mutations-/Login-Erfassung ergänzt.
+  Die Speicherung in der Anwendungsdatenbank garantiert keine Unveränderlichkeit.
+- Ältere grüne Paket-Audits und Testzahlen sind zeitbezogene Ergebnisse und
+  kein Nachweis des aktuellen Zustands. Der aktuelle Kandidat benötigt die
+  im Repository vorgeschriebenen Docker-/Laufzeitprüfungen vor Freigabe.
+
 ## Baseline
 
 - Git-Tag: `baseline`
@@ -33,7 +55,7 @@
 | S8| refactor | Sicherheit/Performance | FND-601 | Sync docker-SDK Analyse; Call-Sites auf aiodocker prüfen | mittel | pytest + Review | erledigt | 6935938 |
 | S9| refactor | Portabilität | FND-602 | .Jules/.jules Verzeichnis-Konflikt auflösen | niedrig | npm build + git status | erledigt | e912f0f |
 | S10| chore | Sicherheit | FND-103 | Compose-Read-Berechtigung dokumentieren | info | Review | erledigt | e912f0f |
-| R1| refactor | Frontend | FND-701 | Pinia-Migration modulweise (scheut von Auth/Snackbar) | mittel | npm build + 21 Frontend-Tests | offen | — |
+| R1| refactor | Frontend | FND-701 | Historischer Pinia-Vorschlag; aktuelle behauptete Doppelinstallation besteht nicht | mittel | Abgleich package.json/main.js am 2026-10-02 | nicht erforderlich | — |
 | I1| feat(i18n) | Frontend/Backend | FND-702 | Vue I18n v11 + Vuetify-Adapter; Backend error.code additiv | mittel | npm build + 21 Tests + pytest | offen | — |
 | U1| style(ui) | UI | — | A11Y-Fixes innerhalb Vuetify 3 | niedrig | npm build + Review | offen | — |
 
@@ -48,7 +70,7 @@
 
 ## Nicht angefasst / bewusst verschoben
 
-- R1 Pinia-Migration: Wurde als "separater Auftrag" vorgeschlagen, aber im Scope des Audits dokumentiert.
+- R1 Pinia-Migration: Historischer Vorschlag; die zugrunde liegende Behauptung einer aktuellen Doppelinstallation ist korrigiert.
 - I1 i18n: Große Oberflächen-Änderung; wird nur vorbereitet (error.code), nicht vollständig implementiert, falls Zeit/Scope es erfordern.
 - U1 A11Y: Erfordert UI-Review, keine automatisierte Testabdeckung; niedrigste Priorität.
 
@@ -65,6 +87,6 @@
 
 ## Blockierte / nicht angefasste Schritte
 
-- R1 Pinia-Migration (FND-701): bewusst verschoben, separater Auftrag empfohlen.
+- R1 Pinia-Migration (FND-701): kein aktueller Fehler; Vuex 4 bleibt der einzige Store.
 - I1 Vue I18n + error.code (FND-702): bewusst verschoben, separater Auftrag empfohlen.
 - U1 A11Y-Fixes: keine automatisierte Testabdeckung, niedrigste Priorität.

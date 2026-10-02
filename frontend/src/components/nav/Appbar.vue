@@ -18,6 +18,27 @@
 
     <!-- Search (center) -->
     <v-spacer></v-spacer>
+
+    <v-btn
+      ref="mobileSearchButton"
+      class="hidden-md-and-up"
+      icon="mdi-magnify"
+      aria-label="Open search"
+      title="Search Apps, Templates and DockerHub"
+      @click="searchOpen = true"
+    />
+    <v-dialog v-model="searchOpen" max-width="600" class="yp-mobile-search" aria-label="Search Apps, Templates and DockerHub" @after-leave="restoreSearchFocus">
+      <v-card style="overflow: visible">
+        <v-card-title class="d-flex align-center">
+          Search
+          <v-spacer />
+          <v-btn icon="mdi-close" variant="text" aria-label="Close search" @click="searchOpen = false" />
+        </v-card-title>
+        <v-card-text>
+          <GlobalSearch v-if="searchOpen" autofocus @selected="searchOpen = false" />
+        </v-card-text>
+      </v-card>
+    </v-dialog>
     <div class="hidden-sm-and-down yp-search-wrap">
       <GlobalSearch />
     </div>
@@ -25,35 +46,13 @@
 
     <!-- Host indicator -->
     <div class="yp-host hidden-sm-and-down mr-3" title="Active host">
-      <span class="yp-host-dot" aria-hidden="true"></span>
       <span class="yp-host-name">{{ hostLabel }}</span>
-      <span class="yp-host-meta yp-mono">{{ hostMeta }}</span>
-      <v-icon size="14" color="medium-emphasis">mdi-chevron-down</v-icon>
     </div>
 
     <!-- Right actions -->
     <div class="d-flex align-center pr-2">
-      <v-btn
-        icon
-        variant="text"
-        class="mr-2 yp-iconbtn"
-        aria-label="View notifications"
-        title="View notifications"
-      >
-        <!-- :model-value gates the badge entirely. Vuetify 3's `dot` mode
-             draws the badge unconditionally when the model is truthy
-             regardless of `content`, so `content="0"` was NOT enough to
-             hide it — the small blue dot showed even with zero unread.
-             Bind to a real unread count once the notification stream is
-             implemented; for now keep the badge off. -->
-        <v-badge :model-value="hasUnreadNotifications" color="primary" dot offset-x="2" offset-y="2">
-          <v-icon>mdi-bell-outline</v-icon>
-        </v-badge>
-        <v-tooltip activator="parent" location="bottom">Notifications</v-tooltip>
-      </v-btn>
-
       <!-- User dropdown -->
-      <v-menu v-if="!authDisabled" offset-y transition="scale-transition">
+      <v-menu v-if="!authDisabled" transition="scale-transition">
         <template v-slot:activator="{ props }">
           <v-btn
             color="surface"
@@ -106,13 +105,8 @@ export default {
   emits: ['toggle-drawer'],
   data() {
     return {
-      // Static placeholders matching the INDEX Overhaul mock. Wire to a real
-      // hosts store once the multi-host backend lands.
       hostLabel: window.location.hostname || 'localhost',
-      hostMeta: window.location.hostname,  // F45: hardcoded fallback IP removed
-      // Wired to a real source the day the notification feature lands.
-      // Until then keep the badge off so it doesn't lie to the user.
-      hasUnreadNotifications: false,
+      searchOpen: false,
     };
   },
   computed: {
@@ -125,6 +119,9 @@ export default {
     ...mapActions({
       logout: "auth/AUTH_LOGOUT"
     }),
+    restoreSearchFocus() {
+      this.$refs.mobileSearchButton?.$el?.focus();
+    },
     themeLogo() {
       if (themeLogo) {
         return themeLogo;
@@ -143,6 +140,13 @@ export default {
   background: var(--yp-bg) !important;
   border-bottom: 1px solid var(--yp-border-soft) !important;
   color: var(--yp-text);
+}
+.yp-topbar :deep(.v-toolbar__content) {
+  overflow: visible;
+}
+.yp-mobile-search :deep(.v-overlay__content) {
+  align-self: flex-start;
+  margin-top: 16px;
 }
 .main-logo {
   height: 32px;
@@ -168,7 +172,6 @@ export default {
   border-radius: var(--yp-radius-sm);
   font-size: 13px;
   color: var(--yp-text);
-  cursor: pointer;
 }
 .yp-host:hover { background: var(--yp-surface-2); }
 .yp-host-dot {

@@ -1,20 +1,16 @@
 <template>
-  <!-- F54: guard against rendering before the record loads -->
-  <div v-if="!image && !network && !volume" class="pa-6">
-    <v-progress-circular indeterminate></v-progress-circular>
-  </div>
-  <div class="page">
+  <div v-if="image" class="page">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
       <v-card-title>
-        <v-menu close-on-click close-on-content-click offset-y>
+        <v-menu close-on-click close-on-content-click location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn icon size="small" v-bind="props" aria-label="Image Actions" title="Image Actions">
               <v-icon>mdi-chevron-down</v-icon>
@@ -22,15 +18,15 @@
           </template>
           <v-list color="foreground" density="compact">
             <v-list-item
-              v-if="image.RepoTags[0]"
+              v-if="image.RepoTags?.[0]"
               @click="updateImage(image.Id)"
             >
-              <v-list-item-icon><v-icon>mdi-update</v-icon></v-list-item-icon>
+              <span><v-icon>mdi-update</v-icon></span>
               <v-list-item-title>Pull Image</v-list-item-title>
             </v-list-item>
-            <v-list-item @click="deleteImage(image.Id)">
-              <v-list-item-icon
-                ><v-icon>mdi-trash-can-outline</v-icon></v-list-item-icon
+            <v-list-item :disabled="deleting" @click="deleteDialog = true">
+              <span
+                ><v-icon>mdi-trash-can-outline</v-icon></span
               >
               <v-list-item-title>Delete Image</v-list-item-title>
             </v-list-item>
@@ -40,15 +36,15 @@
       </v-card-title>
       <v-card-subtitle>
         <v-chip
-          outlined
-          small
+          variant="outlined"
+          size="small"
           color="orange lighten-1"
           class="align-center mt-1"
           label
           v-if="image.inUse == false"
           >Unused</v-chip
         >
-        {{ image.RepoTags[0] || image.RepoDigests[0] }}
+        {{ image.RepoTags?.[0] || image.RepoDigests?.[0] || "-" }}
       </v-card-subtitle>
     </v-card>
     <v-card color="foreground" class="mt-2">
@@ -57,60 +53,60 @@
       </v-card-title>
       <v-list color="foreground" density="compact">
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Tag
-          </v-list-item-content>
-          <v-list-item-content>
-            {{ image.RepoTags[0] }}
-          </v-list-item-content>
+          </div>
+          <div>
+            {{ image.RepoTags?.[0] || "-" }}
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Architecture
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ image.Architecture }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Platform
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ image.Os }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Architecture
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ image.Architecture }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Created
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ $formatDate(image.Created) }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Size
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ formatBytes(image.Size) }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             VirtualSize
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ formatBytes(image.VirtualSize) }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
@@ -120,45 +116,45 @@
         Container Details
       </v-card-title>
       <v-list density="compact" color="foreground">
-        <v-list-item v-if="getCMD(image.ContainerConfig.Cmd)">
-          <v-list-item-content style="max-width:20%">
+        <v-list-item v-if="getCMD(imageConfig.Cmd)">
+          <div style="max-width:20%">
             Command
-          </v-list-item-content>
-          <v-list-item-content>
-            {{ getCMD(image.ContainerConfig.Cmd) }}
-          </v-list-item-content>
+          </div>
+          <div>
+            {{ getCMD(imageConfig.Cmd) }}
+          </div>
         </v-list-item>
-        <v-list-item v-if="image.ContainerConfig.Entrypoint">
-          <v-list-item-content style="max-width:20%">
+        <v-list-item v-if="getCMD(imageConfig.Entrypoint)">
+          <div style="max-width:20%">
             Entrypoint
-          </v-list-item-content>
-          <v-list-item-content>
-            {{ image.ContainerConfig.Entrypoint[0] }}
-          </v-list-item-content>
+          </div>
+          <div>
+            {{ getCMD(imageConfig.Entrypoint) }}
+          </div>
         </v-list-item>
-        <v-list-item v-if="image.ContainerConfig.ExposedPorts">
-          <v-list-item-content style="max-width:20%">
+        <v-list-item v-if="imageConfig.ExposedPorts">
+          <div style="max-width:20%">
             Ports
-          </v-list-item-content>
-          <v-list-item-content
+          </div>
+          <div
             v-for="(port, index) in Object.keys(
-              image.ContainerConfig.ExposedPorts
+              imageConfig.ExposedPorts
             )"
             :key="index"
           >
             {{ port }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
-        <v-list-item v-if="image.ContainerConfig.Labels">
-          <v-list-item-content style="max-width:20%">
+        <v-list-item v-if="imageConfig.Labels">
+          <div style="max-width:20%">
             Labels
-          </v-list-item-content>
-          <v-list-item-content>
-            <v-card variant="outlined" tile>
+          </div>
+          <div>
+            <v-card variant="outlined" rounded="0">
               <v-table density="compact">
                 <tbody>
                   <tr
-                    v-for="(value, key, index) in image.ContainerConfig.Labels"
+                    v-for="(value, key, index) in imageConfig.Labels"
                     :key="index"
                   >
                     <td style="min-width:20%;" class="align-self-center">
@@ -174,18 +170,18 @@
                 </tbody>
               </v-table>
             </v-card>
-          </v-list-item-content>
+          </div>
         </v-list-item>
-        <v-list-item v-if="image.ContainerConfig.Env">
-          <v-list-item-content style="max-width:20%">
+        <v-list-item v-if="imageConfig.Env">
+          <div style="max-width:20%">
             ENV
-          </v-list-item-content>
-          <v-list-item-content>
-            <v-card variant="outlined" tile>
+          </div>
+          <div>
+            <v-card variant="outlined" rounded="0">
               <v-table>
                 <tbody>
                   <tr
-                    v-for="(key, index) in image.ContainerConfig.Env"
+                    v-for="(key, index) in imageConfig.Env"
                     :key="index"
                   >
                     <td
@@ -198,11 +194,27 @@
                 </tbody>
               </v-table>
             </v-card>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
+    <v-dialog v-model="deleteDialog" max-width="420" :persistent="deleting">
+      <v-card>
+        <v-card-title>Delete the image?</v-card-title>
+        <v-card-text>
+          Permanently delete {{ image.RepoTags?.[0] || image.Id }}?
+          This action cannot be revoked.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deleting" :disabled="deleting" @click="confirmDelete">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
+  <v-progress-linear v-else-if="isLoading" indeterminate color="primary" />
+  <v-alert v-else type="error">Image details are unavailable.</v-alert>
 </template>
 
 <script>
@@ -210,16 +222,19 @@ import { mapActions, mapGetters, mapState } from "vuex";
 
 export default {
   data() {
-    return {};
+    return { deleteDialog: false, deleting: false };
   },
   computed: {
-    ...mapState("images", ["image", "images", "isLoading"]),
+    ...mapState("images", ["isLoading"]),
     ...mapGetters({
       getImageById: "images/getImageById"
     }),
     image() {
       const imageid = this.$route.params.imageid;
       return this.getImageById(imageid);
+    },
+    imageConfig() {
+      return this.image?.Config || this.image?.ContainerConfig || {};
     }
   },
   methods: {
@@ -229,6 +244,7 @@ export default {
       deleteImage: "images/deleteImage"
     }),
     formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes < 0) return "-";
       if (bytes === 0) return "0 Bytes";
       const decimals = 2;
       const k = 1024;
@@ -240,10 +256,20 @@ export default {
       return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
     },
     getCMD(cmd) {
-      for (var entry in cmd) {
-        if (cmd[entry].includes("CMD")) {
-          return cmd[entry];
-        } else return null;
+      return Array.isArray(cmd) ? cmd.join(" ") : cmd || null;
+    },
+    async confirmDelete() {
+      if (this.deleting || !this.deleteDialog || !this.image) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteImage(this.image.Id)) {
+          this.deleteDialog = false;
+          await this.$router.push({ name: "Images" });
+        }
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
       }
     }
   },

@@ -5,6 +5,8 @@
 
 sql_app.db
 venv
+.venv/
+.env
 *.db
 
 # Secrets — never commit these
@@ -30,3 +32,9 @@ config
 .Jules/
 
 *.spec.js
+# Isolated verification tooling (not application source).
+/report/tools/
+/report/audit-*.txt
+/audit-*.txt
+/report/bootstrap_npm.py
+/report/remediation_tools.py

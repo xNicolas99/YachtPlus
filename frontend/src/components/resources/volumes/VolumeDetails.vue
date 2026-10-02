@@ -1,29 +1,25 @@
 <template>
-  <!-- F54: guard against rendering before the record loads -->
-  <div v-if="!image && !network && !volume" class="pa-6">
-    <v-progress-circular indeterminate></v-progress-circular>
-  </div>
-  <div class="page">
+  <div v-if="volume" class="page">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
       <v-card-title>
-        <v-menu close-on-click close-on-content-click offset-y>
+        <v-menu close-on-click close-on-content-click location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn icon size="small" v-bind="props" aria-label="Volume Actions" title="Volume Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
           <v-list color="foreground" density="compact">
-            <v-list-item @click="deleteVolume(volume.Name)">
-              <v-list-item-icon
-                ><v-icon>mdi-trash-can-outline</v-icon></v-list-item-icon
+            <v-list-item :disabled="deleting" @click="deleteDialog = true">
+              <span
+                ><v-icon>mdi-trash-can-outline</v-icon></span
               >
               <v-list-item-title>Delete Volume</v-list-item-title>
             </v-list-item>
@@ -33,8 +29,8 @@
       </v-card-title>
       <v-card-subtitle>
         <v-chip
-          outlined
-          small
+          variant="outlined"
+          size="small"
           color="orange lighten-1"
           class="align-center mt-1"
           label
@@ -49,51 +45,51 @@
       </v-card-title>
       <v-list color="foreground" density="compact">
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Name
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ volume.Name }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Driver
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ volume.Driver }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Mountpoint
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ volume.Mountpoint }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Scope
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ volume.Scope }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Created
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ $formatDate(volume.CreatedAt) }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item v-if="volume.Labels">
-          <v-list-item-content style="max-width:20%">
+          <div style="max-width:20%">
             Labels
-          </v-list-item-content>
-          <v-list-item-content>
-            <v-card variant="outlined" tile>
+          </div>
+          <div>
+            <v-card variant="outlined" rounded="0">
               <v-table density="compact">
                 <tbody>
                   <tr v-for="(value, key, index) in volume.Labels" :key="index">
@@ -110,11 +106,27 @@
                 </tbody>
               </v-table>
             </v-card>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
+    <v-dialog v-model="deleteDialog" max-width="420" :persistent="deleting">
+      <v-card>
+        <v-card-title>Delete the volume?</v-card-title>
+        <v-card-text>
+          Permanently delete {{ volume.Name }} and its data?
+          This action cannot be revoked.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deleting" :disabled="deleting" @click="confirmDelete">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
+  <v-progress-linear v-else-if="isLoading" indeterminate color="primary" />
+  <v-alert v-else type="error">Volume details are unavailable.</v-alert>
 </template>
 
 <script>
@@ -122,10 +134,10 @@ import { mapActions, mapGetters, mapState } from "vuex";
 
 export default {
   data() {
-    return {};
+    return { deleteDialog: false, deleting: false };
   },
   computed: {
-    ...mapState("volumes", ["volume", "volumes", "isLoading"]),
+    ...mapState("volumes", ["isLoading"]),
     ...mapGetters({
       getVolumeByName: "volumes/getVolumeByName"
     }),
@@ -138,7 +150,21 @@ export default {
     ...mapActions({
       readVolume: "volumes/readVolume",
       deleteVolume: "volumes/deleteVolume"
-    })
+    }),
+    async confirmDelete() {
+      if (this.deleting || !this.deleteDialog || !this.volume) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteVolume(this.volume.Name)) {
+          this.deleteDialog = false;
+          await this.$router.push({ name: "Volumes" });
+        }
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
+      }
+    }
   },
   created() {
     const volumeName = this.$route.params.volumeName;

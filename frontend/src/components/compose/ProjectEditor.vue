@@ -41,6 +41,9 @@
             </v-col>
           </v-row>
         </div>
+        <v-alert type="info" class="mx-4 mb-3">
+          Saving applies restricted security defaults to each service: non-root user, read-only root filesystem, dropped capabilities and no new privileges. Mount writable volumes for data. An administrator can explicitly use <code>x-yachtplus-security: image-default</code> on services that need the image's original behavior. Existing running containers change only when recreated.
+        </v-alert>
         <v-ace-editor
           v-model:value="form.content"
           @init="editorInit"
@@ -89,7 +92,7 @@ export default {
       // Ace modes/themes are imported at the top
     },
     editorTheming() {
-      if (this.$vuetify.theme.global.current.dark == false) {
+      if (!this.$vuetify.theme.global.current.dark) {
         return "textmate";
       } else {
         return "twilight";

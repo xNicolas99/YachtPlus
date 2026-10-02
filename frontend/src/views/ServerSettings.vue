@@ -69,6 +69,7 @@
                   <SMTPSettings @notify="notify" />
                 </v-window-item>
                 <v-window-item>
+                  <NetworkAccessSecurity @notify="notify" />
                   <TwoFactor @notify="notify" />
                 </v-window-item>
                 <v-window-item>
@@ -100,7 +101,11 @@ import Prune from "../components/serverSettings/Prune";
 import Update from "../components/serverSettings/ServerUpdate";
 import SMTPSettings from "../components/settings/SMTPSettings";
 import TwoFactor from "../components/settings/TwoFactor";
+import NetworkAccessSecurity from "../components/settings/NetworkAccessSecurity.vue";
 import AuditLogs from "../components/serverSettings/AuditLogs.vue";
+
+const tabPaths = [null, "/settings/info", "/settings/theme", "/settings/templateVariables",
+  "/settings/prune", "/settings/update", "/settings/smtp", "/settings/security", "/settings/audit"];
 
 export default {
   components: {
@@ -111,6 +116,7 @@ export default {
     Update,
     SMTPSettings,
     TwoFactor,
+    NetworkAccessSecurity,
     AuditLogs
   },
   data() {
@@ -123,6 +129,19 @@ export default {
         color: "info"
       }
     };
+  },
+  watch: {
+    "$route.path": {
+      immediate: true,
+      handler(path) {
+        const tab = tabPaths.indexOf(path);
+        this.SettingsTab = tab > 0 ? tab : 1;
+      }
+    },
+    SettingsTab(tab) {
+      const path = tabPaths[tab];
+      if (path && path !== this.$route.path) this.$router.replace(path);
+    }
   },
   methods: {
     notify(data) {

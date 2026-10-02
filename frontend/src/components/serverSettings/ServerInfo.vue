@@ -8,18 +8,18 @@
       This is where you can change settings related to your server.
     </v-card-text>
     <h2 class="font-weight-bold ml-5">Import</h2>
-    <Form ref="obs1" v-slot="{ invalid, meta }">  <!-- F15: meta was missing from scope -->
+    <Form ref="obs1" v-slot="{ meta, isSubmitting }" @submit="import_settings(importFile)">
       <Field
         name="importFile"
+        v-model="importFile"
         rules="required"
-        v-slot="{ field, errorMessage }"
+        v-slot="{ componentField, errors }"
       >
         <v-file-input
-          :model-value="field.value"
-          @update:model-value="onImportFileUpdate(field, $event)"
+          v-bind="componentField"
           ref="importFile"
           label="Import export.json"
-          :error-messages="errorMessage"
+          :error-messages="errors"
           required
           show-size
           accept=".json"
@@ -29,8 +29,9 @@
       <v-btn
         class="mx-5"
         color="primary"
-        :disabled="!meta.valid"
-        @click="import_settings(importFile)"
+        type="submit"
+        :disabled="!meta.valid || isSubmitting"
+        :loading="isSubmitting"
         >Import
       </v-btn>
     </Form>
@@ -60,44 +61,39 @@ export default {
       setSuccess: "snackbar/setSuccess",
       setErr: "snackbar/setErr"
     }),
-    export_settings() {
-      axios({
-        url: "/settings/export",
-        method: "GET",
-        responseType: "blob"
-      }).then(response => {
-        var FileURL = window.URL.createObjectURL(new Blob([response.data]));
-        var fileLink = document.createElement("a");
-
-        fileLink.href = FileURL;
+    async export_settings() {
+      let fileURL;
+      let fileLink;
+      try {
+        const response = await axios({
+          url: "/settings/export",
+          method: "GET",
+          responseType: "blob"
+        });
+        fileURL = window.URL.createObjectURL(new Blob([response.data]));
+        fileLink = document.createElement("a");
+        fileLink.href = fileURL;
         fileLink.setAttribute("download", "export.json");
         document.body.appendChild(fileLink);
-
         fileLink.click();
-      });
+      } catch (err) {
+        this.setErr(err);
+      } finally {
+        if (fileLink) fileLink.remove();
+        if (fileURL) window.URL.revokeObjectURL(fileURL);
+      }
     },
-    onImportFileUpdate(field, value) {
-      // H8: keep the vee-validate field value (validation/meta) and the
-      // legacy data property consumed by the import button in sync.
-      field.value = value;
-      this.importFile = value;
-    },
-    import_settings(importFile) {
-      let formData = new FormData();
-      formData.append("upload", importFile);
-      let axiosHeader = {
-        headers: {
-          "Content-Type": "multipart/form-data"
-        }
-      };
-      axios
-        .post("/settings/export", formData, axiosHeader)
-        .then(response => {
-          this.setSuccess(response);
-        })
-        .catch(err => {
-          this.setErr(err);
-        });
+    async import_settings(importFile) {
+      const file = Array.isArray(importFile) ? importFile[0] : importFile;
+      if (!file) return;
+      const formData = new FormData();
+      formData.append("upload", file);
+      try {
+        const response = await axios.post("/settings/export", formData);
+        this.setSuccess(response);
+      } catch (err) {
+        this.setErr(err);
+      }
     }
   }
 };

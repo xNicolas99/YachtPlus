@@ -16,7 +16,7 @@
             <v-menu
               :close-on-click="true"
               :close-on-content-click="true"
-              offset-y
+
             >
               <template v-slot:activator="{ props }">
                 <v-btn icon size="small" v-bind="props" class="" aria-label="Project Details Actions" title="Project Details Actions">
@@ -27,17 +27,17 @@
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'up' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-arrow-up-bold</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Up</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'down' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-arrow-down-bold</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Down</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -46,17 +46,17 @@
                     ProjectAction({ Name: project.name, Action: 'start' })
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-play</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Start</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'stop' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-stop</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Stop</v-list-item-title>
                 </v-list-item>
                 <v-list-item
@@ -64,18 +64,18 @@
                     ProjectAction({ Name: project.name, Action: 'restart' })
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-refresh</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Restart</v-list-item-title>
                 </v-list-item>
                 <v-divider />
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'pull' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-update</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Pull</v-list-item-title>
                 </v-list-item>
                 <v-list-item
@@ -83,27 +83,27 @@
                     ProjectAction({ Name: project.name, Action: 'create' })
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-plus-box-multiple</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Create</v-list-item-title>
                 </v-list-item>
                 <v-divider />
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'kill' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-fire</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Kill</v-list-item-title>
                 </v-list-item>
 
                 <v-list-item
                   @click="ProjectAction({ Name: project.name, Action: 'rm' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Remove</v-list-item-title>
                 </v-list-item>
               </v-list>
@@ -135,22 +135,22 @@
       <v-card-title> Project Details </v-card-title>
       <v-list color="foreground" density="compact">
         <v-list-item>
-          <v-list-item-content> Name </v-list-item-content>
-          <v-list-item-content>
+          <div> Name </div>
+          <div>
             {{ project.name }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content> Path </v-list-item-content>
-          <v-list-item-content>
+          <div> Path </div>
+          <div>
             {{ project.path }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content> Version </v-list-item-content>
-          <v-list-item-content>
+          <div> Version </div>
+          <div>
             {{ project.version }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
@@ -162,7 +162,7 @@
             v-for="(service, index) in Object.keys(project.services)"
             :key="index"
           >
-            <v-expansion-panel-header color="secondary">
+            <v-expansion-panel-title color="secondary">
               <v-row no-gutters style="max-height: 20px">
                 <v-col cols="2">{{ service }} </v-col>
                 <v-col cols="5" class="text--secondary">
@@ -176,10 +176,10 @@
                   }}
                 </v-col>
               </v-row>
-            </v-expansion-panel-header>
-            <v-expansion-panel-content color="foreground">
+            </v-expansion-panel-title>
+            <v-expansion-panel-text color="foreground">
               <div class="text-center mt-2">
-                <v-item-group dense class="v-btn-toggle">
+                <v-item-group density="compact" class="v-btn-toggle">
                   <v-btn
                     small
                     @click="
@@ -190,7 +190,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-arrow-up-bold</v-icon>
+                    <v-icon size="small">mdi-arrow-up-bold</v-icon>
                     up
                   </v-btn>
                   <v-divider vertical />
@@ -204,7 +204,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-play</v-icon>
+                    <v-icon size="small">mdi-play</v-icon>
                     start
                   </v-btn>
                   <v-btn
@@ -217,7 +217,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-stop</v-icon>
+                    <v-icon size="small">mdi-stop</v-icon>
                     stop
                   </v-btn>
                   <v-btn
@@ -230,7 +230,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-refresh</v-icon>
+                    <v-icon size="small">mdi-refresh</v-icon>
                     restart
                   </v-btn>
                   <v-divider vertical />
@@ -244,7 +244,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-update</v-icon>
+                    <v-icon size="small">mdi-update</v-icon>
                     pull
                   </v-btn>
                   <v-divider vertical />
@@ -258,7 +258,7 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-fire</v-icon>
+                    <v-icon size="small">mdi-fire</v-icon>
                     kill
                   </v-btn>
                   <v-btn
@@ -271,47 +271,47 @@
                       })
                     "
                   >
-                    <v-icon small>mdi-delete</v-icon>
+                    <v-icon size="small">mdi-delete</v-icon>
                     remove
                   </v-btn>
                 </v-item-group>
               </div>
               <v-list color="foreground" density="compact">
                 <v-list-item v-if="project.services[service].container_name">
-                  <v-list-item-content> Container Name </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Container Name </div>
+                  <div>
                     {{ project.services[service].container_name }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].image">
-                  <v-list-item-content> Image </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Image </div>
+                  <div>
                     {{ project.services[service].image }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].env_file">
-                  <v-list-item-content> Env File </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Env File </div>
+                  <div>
                     {{ project.services[service].env_file }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].depends_on">
-                  <v-list-item-content> Depends on </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Depends on </div>
+                  <div>
                     {{ project.services[service].depends_on.join(", ") }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].restart">
-                  <v-list-item-content> Restart Policy </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Restart Policy </div>
+                  <div>
                     {{ project.services[service].restart }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].read_only">
-                  <v-list-item-content> Read Only </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Read Only </div>
+                  <div>
                     {{ project.services[service].read_only }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item
                   v-if="
@@ -319,10 +319,10 @@
                       Array.isArray(project.services[service].networks)
                   "
                 >
-                  <v-list-item-content> Networks </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Networks </div>
+                  <div>
                     {{ project.services[service].networks.join(", ") }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item
                   v-else-if="
@@ -330,24 +330,24 @@
                       typeof project.services[service].networks === 'object'
                   "
                 >
-                  <v-list-item-content> Networks </v-list-item-content>
-                  <v-list-item-content
+                  <div> Networks </div>
+                  <div
                     v-for="(content, network) in project.services[service]
                       .networks"
                     :key="network"
                   >
                     {{ network }}, {{ content[Object.keys(content)[0]] }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].ports">
-                  <v-list-item-content> Ports </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Ports </div>
+                  <div>
                     {{ project.services[service].ports.join(", ") }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].volumes">
-                  <v-list-item-content> Volumes </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Volumes </div>
+                  <div>
                     <v-card variant="outlined" tile>
                       <v-table class="secondary" density="compact">
                         <thead>
@@ -372,11 +372,11 @@
                         </tbody>
                       </v-table>
                     </v-card>
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].environment">
-                  <v-list-item-content> Environment </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Environment </div>
+                  <div>
                     <v-card variant="outlined" tile>
                       <v-table class="secondary" density="compact">
                         <thead>
@@ -423,11 +423,11 @@
                         </tbody>
                       </v-table>
                     </v-card>
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].labels">
-                  <v-list-item-content> Labels </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Labels </div>
+                  <div>
                     <v-card variant="outlined" tile>
                       <v-table class="secondary" density="compact">
                         <thead>
@@ -452,11 +452,11 @@
                         </tbody>
                       </v-table>
                     </v-card>
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].command">
-                  <v-list-item-content> Command </v-list-item-content>
-                  <v-list-item-content>
+                  <div> Command </div>
+                  <div>
                     <v-card variant="outlined" tile>
                       <v-table class="secondary" density="compact">
                         <tbody
@@ -483,10 +483,10 @@
                         </tbody>
                       </v-table>
                     </v-card>
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </v-list>
-            </v-expansion-panel-content>
+            </v-expansion-panel-text>
           </v-expansion-panel>
         </v-expansion-panels>
       </v-card-text>
@@ -529,9 +529,9 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false"> Cancel </v-btn>
+          <v-btn variant="text" @click="deleteDialog = false"> Cancel </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
             @click="confirmDelete"
           >
@@ -566,12 +566,9 @@ export default {
   },
   methods: {
     async confirmDelete() {
-      // F77: delete + postDelete ran concurrently — navigation
-      // happened before the action finished.
-      await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
-      await this.postDelete();
+      const succeeded = await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
+      if (succeeded) this.postDelete();
     },
-
     ...mapActions({
       readProject: "projects/readProject",
       projectAppAction: "projects/ProjectAppAction",
@@ -595,7 +592,10 @@ export default {
         if (
           this.apps[app].name == name ||
           this.apps[app].name ==
-            this.project.name.toLowerCase() + "_" + name + "_1"
+            this.project.name.toLowerCase() + "-" + name + "-1" ||
+          this.apps[app].name == this.project.name.toLowerCase() + "_" + name + "_1" ||
+          (this.apps[app].Config?.Labels?.["com.docker.compose.project"] === this.project.name.toLowerCase() &&
+           this.apps[app].Config?.Labels?.["com.docker.compose.service"] === name)
         ) {
           return this.apps[app].State.Status;
         }

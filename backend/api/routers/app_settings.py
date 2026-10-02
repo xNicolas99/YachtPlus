@@ -2,6 +2,9 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Re
 from typing import List
 import io
 import json
+import asyncio
+import logging
+from pydantic import BaseModel, ConfigDict, StrictBool
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +28,87 @@ from api.auth.jwt import get_auth_wrapper
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+class NetworkAccessUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    allow_public: StrictBool
+    confirm_public_access: StrictBool = False
+
+
+async def _record_network_access_request(db, username, previous, requested):
+    """Require a durable audit of the attempted change before opening access.
+
+    The ordinary activity helper deliberately swallows DB errors. Network
+    policy changes need an acknowledged commit and must preserve old policy
+    when audit storage fails. The action explicitly records an attempt, since
+    the following atomic file write may still fail.
+    """
+    from api.db.models.audit import AuditLog
+    db.add(AuditLog(
+        user=username,
+        action="security.network_access.requested",
+        resource="access-policy",
+        details=json.dumps({"before": previous, "requested": requested}),
+    ))
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        logger.error("Could not audit network access change")
+        raise HTTPException(status_code=503, detail="Security audit unavailable") from None
+
+
+@router.get("/security")
+async def get_security_settings(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    user = await require_superuser(Authorize, db)
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Active superuser required")
+    from api.utils.security import _resolve_client_ip
+    from api.utils.access_policy import security_status, is_local_client, ProtectionUnavailable
+    try:
+        result = await asyncio.to_thread(security_status, settings)
+    except ProtectionUnavailable:
+        raise HTTPException(status_code=503, detail="Security protection unavailable") from None
+    result["can_modify"] = is_local_client(_resolve_client_ip(request))
+    return result
+
+
+@router.put("/security")
+async def update_security_settings(
+    request: Request,
+    update: NetworkAccessUpdate,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
+    user = await require_superuser(Authorize, db)
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Active superuser required")
+    from api.utils.security import _resolve_client_ip
+    from api.utils.access_policy import (
+        security_status, is_local_client, read_access_policy, write_access_policy,
+        fail2ban_active, ProtectionUnavailable,
+    )
+    if not is_local_client(_resolve_client_ip(request)):
+        raise HTTPException(status_code=403, detail="Security changes require a local client")
+    if update.allow_public and not update.confirm_public_access:
+        raise HTTPException(status_code=422, detail="Explicit confirmation of public access is required")
+    try:
+        if update.allow_public and (not settings.FAIL2BAN_REQUIRED or not fail2ban_active(settings)):
+            raise ProtectionUnavailable("Fail2ban protection unavailable")
+        previous = await asyncio.to_thread(read_access_policy, settings)
+        await _record_network_access_request(db, user.username, previous["allow_public"], update.allow_public)
+        await asyncio.to_thread(write_access_policy, update.allow_public, settings)
+        result = await asyncio.to_thread(security_status, settings)
+    except ProtectionUnavailable:
+        raise HTTPException(status_code=503, detail="Security protection unavailable") from None
+    result["can_modify"] = True
+    return result
 
 
 @router.get(
@@ -60,7 +144,7 @@ async def set_template_variables(
     response_model=schemas.Import_Export,
 )
 async def export_settings(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    await auth_check(Authorize)
+    await require_superuser(Authorize, db)
     return await scrud.export_settings(db=db)
 
 
@@ -106,6 +190,8 @@ async def import_settings(
         json.loads(raw)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Settings import is not valid JSON")
+    except RecursionError:
+        raise HTTPException(422, "Settings export is too deeply nested") from None
 
     # Hand the CRUD layer a fresh file-like view so its `upload.file.read()`
     # call sees the same bytes we just validated (the original stream was
@@ -163,13 +249,18 @@ async def get_deployment_status(
     """Read-only status of the detected deployment mode and config checks.
 
     Returns the mode (local/public/mixed) and the list of configuration
-    health checks generated at startup. This endpoint is authenticated but
+    health checks recalculated from the persisted access policy. This endpoint is authenticated but
     not restricted to superusers — any authenticated operator may review
     the instance hardening status. (FND-501 / S7)
     """
     await auth_check(Authorize)
-    mode = settings.MODE
-    checks = settings.CONFIG_CHECKS
+    from api.utils.access_policy import read_access_policy, ProtectionUnavailable
+    from api.utils.deployment_mode import detect_deployment_mode
+    try:
+        policy = read_access_policy(settings)
+    except ProtectionUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+    mode, checks = detect_deployment_mode(settings, allow_public=policy["allow_public"])
     return {
         "mode": mode.value,
         "checks": [

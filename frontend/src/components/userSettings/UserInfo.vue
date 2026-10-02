@@ -34,6 +34,7 @@
               >
               </v-text-field>
             </v-form>
+            <v-alert v-if="error" type="error" class="my-2">{{ error }}</v-alert>
             <v-btn
               v-if="!newKey"
               class="primary"
@@ -48,10 +49,7 @@
               Generated API Key:</span
             >
             <v-btn
-              @click="
-                copykey();
-                saved = true;
-              "
+              @click="copykey"
               icon
               v-if="newKey"
               aria-label="Copy API Key"
@@ -59,13 +57,10 @@
               ><v-icon>mdi-clipboard-text-outline</v-icon></v-btn
             >
             <v-textarea
-              @click="
-                copykey();
-                saved = true;
-              "
+              @click="copykey"
               shaped
-              outlined
-              dense
+              variant="outlined"
+              density="compact"
               readonly
               no-resize
               v-if="newKey"
@@ -74,11 +69,11 @@
             ></v-textarea>
             <v-snackbar v-model="saved" bottom color="secondary">
               Copied to clipboard
-              <template v-slot:action="{ attrs }">
+              <template v-slot:action="{ props }">
                 <v-btn
                   color="primary"
-                  text
-                  v-bind="attrs"
+                  variant="text"
+                  v-bind="props"
                   @click="saved = false"
                 >
                   Close
@@ -101,7 +96,8 @@
         </v-card>
       </v-dialog>
     </h2>
-    <v-data-table dense :headers="headers" :items="apiKeys" :items-per-page="5">
+    <v-alert v-if="error && !keyDialog" type="error" class="mx-4">{{ error }}</v-alert>
+    <v-data-table density="compact" :headers="headers" :items="apiKeys" :items-per-page="5">
       <template v-slot:item.key_name="{ item }">
         <v-btn @click="revoke_api_key(item)" icon aria-label="Revoke API key" title="Revoke API key"
           ><v-icon>mdi-trash-can-outline</v-icon></v-btn
@@ -129,17 +125,18 @@ export default {
       },
       saved: false,
       isGenerating: false,
+      error: null,
       apiKeys: [],
       headers: [
         {
-          text: "Name",
-          value: "key_name",
+          title: "Name",
+          key: "key_name",
           sortable: true,
           align: "start"
         },
         {
-          text: "Created Time",
-          value: "created_at",
+          title: "Created Time",
+          key: "created_at",
           sortable: true
         }
       ]
@@ -147,50 +144,51 @@ export default {
   },
   methods: {
     async get_api_keys() {
-      let url = "/auth/api/keys";
-      await axios
-        .get(url)
-        .then(resp => {
-          for (let key in resp.data) {
-            if (!(resp.data[key] in this.apiKeys)) {
-              this.apiKeys.push(resp.data[key]);
-            }
-          }
-        })
-        .catch(() => {
-          //pass
-        });
+      try {
+        const resp = await axios.get("/auth/api/keys");
+        this.apiKeys = Array.isArray(resp.data) ? resp.data : [];
+      } catch (err) {
+        this.error = "Could not load API keys.";
+      }
     },
-    copykey() {
-      var copytext = document.getElementById("newapikey");
-      copytext.select();
-      copytext.focus();
-      copytext.select();
-      document.execCommand("Copy");
+    async copykey() {
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(this.newKey);
+        } else {
+          const copytext = document.getElementById("newapikey");
+          copytext.select();
+          if (!document.execCommand("copy")) throw new Error("Copy failed");
+        }
+        this.saved = true;
+      } catch (err) {
+        this.error = "Could not copy the API key. Select the text and copy it manually.";
+      }
     },
-    generate_api_key() {
+    async generate_api_key() {
       this.isGenerating = true;
-      const payload = { ...this.keyForm };
-      let url = "/auth/api/keys/new";
-      axios.post(url, payload).then(resp => {
+      this.error = null;
+      try {
+        const resp = await axios.post("/auth/api/keys/new", { ...this.keyForm });
         this.newKey = resp.data.token;
         this.apiKeys.push(resp.data);
-      }).finally(() => {
+      } catch (err) {
+        this.error = err.response?.data?.detail || "Could not generate API key.";
+      } finally {
         this.isGenerating = false;
-      });
+      }
     },
-    revoke_api_key(key) {
+    async revoke_api_key(key) {
       this.isLoading = true;
-      axios
-        .delete(`/auth/api/keys/${key.id}`)
-        .then(() => {
-          let idx = this.apiKeys.findIndex(x => x.id === key.id);
-          // F60: splice(-1) would remove the wrong element.
-          if (idx !== -1) this.apiKeys.splice(idx, 1);
-        })
-        .finally(() => {
-          this.isLoading = false;
-        });
+      this.error = null;
+      try {
+        await axios.delete(`/auth/api/keys/${key.id}`);
+        this.apiKeys = this.apiKeys.filter(item => item.id !== key.id);
+      } catch (err) {
+        this.error = err.response?.data?.detail || "Could not revoke API key.";
+      } finally {
+        this.isLoading = false;
+      }
     }
   },
   async created() {

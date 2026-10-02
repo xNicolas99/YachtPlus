@@ -59,9 +59,7 @@ def test_get_compose_sync_no_content(mock_find, mock_settings):
     mock_settings.COMPOSE_DIR = "/fake/dir/"
     mock_find.return_value = {"proj1": "proj1.yml"}
     with patch('builtins.open', mock_open(read_data="")):
-        res = _get_compose_sync("proj1")
-        assert res['version'] == '-'
-        assert res['services'] == {}
-        assert res['volumes'] == []
-        assert res['networks'] == []
-        assert res['content'] == ''
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as exc:
+            _get_compose_sync("proj1")
+        assert exc.value.status_code == 422

@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy import select, delete, or_
 from sqlalchemy.exc import IntegrityError
 
@@ -20,6 +20,9 @@ import os
 import socket
 import ipaddress
 import asyncio
+import time
+import shlex
+from api.utils.yaml_loader import load_yaml
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +33,17 @@ logger = logging.getLogger(__name__)
 # unbounded by default — so a malicious or slow-responding template URL
 # could hang the request worker indefinitely.
 TEMPLATE_FETCH_TIMEOUT_S = 15
+TEMPLATE_MAX_BYTES = 5 * 1024 * 1024
 
 def is_private_ip(ip: str) -> bool:
     if ip == '0.0.0.0':
         return True
     try:
         ip_obj = ipaddress.ip_address(ip)
-        return ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_multicast
+        return (not ip_obj.is_global or ip_obj.is_multicast or
+                (ip_obj.version == 6 and ip_obj in ipaddress.ip_network("64:ff9b::/96")))
     except ValueError:
-        return False # Invalid IP, treat as public/unsafe
+        return True
 
 def validate_url(url: str):
     parsed = urlparse(url)
@@ -114,7 +119,7 @@ class _SSRFBlocked(OSError):
     pass
 
 
-def _check_address_safe(host: str, port: int) -> None:
+def _check_address_safe(host: str, port: int):
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except (socket.gaierror, socket.herror, socket.timeout, OSError) as exc:
@@ -127,17 +132,38 @@ def _check_address_safe(host: str, port: int) -> None:
             raise _SSRFBlocked(
                 f"Refusing to connect to {host!r}: resolved to private IP {ip}"
             )
+    return infos
+
+
+def _connect_resolved(infos, timeout, source_address=None):
+    # Connect to the exact validated sockaddr; never resolve the hostname
+    # again. TLS still verifies the original hostname in HTTPSConnection.
+    error = None
+    for family, kind, proto, _, sockaddr in infos:
+        sock = socket.socket(family, kind, proto)
+        try:
+            sock.settimeout(timeout)
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(sockaddr)
+            return sock
+        except OSError as exc:
+            sock.close()
+            error = exc
+    raise error or _SSRFBlocked("No usable address")
 
 
 class _SSRFGuardedHTTPConnection(http.client.HTTPConnection):
     def connect(self):  # noqa: D401 — overrides stdlib
-        _check_address_safe(self.host, self.port or 80)
+        infos = _check_address_safe(self.host, self.port or 80)
+        self._create_connection = lambda address, timeout, source_address=None: _connect_resolved(infos, timeout, source_address)
         super().connect()
 
 
 class _SSRFGuardedHTTPSConnection(http.client.HTTPSConnection):
     def connect(self):  # noqa: D401
-        _check_address_safe(self.host, self.port or 443)
+        infos = _check_address_safe(self.host, self.port or 443)
+        self._create_connection = lambda address, timeout, source_address=None: _connect_resolved(infos, timeout, source_address)
         super().connect()
 
 
@@ -155,6 +181,7 @@ def _build_safe_opener():
     """Construct a urllib opener that re-validates DNS at connect time and
     rejects redirects to private addresses."""
     return urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
         SafeRedirectHandler(),
         _SSRFGuardedHTTPHandler(),
         _SSRFGuardedHTTPSHandler(),
@@ -164,17 +191,17 @@ def _build_safe_opener():
 # --- Async DB helpers -------------------------------------------------------
 
 async def get_templates(db: AsyncSession):
-    result = await db.execute(select(models.Template))
+    result = await db.execute(select(models.Template).options(selectinload(models.Template.items)))
     return result.scalars().all()
 
 
 async def get_template(db: AsyncSession, url: str):
-    result = await db.execute(select(models.Template).filter(models.Template.url == url))
+    result = await db.execute(select(models.Template).options(selectinload(models.Template.items)).filter(models.Template.url == url))
     return result.scalars().first()
 
 
 async def get_template_by_id(db: AsyncSession, id: int):
-    result = await db.execute(select(models.Template).filter(models.Template.id == id))
+    result = await db.execute(select(models.Template).options(selectinload(models.Template.items)).filter(models.Template.id == id))
     return result.scalars().first()
 
 
@@ -202,12 +229,10 @@ async def match_templates(db: AsyncSession, query: str):
 
 async def delete_template(db: AsyncSession, template_id: int):
     result = await db.execute(
-        select(models.Template).filter(models.Template.id == template_id)
+        select(models.Template).options(selectinload(models.Template.items)).filter(models.Template.id == template_id)
     )
     _template = result.scalars().first()
-    # B9: refuse to delete a non-existent row instead of 500ing on
-    # db.delete(None).
-    if not _template:
+    if _template is None:
         raise HTTPException(status_code=404, detail="Template not found")
     await db.delete(_template)
     await db.commit()
@@ -216,17 +241,22 @@ async def delete_template(db: AsyncSession, template_id: int):
 
 def _build_template_item(entry: dict) -> models.TemplateItem:
     """Map one entry from a template feed to a TemplateItem row."""
+    if not isinstance(entry, dict) or not isinstance(entry.get("title"), str):
+        raise HTTPException(422, "Each template must have a title")
+    command = entry.get("command")
+    if isinstance(command, str):
+        command = shlex.split(command)
     return models.TemplateItem(
         type=int(entry.get("type", 1)),
         title=entry["title"],
-        platform=entry["platform"],
+        platform=entry.get("platform", "linux"),
         description=entry.get("description", ""),
         name=entry.get("name", entry["title"].lower()),
-        command=entry.get("command"),
+        command=command,
         logo=entry.get("logo", ""),
         image=entry.get("image", ""),
         notes=entry.get("note", ""),
-        categories=entry.get("categories", ""),
+        categories=entry.get("categories", []),
         restart_policy=entry.get("restart_policy"),
         ports=conv_ports2dict(entry.get("ports", [])),
         network_mode=entry.get("network_mode", ""),
@@ -251,22 +281,41 @@ def _fetch_template_payload_sync(url: str):
     asyncio.to_thread so it never blocks the event loop.
     """
     ext = os.path.splitext(urlparse(url).path)[1].rstrip()
+    if ext not in {".yml", ".yaml", ".json"}:
+        raise HTTPException(422, "Invalid filetype")
+    validate_url(url)
+    deadline = time.monotonic() + TEMPLATE_FETCH_TIMEOUT_S
     opener = _build_safe_opener()
     with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as file:
-        if ext in (".yml", ".yaml"):
-            return yaml.load(file, Loader=yaml.SafeLoader)
-        if ext in (".json", "json"):
-            return json.load(file)
-    raise HTTPException(status_code=422, detail=f"Invalid filetype: {ext!r}")
+        raw = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise HTTPException(504, "Template download timed out")
+            sock = getattr(getattr(getattr(file, "fp", None), "raw", None), "_sock", None)
+            if sock is not None:
+                sock.settimeout(remaining)
+            chunk = file.read1(min(65536, TEMPLATE_MAX_BYTES + 1 - len(raw)))
+            if not chunk:
+                break
+            raw.extend(chunk)
+            if len(raw) > TEMPLATE_MAX_BYTES:
+                raise HTTPException(413, "Template catalog is too large")
+        return load_yaml(bytes(raw)) if ext in {".yml", ".yaml"} else json.loads(raw)
 
 
 async def _fetch_template_payload(url: str):
     """Async wrapper around the thread-bound fetch."""
-    return await asyncio.to_thread(_fetch_template_payload_sync, url)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch_template_payload_sync, url), TEMPLATE_FETCH_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        raise HTTPException(504, "Template download timed out") from None
 
 
 def _items_from_payload(payload) -> list[models.TemplateItem]:
     """Turn the loaded feed (list or dict) into TemplateItem rows."""
+    if isinstance(payload, dict) and "templates" in payload:
+        payload = payload["templates"]
     if isinstance(payload, list):
         return [_build_template_item(entry) for entry in payload]
     if isinstance(payload, dict):
@@ -275,7 +324,6 @@ def _items_from_payload(payload) -> list[models.TemplateItem]:
 
 
 async def add_template(db: AsyncSession, template: models.Template):
-    validate_url(template.url)
     _template = models.Template(title=template.title, url=template.url)
 
     try:
@@ -286,7 +334,7 @@ async def add_template(db: AsyncSession, template: models.Template):
     except (OSError, TypeError, ValueError, KeyError) as err:
         logger.warning("Template fetch failed for %s: %s", template.url, err)
         status_code = getattr(err, "status_code", 400)
-        raise HTTPException(status_code=status_code, detail=str(err))
+        raise HTTPException(status_code=status_code, detail="Failed to load template catalog")
 
     try:
         db.add(_template)
@@ -309,130 +357,27 @@ async def add_template(db: AsyncSession, template: models.Template):
 
 
 def _refresh_fetch_sync(url: str, ext: str):
-    """Synchronous refresh fetch (runs in a thread). Keeps SSRF guard."""
-    opener = _build_safe_opener()
-    with opener.open(url, timeout=TEMPLATE_FETCH_TIMEOUT_S) as fp:
-        if ext.rstrip() in (".yml", ".yaml"):
-            return yaml.load(fp, Loader=yaml.SafeLoader)
-        elif ext.rstrip() in (".json"):
-            return json.load(fp)
-        else:
-            logger.warning("Refresh: invalid template filetype %r for url %s", ext, url)
-            raise HTTPException(status_code=422, detail="Invalid filetype")
-    return None
+    return _fetch_template_payload_sync(url)
 
 
-async def refresh_template(db: AsyncSession, template_id: id):
-    result = await db.execute(
-        select(models.Template).filter(models.Template.id == template_id)
-    )
-    template = result.scalars().first()
+async def refresh_template(db: AsyncSession, template_id: int):
+    template = await get_template_by_id(db, template_id)
     if template is None:
-        raise HTTPException(status_code=404, detail="Template not found")
-
-    # Local-only templates (uploaded / created in-UI) have no remote
-    # URL to refresh — surface a clean 400 instead of bouncing off
-    # validate_url's "Invalid scheme" error.
+        raise HTTPException(404, "Template not found")
     if template.url and template.url.startswith(_LOCAL_TEMPLATE_URL_PREFIX):
-        raise HTTPException(
-            status_code=400,
-            detail="This catalog has no remote source; edit it via the manual editor instead.",
-        )
-
-    validate_url(template.url)
-
-    _template_path = urlparse(template.url).path
-    ext = os.path.splitext(_template_path)[1]
-
-    items = []
+        raise HTTPException(400, "This catalog has no remote source; edit it via the manual editor instead.")
     try:
-        loaded_file = await asyncio.to_thread(_refresh_fetch_sync, template.url, ext)
-        if isinstance(loaded_file, list):
-            for entry in loaded_file:
-
-                if entry.get("ports"):
-                    ports = conv_ports2dict(entry.get("ports", []))
-                sysctls = conv_sysctls2dict(entry.get("sysctls", []))
-
-                item = models.TemplateItem(
-                    type=int(entry["type"]),
-                    title=entry["title"],
-                    platform=entry["platform"],
-                    description=entry.get("description", ""),
-                    name=entry.get("name", entry["title"].lower()),
-                    command=entry.get("command"),
-                    logo=entry.get("logo", ""),  # default logo here!
-                    image=entry.get("image", ""),
-                    notes=entry.get("note", ""),
-                    categories=entry.get("categories", ""),
-                    restart_policy=entry.get("restart_policy"),
-                    ports=ports,
-                    network_mode=entry.get("network_mode", ""),
-                    network=entry.get("network", ""),
-                    volumes=entry.get("volumes", []),
-                    env=entry.get("env", []),
-                    devices=entry.get("devices", []),
-                    labels=entry.get("labels", []),
-                    sysctls=sysctls,
-                    cap_add=entry.get("cap_add", []),
-                    cpus=entry.get("cpus"),
-                    mem_limit=entry.get("mem_limit"),
-                )
-                items.append(item)
-        elif isinstance(loaded_file, dict):
-            entry = loaded_file
-            ports = conv_ports2dict(entry.get("ports", []))
-            sysctls = conv_sysctls2dict(entry.get("sysctls", []))
-
-            # Optional use classmethod from_dict
-            template_content = models.TemplateItem(
-                type=int(entry["type"]),
-                title=entry["title"],
-                platform=entry["platform"],
-                description=entry.get("description", ""),
-                name=entry.get("name", entry["title"].lower()),
-                command=entry.get("command"),
-                logo=entry.get("logo", ""),  # default logo here!
-                image=entry.get("image", ""),
-                notes=entry.get("note", ""),
-                categories=entry.get("categories", ""),
-                restart_policy=entry.get("restart_policy"),
-                ports=ports,
-                network_mode=entry.get("network_mode", ""),
-                network=entry.get("network", ""),
-                volumes=entry.get("volumes", []),
-                env=entry.get("env", []),
-                devices=entry.get("devices", []),
-                labels=entry.get("labels", []),
-                sysctls=sysctls,
-                cap_add=entry.get("cap_add", []),
-                cpus=entry.get("cpus"),
-                mem_limit=entry.get("mem_limit"),
-            )
-            items.append(template_content)
-    except Exception as exc:
-        if hasattr(exc, "code") and exc.code == 404:
-            raise HTTPException(status_code=exc.code, detail="Template source not found")
-        logger.error("Template refresh failed (ERR_001) for %s: %s", template.url, exc)
-        raise HTTPException(
-            status_code=500,
-            detail="Failed to refresh template. Check server logs for details."
-        )
-    else:
-        template.updated_at = datetime.now(timezone.utc)
+        items = _items_from_payload(await _fetch_template_payload(template.url))
         template.items = items
-
-        try:
-            await db.commit()
-            logger.info('Template "%s" updated successfully.', template.title)
-        except Exception as exc:
-            await db.rollback()
-            logger.error("Template commit failed (ERR_002) for %s: %s", template.title, exc)
-            raise HTTPException(
-                status_code=exc.response.status_code if hasattr(exc, "response") else 502,
-                detail=exc.explanation if hasattr(exc, "explanation") else "Upstream template fetch failed"
-            )
-
+        template.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+    except HTTPException:
+        await db.rollback()
+        raise
+    except Exception:
+        await db.rollback()
+        logger.exception("Template refresh failed")
+        raise HTTPException(400, "Failed to refresh template catalog") from None
     return template
 
 
@@ -445,8 +390,7 @@ async def read_app_template(db: AsyncSession, app_id):
         return template_item
     except Exception as exc:
         raise HTTPException(
-            status_code=exc.response.status_code if hasattr(exc, "response") else 502,
-            detail=exc.explanation if hasattr(exc, "explanation") else "Upstream template fetch failed"
+            status_code=400, detail="Template database operation failed"
         )
 
 
@@ -474,8 +418,9 @@ async def set_template_variables(db: AsyncSession, new_variables: models.Templat
         return new_template_variables
 
     except IntegrityError as exc:
+        await db.rollback()
         logger.error("set_template_variables failed: %s", exc)
-        raise HTTPException(status_code=409, detail="Template variable conflict")
+        raise HTTPException(status_code=409, detail="Template variable conflict") from None
 
 
 async def read_template_variables(db: AsyncSession):
@@ -570,7 +515,7 @@ async def replace_template_items(db: AsyncSession, template_id: int, payload, ti
     Edit dialog for `local://` templates (URL-based ones use /refresh).
     """
     result = await db.execute(
-        select(models.Template).filter(models.Template.id == template_id)
+        select(models.Template).options(selectinload(models.Template.items)).filter(models.Template.id == template_id)
     )
     template = result.scalars().first()
     if template is None:

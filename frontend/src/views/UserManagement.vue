@@ -143,11 +143,11 @@ export default {
     dialog: false,
     loading: false,
     headers: [
-      { text: "Username", value: "username" },
-      { text: "Admin", value: "is_superuser" },
-      { text: "Active", value: "is_active" },
-      { text: "2FA", value: "is_2fa_enabled" },
-      { text: "Actions", value: "actions", sortable: false }
+      { title: "Username", key: "username" },
+      { title: "Admin", key: "is_superuser" },
+      { title: "Active", key: "is_active" },
+      { title: "2FA", key: "is_2fa_enabled" },
+      { title: "Actions", key: "actions", sortable: false }
     ],
     users: [],
     editedIndex: -1,

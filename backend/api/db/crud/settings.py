@@ -5,8 +5,9 @@ from sqlalchemy.orm import selectinload
 from api.db.models import containers as models
 from api.db.models.settings import SecretKey
 from datetime import datetime
-from api.settings import get_settings
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from api.settings import get_settings
 settings = get_settings()
 import json
 import asyncio
@@ -18,11 +19,7 @@ logger = logging.getLogger(__name__)
 
 async def export_settings(db: AsyncSession):
     file_export = {}
-    # B4: eager-load Template.items — lazy load on AsyncSession during
-    # response_model serialization raises MissingGreenlet (export 500s).
-    result_t = await db.execute(
-        select(models.Template).options(selectinload(models.Template.items))
-    )
+    result_t = await db.execute(select(models.Template).options(selectinload(models.Template.items)))
     file_export["templates"] = result_t.scalars().all()
     result_v = await db.execute(select(models.TemplateVariables))
     file_export["variables"] = result_v.scalars().all()
@@ -39,19 +36,34 @@ async def get_secret_key(db: AsyncSession):
 
 
 async def generate_secret_key(db: AsyncSession):
-    # The JWT signing key is intentionally NOT persisted here: writing the
-    # plaintext key into the DB would duplicate a secret that already lives
-    # in settings.SECRET_KEY / SECRET_KEY_FILE and expose it to every DB
-    # read/backup. settings is the single source of truth.
-    logger.debug("Returning in-memory secret key")
+    # Keep the configured signing key in its dedicated secret file rather
+    # than creating a second plaintext copy in database backups.
     return get_settings().SECRET_KEY
 
 
 async def import_settings(db: AsyncSession, upload):
     # File read is blocking I/O; run it in a thread so it doesn't block the loop.
-    import_file = await asyncio.to_thread(upload.file.read)
-    decoded_import = import_file.decode("utf-8")
-    import_contents = json.loads(decoded_import)
+    limit = 5 * 1024 * 1024
+    import_file = await asyncio.to_thread(upload.file.read, limit + 1)
+    if len(import_file) > limit:
+        raise HTTPException(413, "Settings export is too large")
+    from api.db.schemas.templates import Import_Export
+    from pydantic import ValidationError
+    try:
+        import_contents = json.loads(import_file.decode("utf-8"))
+        if not isinstance(import_contents, dict) or not {"templates", "variables"} <= import_contents.keys():
+            raise ValueError("Missing settings export sections")
+        validated = Import_Export.model_validate(import_contents)
+        if any(not row.title or not row.url for row in validated.templates):
+            raise ValueError("Templates require title and URL")
+        for catalog in validated.templates:
+            if any(item.type is None or not item.title or not item.platform or not item.image for item in catalog.items):
+                raise ValueError("Template items require type, title, platform and image")
+        if any(not row.variable or row.replacement is None for row in validated.variables):
+            raise ValueError("Variables require name and replacement")
+        import_contents = validated.model_dump()
+    except (ValidationError, ValueError, UnicodeError, RecursionError):
+        raise HTTPException(422, "Invalid settings export") from None
 
     _templates = import_contents["templates"]
     _variables = import_contents["variables"]
@@ -60,30 +72,16 @@ async def import_settings(db: AsyncSession, upload):
     _var_list = []
 
     for template in _templates:
-        template_model = models.Template(
-            id=template["id"],
-            title=template["title"],
-            url=template["url"],
-            updated_at=datetime.fromisoformat(template["updated_at"]),
-            created_at=datetime.fromisoformat(template["created_at"]),
-        )
+        values = {key: template[key] for key in ("title", "url", "updated_at", "created_at") if template.get(key) is not None}
+        template_model = models.Template(**values)
         for item in template["items"]:
-            # B19: whitelist fields — unknown/attacker keys in the upload
-            # raised TypeError (500) and could overwrite internal columns.
-            _allowed_item = {
-                k: v for k, v in item.items()
-                if k in getattr(models.TemplateItem, '__table__').columns.keys()
-            }
-            _item = models.TemplateItem(**_allowed_item)
+            fields = {column.key for column in models.TemplateItem.__table__.columns} - {"id", "template_id"}
+            _item = models.TemplateItem(**{key: value for key, value in item.items() if key in fields})
             template_model.items.append(_item)
         _template_list.append(template_model)
 
     for variable in _variables:
-        _allowed_var = {
-            k: v for k, v in variable.items()
-            if k in getattr(models.TemplateVariables, '__table__').columns.keys()
-        }
-        variable_model = models.TemplateVariables(**_allowed_var)
+        variable_model = models.TemplateVariables(variable=variable["variable"], replacement=variable["replacement"])
         _var_list.append(variable_model)
 
     # Remove Existing
@@ -96,10 +94,11 @@ async def import_settings(db: AsyncSession, upload):
     db.add_all(_var_list)
     try:
         await db.commit()
-    except Exception as exc:
-        # B19: roll back the destructive replace-all on failure.
+    except IntegrityError:
         await db.rollback()
-        logger.exception("Settings import commit failed")
-        raise HTTPException(status_code=422, detail="Import failed: invalid payload or database error")
+        raise HTTPException(422, "Settings export contains conflicting data") from None
+    except SQLAlchemyError:
+        await db.rollback()
+        raise HTTPException(503, "Settings import database unavailable") from None
     response = {"success": "Import Successful"}
     return response

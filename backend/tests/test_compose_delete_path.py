@@ -8,7 +8,10 @@ from fastapi import HTTPException
 from api.actions.compose import _delete_compose_sync
 
 
-def test_delete_compose_resolves_inside_compose_dir():
+def test_delete_compose_resolves_inside_compose_dir(monkeypatch):
+    from unittest.mock import MagicMock
+    down = MagicMock()
+    monkeypatch.setattr("api.actions.compose._run_compose_command", down)
     """Deleting a project must resolve inside the configured compose dir."""
     with tempfile.TemporaryDirectory() as tmp:
         project_dir = pathlib.Path(tmp) / "demo"
@@ -23,6 +26,7 @@ def test_delete_compose_resolves_inside_compose_dir():
 
             _delete_compose_sync("demo")
             assert not project_dir.exists()
+            assert down.call_args.args[:2] == (["down"], str(project_dir))
 
 
 def test_delete_compose_rejects_traversal_project_name():

@@ -14,7 +14,7 @@ def _request_with(client=None, headers=None):
 
 def test_resolve_client_ip_with_none_client():
     req = _request_with(client=None)
-    assert _resolve_client_ip(req) == "127.0.0.1"
+    assert _resolve_client_ip(req) == "unknown"
 
 
 def test_rate_limit_key_with_none_client():
@@ -22,7 +22,7 @@ def test_rate_limit_key_with_none_client():
     # Should not raise; returns a deterministic key.
     key = rate_limit_key(req)
     assert isinstance(key, str)
-    assert "127.0.0.1" in key
+    assert key == "unknown"
 
 
 def test_resolve_client_ip_with_real_client():

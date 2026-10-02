@@ -82,7 +82,7 @@
                     >
                       <td v-if="network_labels.includes('Label')">
                         {{
-                          app.Config.Labels[`local.yachtplus.port.${port.hport}`]
+                          app.Config.Labels[`local.yacht.port.${port.hport}`]
                         }}
                       </td>
                       <td>{{ port.cport }}</td>
@@ -92,17 +92,17 @@
                           v-if="port.hip == '0.0.0.0'"
                           color="primary"
                           label
-                          :href="(port.hport == 443 || port.hport == 8443 ? 'https://' : window.location.protocol + '//') + host_ip + ':' + port.hport"
+                          :href="portHref(port)"
                           target="_blank"
-                          ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                          ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip
                         ><v-chip
                           v-else
                           color="primary"
                           label
-                          :href="(port.hport == 443 || port.hport == 8443 ? 'https://' : window.location.protocol + '//') + port.hip + ':' + port.hport"
+                          :href="portHref(port)"
                           target="_blank"
-                          ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                          ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip
                         >
                       </td>
@@ -300,9 +300,9 @@
             <v-window-item v-if="Array.isArray(app.Args) && app.Args.length">
               <v-list class="foreground">
                 <v-list-item v-for="(arg, index) in app.Args" :key="index">
-                  <v-list-item-content>
+                  <div>
                     {{ arg }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </v-list>
             </v-window-item>
@@ -348,9 +348,9 @@
                   v-for="(item, index) in app.HostConfig.CapAdd"
                   :key="index"
                 >
-                  <v-list-item-content>
+                  <div>
                     {{ item }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </v-list>
             </v-window-item>
@@ -362,6 +362,7 @@
 </template>
 
 <script>
+import { containerPortLink } from "@/utils/containerLinks";
 export default {
   data() {
     return {
@@ -377,7 +378,7 @@ export default {
       for (var port in this.convPorts(this.app.ports)) {
         if (
           this.app.Config.Labels[
-            `local.yachtplus.port.${this.convPorts(this.app.ports)[port].hport}`
+            `local.yacht.port.${this.convPorts(this.app.ports)[port].hport}`
           ]
         ) {
           var label_found = true;
@@ -392,6 +393,7 @@ export default {
     }
   },
   methods: {
+    portHref(port) { return containerPortLink(port, window.location); },
     convPorts(data) {
       let o = [];
       for (var k in data) {

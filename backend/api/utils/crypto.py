@@ -45,23 +45,14 @@ def _salt_path() -> str:
 
 def _load_or_create_salt() -> bytes:
     path = _salt_path()
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            salt = f.read()
-        if len(salt) >= _SALT_BYTES:
-            return salt
-        logger.warning("Fernet salt at %s is too short; regenerating.", path)
-
-    salt = secrets.token_bytes(_SALT_BYTES)
     try:
-        with open(path, "wb") as f:
-            f.write(salt)
+        from api.utils.secret_files import read_or_create_secret
+        return read_or_create_secret(path, lambda: secrets.token_bytes(_SALT_BYTES), _SALT_BYTES)
     except OSError as exc:
         raise RuntimeError(
             f"Could not persist Fernet salt at {path!r}: {exc}. Set FERNET_SALT_FILE "
             "to a writable path."
         ) from exc
-    return salt
 
 
 # Cache the derived key. SECRET_KEY and salt are both immutable for the

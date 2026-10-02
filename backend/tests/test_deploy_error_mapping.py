@@ -53,7 +53,8 @@ async def test_docker_apierror_status_propagated():
         with pytest.raises(HTTPException) as exc:
             await deploy_app(_form())
     assert exc.value.status_code == 409
-    assert "already in use" in exc.value.detail
+    assert "already in use" not in exc.value.detail
+    assert "Docker deployment failed" in exc.value.detail
 
 
 @pytest.mark.asyncio

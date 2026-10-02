@@ -95,7 +95,7 @@
                 <v-menu
                   close-on-click
                   close-on-content-click
-                  offset-y
+
                   class="hidden-md-and-up"
                 >
                   <template v-slot:activator="{ props }">
@@ -110,9 +110,9 @@
                   </template>
                   <v-list color="foreground" class="hidden-md-and-up" density="compact">
                     <v-list-item @click="editClick({ Name: app.name })">
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-file-document-edit-outline</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Edit</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -121,9 +121,9 @@
                       color="primary"
                       download
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-help-circle-outline</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Help</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -134,9 +134,9 @@
                         readAppStats(app.name);
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-play</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Start</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -146,17 +146,17 @@
                         closeStats();
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-stop</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Stop</v-list-item-title>
                     </v-list-item>
                     <v-list-item
                       @click="AppAction({ Name: app.name, Action: 'restart' })"
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-refresh</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Restart</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -167,15 +167,15 @@
                         closeStats();
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-fire</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Kill</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click="removeDialog = true">
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-delete</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Remove</v-list-item-title>
                     </v-list-item>
                   </v-list>
@@ -195,11 +195,11 @@
                     </v-card-text>
                     <v-card-actions>
                       <v-spacer></v-spacer>
-                      <v-btn text @click="removeDialog = false">
+                      <v-btn variant="text" @click="removeDialog = false">
                         Cancel
                       </v-btn>
                       <v-btn
-                        text
+                        variant="text"
                         color="error"
                         @click="
                           AppAction({ Name: app.name, Action: 'remove' });
@@ -379,11 +379,8 @@ export default {
   },
   methods: {
     supportHref(app) {
-      // F34: strip leading "/" from store app names.
-      const name = (app?.name || "").replace(/^\//, "");
-      return `/api/apps/${name}/support`;
+      return `/api/apps/${encodeURIComponent((app?.name || "").replace(/^\//, ""))}/support`;
     },
-
     ...mapActions({
       readApp: "apps/readApp",
       readAppProcesses: "apps/readAppProcesses",
@@ -412,7 +409,10 @@ export default {
       this.logConnection = new EventSource(`${origin}/api/apps/${appName}/logs`);
       this.logConnection.addEventListener("update", event => {
         this.logs.push(event.data);
+        if (this.logs.length > 10000) this.logs.splice(0, this.logs.length - 10000);
       });
+      this.logConnection.addEventListener("end", () => { this.logConnection?.close(); });
+      this.logConnection.onerror = () => { this.logConnection?.close(); };
     },
     readAppStats(appName) {
       if (this.statConnection) {
@@ -422,13 +422,8 @@ export default {
       this.statConnection = new EventSource(`${origin}/api/apps/${appName}/stats`);
       this.statConnection.addEventListener("update", event => {
         let statsGroup;
-        try {
-          statsGroup = JSON.parse(event.data);
-        } catch (e) {
-          // F31: a malformed SSE chunk killed the whole stats stream.
-          console.warn("F31: skipping malformed stats chunk", e);
-          return;
-        }
+        try { statsGroup = JSON.parse(event.data); }
+        catch { return; }
         this.stats.time.push(statsGroup.time);
         this.stats.cpu_percent.push(Math.round(statsGroup.cpu_percent));
         this.stats.mem_percent.push(Math.round(statsGroup.mem_percent));

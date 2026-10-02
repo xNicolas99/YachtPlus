@@ -14,10 +14,10 @@ async def test_fetch_template_payload_passes_timeout():
     fake_response.__enter__.return_value = fake_response
     fake_response.__exit__.return_value = False
     fake_opener.open.return_value = fake_response
+    fake_response.read1.side_effect = [b'{"title":"x","platform":"linux"}', b""]
 
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener), \
-         patch.object(crud, "json") as fake_json:
-        fake_json.load.return_value = {"title": "x", "platform": "linux"}
+         patch.object(crud, "validate_url", return_value=True):
         await crud._fetch_template_payload("http://example.test/feed.json")
 
     call_args = fake_opener.open.call_args
@@ -31,6 +31,7 @@ async def test_fetch_template_payload_rejects_unknown_extension():
     fake_response.__enter__.return_value = fake_response
     fake_response.__exit__.return_value = False
     fake_opener.open.return_value = fake_response
+    fake_response.read1.side_effect = [b'{"title":"x","platform":"linux"}', b""]
 
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener):
         with pytest.raises(HTTPException) as exc:
@@ -47,13 +48,13 @@ async def test_fetch_template_payload_yaml():
     fake_response.__enter__.return_value = fake_response
     fake_response.__exit__.return_value = False
     fake_opener.open.return_value = fake_response
+    fake_response.read1.side_effect = [b'{"title":"x","platform":"linux"}', b""]
 
     with patch.object(crud.urllib.request, "build_opener", return_value=fake_opener), \
-         patch.object(crud.yaml, "load", return_value={"k": "v"}) as fake_yaml_load:
+         patch.object(crud, "validate_url", return_value=True):
         result = await crud._fetch_template_payload("http://example.test/feed.yaml")
 
-    fake_yaml_load.assert_called_once()
-    assert result == {"k": "v"}
+    assert result == {"title": "x", "platform": "linux"}
 
 
 def test_fetch_template_payload_timeout_constant_is_positive():

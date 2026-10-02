@@ -1,5 +1,6 @@
 import axios from "axios";
 import router from "@/router/index";
+import { readResourcePages } from "@/utils/resourcePages";
 
 const state = {
   networks: [],
@@ -34,46 +35,36 @@ const mutations = {
 };
 
 const actions = {
-  _readNetworks({ commit }) {
-    const url = "/resources/networks/";
+  async _readNetworks({ commit }) {
     commit("setLoading", true);
-    return new Promise((resolve, reject) => {
-      axios
-        .get(url)
-        .then(response => {
-          const networks = response.data;
-          commit("setNetworks", networks);
-          resolve(networks);
-        })
-        .catch(error => {
-          commit("snackbar/setErr", error, { root: true });
-          reject(error);
-        })
-        .finally(() => {
-          commit("setLoading", false);
-        });
-    });
+    try {
+      const items = await readResourcePages("/resources/networks/");
+      commit("setNetworks", items);
+      return items;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      throw error;
+    } finally {
+      commit("setLoading", false);
+    }
   },
-  readNetworks({ commit }) {
+  async readNetworks({ commit }) {
     commit("setLoading", true);
-    const url = "/resources/networks/";
-    axios
-      .get(url)
-      .then(response => {
-        const networks = response.data;
-        commit("setNetworks", networks);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      const items = await readResourcePages("/resources/networks/");
+      commit("setNetworks", items);
+      return items;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
   readNetwork({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/networks/${id}`;
-    axios
+    return axios
       .get(url)
       .then(response => {
         const network = response.data;
@@ -86,56 +77,35 @@ const actions = {
         commit("setLoading", false);
       });
   },
-  writeNetwork({ commit }, payload) {
+  async writeNetwork({ commit, dispatch }, payload) {
     commit("setLoading", true);
-    const url = "/resources/networks/";
-    axios
-      .post(url, payload)
-      .then(response => {
-        const networks = response.data;
-        commit("setNetworks", networks);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .then(() => {
-        // F38: navigate only on success — finally also ran on errors.
-        router.push({ name: "Networks" });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      await axios.post("/resources/networks/", payload);
+      await dispatch("readNetworks");
+      await router.push({ name: "Networks" });
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
-  //   updateNetwork({ commit }, id) {
-  //     commit("setLoading", true);
-  //     const url = `/api/resources/networks/${id}/pull`;
-  //     axios
-  //       .get(url)
-  //       .then(response => {
-  //         const network = response.data;
-  //         commit("setNetwork", network);
-  //       })
-  //       .catch(err => {
-  //         commit("snackbar/setErr", err, { root: true });
-  //       })
-  //       .finally(() => {
-  //         commit("setLoading", false);
-  //       });
-  //   },
   deleteNetwork({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/networks/${id}`;
-    axios
+    return axios
       .delete(url)
       .then(response => {
         const network = response.data;
         commit("removeNetwork", network);
-        commit("setLoading", false);
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
-        commit("setLoading", false);
-      });
+        return false;
+      })
+      .finally(() => { commit("setLoading", false); });
   }
 };
 

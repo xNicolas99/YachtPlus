@@ -68,7 +68,8 @@ def test_accepts_payload_at_size_limit(tmp_path, monkeypatch):
         "api.actions.compose._get_compose_sync",
         lambda name: {"name": name, "path": str(tmp_path / name / "docker-compose.yml")},
     )
-    payload = "x" * (_COMPOSE_MAX_BYTES)  # exactly at the cap
+    prefix = "services:\n  web:\n    image: nginx\n#"
+    payload = prefix + "x" * (_COMPOSE_MAX_BYTES - len(prefix))  # valid YAML exactly at the cap
     compose = _compose(content=payload)
     result = _write_compose_sync(compose)
     assert result["name"] == "myproj"

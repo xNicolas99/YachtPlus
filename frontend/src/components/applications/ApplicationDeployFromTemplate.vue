@@ -36,7 +36,7 @@
             </v-card-subtitle>
             <v-text-field label="Search" v-model="search" class="mx-5" />
             <v-container fluid v-if="template">
-              <v-row dense>
+              <v-row density="compact">
                 <v-col
                   cols="12"
                   xl="2"
@@ -129,44 +129,44 @@
                   <v-divider />
                   <v-list class="secondary" density="compact">
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Name</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
 
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title class="px-5 text-centered">
                           {{ selectedApp.name }}
                         </v-list-item-title>
-                      </v-list-item-content>
+                      </div>
                     </v-list-item>
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Image</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title class="px-5 text-centered">
                           {{ selectedApp.image }}
                         </v-list-item-title>
-                      </v-list-item-content>
+                      </div>
                     </v-list-item>
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Platform</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title class="px-5 text-centered">
                           {{ selectedApp.platform }}
                         </v-list-item-title>
-                      </v-list-item-content>
+                      </div>
                     </v-list-item>
                   </v-list>
                 </v-card>
@@ -179,23 +179,23 @@
                   <v-divider />
                   <v-list density="compact" class="secondary">
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Label</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Host Port</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Container Port/Proto</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
                     </v-list-item>
                     <v-divider />
@@ -203,21 +203,21 @@
                       v-for="port in selectedApp.ports"
                       :key="port.hport"
                     >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           port.label || "None"
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           port.hport
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title class="px-5 text-centered">
                           {{ port.cport }}/{{ port.proto }}
                         </v-list-item-title>
-                      </v-list-item-content>
+                      </div>
                     </v-list-item>
                   </v-list>
                 </v-card>
@@ -231,17 +231,17 @@
                   <v-divider />
                   <v-list density="compact" class="secondary">
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Host</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content>
+                      <div>
                         <v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Container</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
                     </v-list-item>
                     <v-divider />
@@ -249,16 +249,16 @@
                       v-for="volume in selectedApp.volumes"
                       :key="volume.container"
                     >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           volume.bind
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
 
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           volume.container
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
                     </v-list-item>
                   </v-list>
@@ -273,23 +273,23 @@
                   <v-divider />
                   <v-list density="compact" class="secondary">
                     <v-list-item>
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Label</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Name</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title
                           class="px-5 text-centered font-weight-bold"
                           >Default</v-list-item-title
-                        ></v-list-item-content
+                        ></div
                       >
                     </v-list-item>
                     <v-divider />
@@ -297,20 +297,20 @@
                       v-for="env in selectedApp.env"
                       :key="env.label"
                     >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           env.label
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           env.name
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
-                      <v-list-item-content
+                      <div
                         ><v-list-item-title class="px-5 text-centered">{{
                           env.default
-                        }}</v-list-item-title></v-list-item-content
+                        }}</v-list-item-title></div
                       >
                     </v-list-item>
                   </v-list>
@@ -319,11 +319,11 @@
               <v-card-actions>
                 <v-spacer></v-spacer>
 
-                <v-btn text @click="appDetailsDialog = false">
+                <v-btn variant="text" @click="appDetailsDialog = false">
                   Cancel
                 </v-btn>
                 <v-btn
-                  text
+                  variant="text"
                   color="primary"
                   :to="{ name: 'Deploy', params: { appId: selectedApp.id } }"
                 >

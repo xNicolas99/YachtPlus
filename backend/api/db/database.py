@@ -1,22 +1,15 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import StaticPool
+from sqlalchemy.engine import make_url
 from api.settings import get_settings
 settings = get_settings()
 
 
-# Translate DB URL for async drivers. Match the prefixes exactly and only
-# rewrite the plain (sync) form — a URL that already uses an async driver
-# (e.g. `sqlite+aiosqlite:///...`) must pass through untouched. The previous
-# substring `replace()` rewrote async URLs a second time and produced
-# `sqlite+aiosqlite+aiosqlite:///...` (NoSuchModuleError at startup).
-db_url = get_settings().DATABASE_URL
-if db_url.startswith("sqlite:///"):
-    db_url = "sqlite+aiosqlite:///" + db_url[len("sqlite:///"):]
-elif db_url.startswith("postgresql://"):
-    db_url = "postgresql+asyncpg://" + db_url[len("postgresql://"):]
-elif db_url.startswith("mysql://"):
-    db_url = "mysql+aiomysql://" + db_url[len("mysql://"):]
+# Translate DB URL for async drivers
+database_url = make_url(get_settings().DATABASE_URL)
+async_drivers = {"sqlite": "sqlite+aiosqlite", "postgresql": "postgresql+asyncpg", "postgres": "postgresql+asyncpg", "mysql": "mysql+aiomysql"}
+db_url = database_url.set(drivername=async_drivers.get(database_url.get_backend_name(), database_url.drivername)).render_as_string(hide_password=False)
 
 # SQLite needs StaticPool and specific connect_args for async testing
 connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
@@ -37,6 +30,21 @@ SessionLocal = async_sessionmaker(
 )
 
 Base = declarative_base()
+
+
+def sync_migration_url(database_url: str) -> str:
+    """Use installed synchronous drivers for Alembic's migration engine."""
+    url = make_url(database_url)
+    drivers = {
+        "sqlite+aiosqlite": "sqlite",
+        "postgresql": "postgresql+psycopg2",
+        "postgresql+asyncpg": "postgresql+psycopg2",
+        "mysql": "mysql+pymysql",
+        "mysql+aiomysql": "mysql+pymysql",
+    }
+    return url.set(drivername=drivers.get(url.drivername, url.drivername)).render_as_string(
+        hide_password=False
+    )
 
 async def get_db():
     async with SessionLocal() as db:

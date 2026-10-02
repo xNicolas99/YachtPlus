@@ -1,3 +1,4 @@
+from api.utils.container_stats import memory_usage
 import api.db.models.containers as models
 from api.db.database import SessionLocal
 from api.settings import get_settings
@@ -12,6 +13,7 @@ import json
 from fastapi import HTTPException
 import logging
 import os
+import posixpath
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +110,7 @@ def conv_volumes2data(data, t_variables=None):
     # Default to /config only
     whitelist_str = os.environ.get("VOLUME_WHITELIST", "/config")
     # Parse into a list of allowed prefixes
-    allowed_paths = [p.strip() for p in whitelist_str.split(",") if p.strip()]
+    allowed_paths = [posixpath.normpath(p.strip()) for p in whitelist_str.split(",") if p.strip()]
 
     # Always allow docker socket if explicitly requested and whitelisted?
     # Actually, if the user puts /var/run/docker.sock in VOLUME_WHITELIST env, it is allowed.
@@ -123,6 +125,14 @@ def conv_volumes2data(data, t_variables=None):
                     new_path = volume.bind.replace(t_var.variable, t_var.replacement)
                     volume.bind = new_path
 
+            # Normalize AFTER variable substitution. A textual '/config/'
+            # prefix accepted '/config/../../etc' and escaped the allowlist.
+            if not volume.bind.startswith("/") or "\\" in volume.bind or "\x00" in volume.bind:
+                raise HTTPException(403, "Volume bind paths must be absolute Linux paths.")
+            volume.bind = posixpath.normpath("/" + volume.bind.lstrip("/"))
+            sensitive = ("/var/run/docker.sock", "/run/docker.sock", "/proc", "/sys", "/etc", "/root", "/boot", "/dev")
+            if any(volume.bind == p or volume.bind.startswith(p + "/") for p in sensitive):
+                raise HTTPException(403, "Volume bind path is restricted.")
             # Whitelist Check
             # Check if the bind path starts with any of the allowed paths
             is_allowed = False
@@ -361,7 +371,7 @@ async def get_app_stats(app_name):
         container: DockerContainer = await docker.containers.get(app_name)
         stats = container.stats(stream=True)
         async for line in stats:
-            mem_current = line["memory_stats"]["usage"]
+            mem_current = memory_usage(line.get("memory_stats", {}))
             mem_total = line["memory_stats"]["limit"]
 
             try:

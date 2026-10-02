@@ -13,6 +13,8 @@ in tests/test_users_delete.py).
 """
 import os
 import tempfile
+import inspect
+from functools import wraps
 import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
@@ -29,6 +31,29 @@ def _noop_limit(self, *args, **kwargs):
     return lambda f: f
 
 Limiter.limit = _noop_limit
+
+# Production refuses unknown peers. Give legacy integration tests a real
+# loopback source; explicit client tuples in network-policy tests stay intact.
+from starlette.testclient import TestClient
+_original_testclient_init = TestClient.__init__
+_testclient_signature = inspect.signature(_original_testclient_init)
+
+@wraps(_original_testclient_init)
+def _local_testclient_init(self, *args, **kwargs):
+    bound = _testclient_signature.bind_partial(self, *args, **kwargs)
+    if "client" not in bound.arguments:
+        kwargs["client"] = ("127.0.0.1", 50000)
+    return _original_testclient_init(self, *args, **kwargs)
+
+TestClient.__init__ = _local_testclient_init
+
+# Security state and failure logs must never read/write a host /config during
+# tests. TemporaryDirectory keeps this session isolated from prior test runs.
+_security_test_directory = tempfile.TemporaryDirectory(prefix="yacht-security-tests-")
+os.environ.setdefault("YACHT_ACCESS_POLICY_FILE", os.path.join(_security_test_directory.name, "access-policy.json"))
+os.environ.setdefault("YACHT_SECURITY_LOG", os.path.join(_security_test_directory.name, "auth.log"))
+os.environ.setdefault("YACHT_FAIL2BAN_STATE_DIR", os.path.join(_security_test_directory.name, "state"))
+os.environ.setdefault("YACHT_FAIL2BAN_REQUIRED", "false")
 
 # Starlette's TestClient sends Host: testserver by default. Add it to the
 # allowed-host list so TrustedHostMiddleware doesn't 400 every request.

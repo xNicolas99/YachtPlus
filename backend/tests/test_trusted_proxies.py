@@ -64,7 +64,7 @@ def test_xff_walked_right_to_left_when_proxy_trusted():
         ip = _resolve_client_ip(
             _request("10.0.0.1", {"X-Forwarded-For": "1.1.1.1, 10.0.0.50"})
         )
-    assert ip == "1.1.1.1"  # rightmost non-private hop
+    assert ip == "10.0.0.50"  # stop at an untrusted private hop
 
 
 @pytest.mark.asyncio

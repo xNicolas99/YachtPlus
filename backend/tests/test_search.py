@@ -35,6 +35,7 @@ def _template_orm(**kwargs):
     """Create an object that exposes attributes like a Template ORM row."""
     defaults = {
         "id": 1,
+        "template_id": 1,
         "title": "Demo",
         "name": "demo",
         "description": "desc",
@@ -120,7 +121,7 @@ async def test_search_template_orm_conversion(mock_auth_enabled):
         "description": "Media server",
         "image": "linuxserver/plex",
         "logo": "plex.png",
-        "url": "http://example.com/plex.json",
+        "url": "/templates/1",
     }
 
 

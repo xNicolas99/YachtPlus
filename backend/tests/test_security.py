@@ -1,6 +1,11 @@
 import pytest
 import pytest_asyncio
 from unittest.mock import MagicMock, patch
+import asyncio
+
+@pytest.fixture(autouse=True)
+def alert_cooldown(monkeypatch):
+    monkeypatch.setattr("api.utils.security._last_alert", 0.0)
 from fastapi import Request, HTTPException, status
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.pool import StaticPool
@@ -63,6 +68,8 @@ async def test_send_security_alert_with_admin_user(db):
         mock_smtp.return_value = mock_server
 
         await send_security_alert(db, "1.2.3.4", "Test Reason", "testuser")
+        from api.utils.security import _alert_tasks
+        await asyncio.gather(*_alert_tasks)
 
     mock_smtp.assert_called_once_with("smtp.example.com", 587, timeout=10)
     mock_server.starttls.assert_called_once()
@@ -96,6 +103,8 @@ async def test_send_security_alert_no_tls_no_auth(db):
         mock_smtp.return_value = mock_server
 
         await send_security_alert(db, "1.2.3.4", "Test Reason")
+        from api.utils.security import _alert_tasks
+        await asyncio.gather(*_alert_tasks)
 
     mock_smtp.assert_called_once_with("smtp.example.com", 25, timeout=10)
     mock_server.starttls.assert_not_called()
@@ -112,6 +121,8 @@ async def test_send_security_alert_no_tls_no_auth(db):
 async def test_send_security_alert_no_settings(db, caplog):
     with caplog.at_level("WARNING", logger="api.utils.security"):
         await send_security_alert(db, "1.2.3.4", "Test Reason")
+        from api.utils.security import _alert_tasks
+        await asyncio.gather(*_alert_tasks)
 
     assert "SMTP settings not found" in caplog.text
 

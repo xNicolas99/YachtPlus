@@ -1,69 +1,106 @@
+# Default deployment: LAN access, mandatory fail2ban, capability-free app.
 services:
   dockerproxy:
+    labels:
+      local.yachtplus.infrastructure: docker-proxy
     image: tecnativa/docker-socket-proxy
     environment:
-      - CONTAINERS=1
-      - IMAGES=1
-      - NETWORKS=1
-      - VOLUMES=1
-      - POST=1 # Erlaubt Steuerung (Start/Stop), blockiert aber gefährliche Host-Befehle
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      INFO: 1
+      BUILD: 1
+      EXEC: 1
+      POST: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker_api
     restart: unless-stopped
-    # Standard container hardening — applies to both services. The socket
-    # proxy never needs to escalate privileges or write to its own FS, and
-    # capping memory keeps a compromised proxy from being weaponised as a
-    # DoS lever against the host.
     security_opt:
       - no-new-privileges:true
     read_only: true
-    # tecnativa/docker-socket-proxy's entrypoint writes its haproxy
-    # config to /tmp/haproxy.cfg on every start. With read_only: true
-    # alone the container crash-loops with `can't create /tmp/haproxy.cfg:
-    # Read-only file system`. tmpfs gives /tmp a writable in-memory
-    # mount while keeping the rest of the rootfs read-only.
     tmpfs:
-      - /tmp
+      - /tmp:noexec,nosuid,nodev,size=16m
     cap_drop:
       - ALL
     mem_limit: 128m
     pids_limit: 100
 
-  yachtplus:
-    build: .
-    ports:
-      # Host 8000 -> container 8080 (nginx). Nginx serves the Vue SPA
-      # from / and reverse-proxies /api/* to gunicorn on 127.0.0.1:8000
-      # *inside* the container. Mapping host 8000 -> container 8000
-      # would bypass nginx and expose only the raw FastAPI, with no UI
-      # and no SPA routing — that was the "I can't access it" symptom.
-      - "8000:8080"
-    environment:
-      - DOCKER_HOST=tcp://dockerproxy:2375 # Proxy statt direktem Socket
-    depends_on:
-      - dockerproxy
-    restart: unless-stopped
+  fail2ban:
+    labels:
+      local.yachtplus.infrastructure: fail2ban
+    build: ./fail2ban
+    user: "1001:1000"
+    network_mode: none
     volumes:
-      # Persist SQLite DB, SECRET_KEY, Fernet salt and setup flag across
-      # container recreation.
-      - yacht_config:/config
-    # YachtPlus itself does not need any host capability beyond the ones
-    # the runtime asks for explicitly. start.sh chmods /config + bind-mounts
-    # so the FS isn't read-only, but no-new-privileges + dropping the full
-    # cap set still blocks the common privilege-escalation paths.
+      - yacht_security_logs:/config/security:ro
+      - yacht_security_state:/run/yachtplus-security
+    restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1001,gid=1000,mode=0700,noexec,nosuid,nodev,size=16m
     cap_drop:
       - ALL
-    cap_add:
-      - CHOWN          # start.sh chowns /config to appuser
-      - SETUID         # gosu drops to appuser
-      - SETGID
-      - DAC_OVERRIDE   # nginx writes pid + cache to mounted volumes
-      - NET_BIND_SERVICE  # nginx listens on 8080
+    mem_limit: 128m
+    pids_limit: 50
+
+  yachtplus:
+    labels:
+      local.yachtplus.infrastructure: application
+    build: .
+    user: "1000:1000"
+    ports:
+      - "8000:8080"
+    environment:
+      DOCKER_HOST: tcp://dockerproxy:2375
+      YACHT_DOCKER_PROXY_NETWORK: ${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api
+      YACHT_ALLOW_PRIVATE_NETWORK_HOSTS: "true"
+      YACHT_ALLOWED_HOSTS: ${YACHT_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+      YACHT_HTTP_TRUSTED_PROXIES: ${YACHT_HTTP_TRUSTED_PROXIES:-}
+      YACHT_TRUSTED_PROXIES: "127.0.0.1,::1"
+      YACHT_FAIL2BAN_REQUIRED: "true"
+      YACHT_FAIL2BAN_STATE_DIR: /run/yachtplus-security
+      YACHT_SECURITY_LOG: /config/security/auth.log
+      FORWARDED_ALLOW_IPS: ""
+    depends_on:
+      dockerproxy:
+        condition: service_started
+      fail2ban:
+        condition: service_healthy
+    networks:
+      - docker_api
+      - app_egress
+    restart: unless-stopped
+    volumes:
+      - yacht_config:/config
+      - yacht_compose:/compose
+      - yacht_security_logs:/config/security
+      - yacht_security_state:/run/yachtplus-security:ro
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1777,nosuid,nodev,size=128m
+      - /var/run/nginx:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=8m
+      - /var/www:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=64m
+      - /home/appuser:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=8m
+    cap_drop:
+      - ALL
     mem_limit: 1g
     pids_limit: 200
 
 volumes:
   yacht_config:
-    driver: local
+  yacht_compose:
+  yacht_security_logs:
+  yacht_security_state:
+
+networks:
+  docker_api:
+    name: ${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api
+    internal: true
+  app_egress:

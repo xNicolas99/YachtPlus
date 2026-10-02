@@ -61,7 +61,7 @@ def test_rejects_container_namespace_jump():
 
 def test_accepts_known_network_modes():
     for mode in ("bridge", "host", "none", "default"):
-        _validate_deploy_template(_form(network_mode=mode))
+        _validate_deploy_template(_form(network_mode=mode, security_profile="image-default", confirm_image_default=True))
 
 
 def test_rejects_dangerous_capability():

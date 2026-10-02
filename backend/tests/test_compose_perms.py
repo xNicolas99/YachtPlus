@@ -143,9 +143,9 @@ async def test_compose_delete_with_perm_delete(db):
 
 
 @pytest.mark.asyncio
-async def test_compose_pull_does_not_require_action_perm(db):
+async def test_compose_pull_requires_restart_permission(db):
     """`pull` only fetches images; no run-state mutation, so no perm gate."""
-    await _add(db, "puller")
+    await _add(db, "puller", perm_restart=True)
 
     with patch(
         "api.routers.compose.compose_action",

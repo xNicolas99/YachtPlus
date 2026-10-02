@@ -20,10 +20,10 @@ class Template(Base):
 
     # alternative: DateTime(timezone=True), sqlalchemy.sql.func.now()
     created_at = Column(
-        DateTime, nullable=False, unique=False, index=False, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), nullable=False, unique=False, index=False, default=lambda: datetime.now(timezone.utc)
     )
     updated_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         unique=False,
         index=False,

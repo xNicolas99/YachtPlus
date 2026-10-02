@@ -2,6 +2,18 @@ import pytest
 from datetime import datetime, timedelta, timezone
 import jwt
 from unittest.mock import MagicMock, patch
+import pytest_asyncio
+
+@pytest_asyncio.fixture(autouse=True)
+async def auth_database(db, monkeypatch):
+    from contextlib import asynccontextmanager
+    from api.db.models.users import User
+    db.add(User(username="testuser", hashed_password="pw", is_active=True, auth_version="test-version"))
+    await db.commit()
+    @asynccontextmanager
+    async def sessions():
+        yield db
+    monkeypatch.setattr("api.db.database.SessionLocal", sessions)
 from fastapi import HTTPException, Request, Response
 
 from api.auth.jwt import (
@@ -120,6 +132,7 @@ async def test_verify_token_pyjwt_error(mock_secret_key):
 
 def test_get_current_user_token_header():
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {"Authorization": "Bearer abc123"}
     request.cookies = {}
     assert get_current_user_token(request) == "abc123"
@@ -127,6 +140,7 @@ def test_get_current_user_token_header():
 
 def test_get_current_user_token_cookie():
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {}
     request.cookies = {"access_token_cookie": "cookie_token"}
     assert get_current_user_token(request) == "cookie_token"
@@ -134,6 +148,7 @@ def test_get_current_user_token_cookie():
 
 def test_get_current_user_token_none():
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {}
     request.cookies = {}
     assert get_current_user_token(request) is None
@@ -156,7 +171,7 @@ async def test_get_current_user_no_token(monkeypatch, mock_secret_key):
 @pytest.mark.asyncio
 async def test_get_current_user_success(monkeypatch, mock_secret_key):
     monkeypatch.setattr("api.auth.jwt.settings.DISABLE_AUTH", False)
-    token = create_access_token({"sub": "testuser"})
+    token = create_access_token({"sub": "testuser", "av": "test-version"})
     token_data = await get_current_user(token)
     assert isinstance(token_data, TokenData)
     assert token_data.username == "testuser"
@@ -166,8 +181,9 @@ async def test_get_current_user_success(monkeypatch, mock_secret_key):
 async def test_auth_wrapper_jwt_required(monkeypatch, mock_secret_key):
     monkeypatch.setattr("api.auth.jwt.settings.DISABLE_AUTH", False)
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {}
-    request.cookies = {"access_token_cookie": create_access_token({"sub": "testuser"})}
+    request.cookies = {"access_token_cookie": create_access_token({"sub": "testuser", "av": "test-version"})}
     wrapper = AuthWrapper(request)
     user = await wrapper.jwt_required()
     assert user.username == "testuser"
@@ -177,6 +193,7 @@ async def test_auth_wrapper_jwt_required(monkeypatch, mock_secret_key):
 async def test_auth_wrapper_jwt_required_setup_pending_forbidden(monkeypatch, mock_secret_key):
     monkeypatch.setattr("api.auth.jwt.settings.DISABLE_AUTH", False)
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {}
     request.cookies = {"access_token_cookie": create_access_token({"sub": "u", "setup_pending": True})}
     wrapper = AuthWrapper(request)
@@ -189,8 +206,9 @@ async def test_auth_wrapper_jwt_required_setup_pending_forbidden(monkeypatch, mo
 async def test_auth_wrapper_get_jwt_subject(monkeypatch, mock_secret_key):
     monkeypatch.setattr("api.auth.jwt.settings.DISABLE_AUTH", False)
     request = MagicMock(spec=Request)
+    request.scope = {}
     request.headers = {}
-    request.cookies = {"access_token_cookie": create_access_token({"sub": "testuser"})}
+    request.cookies = {"access_token_cookie": create_access_token({"sub": "testuser", "av": "test-version"})}
     wrapper = AuthWrapper(request)
     subject = await wrapper.get_jwt_subject()
     assert subject == "testuser"
@@ -198,15 +216,18 @@ async def test_auth_wrapper_get_jwt_subject(monkeypatch, mock_secret_key):
 
 def test_auth_wrapper_unset_jwt_cookies():
     request = MagicMock(spec=Request)
+    request.scope = {}
     wrapper = AuthWrapper(request)
     response = MagicMock(spec=Response)
     wrapper.unset_jwt_cookies(response)
-    response.delete_cookie.assert_called_once_with("access_token_cookie", path="/")
+    response.delete_cookie.assert_any_call("access_token_cookie", path="/")
+    response.delete_cookie.assert_any_call("csrf_access_token", path="/")
 
 
 def test_auth_wrapper_set_access_cookies():
     request = MagicMock(spec=Request)
+    request.scope = {}
     wrapper = AuthWrapper(request)
     response = MagicMock(spec=Response)
     wrapper.set_access_cookies("sometoken", response)
-    response.set_cookie.assert_called_once()
+    assert response.set_cookie.call_count == 2

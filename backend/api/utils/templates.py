@@ -45,7 +45,7 @@ def conv_ports2dict(data: List[str]) -> List[Dict[str, str]]:
                 portlst.append(
                     {"cport": cport, "hport": hport, "proto": proto, "label": label}
                 )
-            return portlst
+        return portlst
 
     elif isinstance(data, list):
         delim = ":"

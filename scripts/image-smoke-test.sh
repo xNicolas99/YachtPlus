@@ -1,6 +1,6 @@
 #!/bin/sh
 # Image smoke test for YachtPlus Docker builds.
-# Run inside the built image or via: docker run --rm yachtplus:latest /scripts/image-smoke-test.sh
+# Run with: docker run --rm --entrypoint sh yachtplus:latest /scripts/image-smoke-test.sh
 set -eu
 
 echo "=== Docker CLI ==="
@@ -9,10 +9,18 @@ docker --version
 echo "=== Docker Compose plugin ==="
 docker compose version
 
-echo "=== Compose standalone symlink ==="
-test -L /usr/local/bin/docker-compose || test -x /usr/local/bin/docker-compose
+echo "=== Nginx configuration and frontend bundle ==="
+nginx -t
+test -s /app/index.html
+test -d /app/assets
+test -s /app/version.json
 
-echo "=== YachtPlus compose command path (from backend/api/actions/compose.py) ==="
-docker compose ls 2>/dev/null || true
+echo "=== No packaged credentials or runtime databases ==="
+packaged_files="$(find /api /config -type f \( -name '.secret_key' -o -name '.fernet_salt' -o -name '.env' -o -name '.env.*' -o -name '*.db' -o -name '*.db-*' \) -print -quit)"
+test -z "$packaged_files"
+
+echo "=== Backend import ==="
+cd /api
+python3 -c 'from api.main import app; assert app.title == "YachtPlus API"'
 
 echo "OK"

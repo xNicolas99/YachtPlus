@@ -189,7 +189,7 @@
         :stats="stats[app.name]"
         @click="handleAppClick(app.name)"
         @logs="handleLogs(app.name)"
-        @action="(action) => sendContainerAction(action, app.name)"
+        @action="(action) => handleContainerAction(action, app.name)"
         class="cursor-pointer"
       />
     </div>
@@ -343,20 +343,12 @@ export default {
     handleLogs(appName) {
       this.$router.push({ path: `/apps/${appName}/logs` });
     },
-    async sendContainerAction(action, appName) {
-      // H2: backend only accepts POST /containers/{id}/start|stop|restart,
-      // removal is DELETE /containers/{id}. The old GET returned 405.
-      const isRemove = action === "remove";
-      const url = isRemove
-        ? `/containers/${appName}`
-        : `/containers/${appName}/${action}`;
+    async handleContainerAction(action, appName) {
+      if (action === "remove" && !window.confirm(`Remove container ${appName}?`)) return;
       try {
         this.loading = true;
-        if (isRemove) {
-          await axios.delete(url);
-        } else {
-          await axios.post(url);
-        }
+        if (action === "remove") await axios.delete(`/containers/${encodeURIComponent(appName)}`);
+        else await axios.post(`/containers/${encodeURIComponent(appName)}/${action}`);
         setTimeout(() => { this.refresh(); }, 1000);
         this.$store.commit('snackbar/setMessage', `Container ${action}ed successfully.`, { root: true });
       } catch (err) {
@@ -366,8 +358,6 @@ export default {
       }
     },
     formatBytes(bytes, decimals = 2) {
-      // F32: undefined/null/NaN must not produce "NaN undefined".
-      if (bytes === undefined || bytes === null || isNaN(bytes)) return "0 B";
       if (!+bytes) return '0 B';
       const k = 1024;
       const dm = decimals < 0 ? 0 : decimals;

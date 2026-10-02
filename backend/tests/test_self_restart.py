@@ -97,7 +97,7 @@ async def test_self_restart_branch_schedules_by_name():
     mock_aiofiles_ctx.__aexit__ = AsyncMock(return_value=False)
 
     with patch("api.actions.apps.aiodocker.Docker") as MockDockerCls, \
-         patch("aiofiles.open", return_value=mock_aiofiles_ctx), \
+         patch("api.actions.apps._get_self_id", new=AsyncMock(return_value=container_id)), \
          patch("api.actions.apps.get_apps", new=fake_get_apps), \
          patch("api.actions.apps._restart_by_name") as rb_name:
         MockDockerCls.return_value.__aenter__ = fake_aenter
@@ -110,6 +110,8 @@ async def test_self_restart_branch_schedules_by_name():
     assert result == [{"name": "yachtplus"}]
     # The scheduled task must be restart-by-name with the NAME argument
     assert captured["fn"] is not None
-    assert captured["args"] == ("yachtplus",)
+    # Use the inspected immutable ID so a concurrent rename cannot redirect
+    # the deferred restart to a different container with the same name.
+    assert captured["args"] == (container_id,)
     # The dead pattern (passing the bound container object) must be gone
     assert captured["args"] != (mock_container,)

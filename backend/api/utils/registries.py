@@ -3,6 +3,8 @@ import httpx
 import logging
 import asyncio
 from datetime import datetime, timedelta
+from urllib.parse import quote
+import re
 
 from api.utils.registry_helpers import get_registry_and_name, drop_registry_prefix
 
@@ -15,11 +17,13 @@ logger = logging.getLogger(__name__)
 #   'linuxserver': { 'data': [...], 'timestamp': ... }
 #   'search_query_registry': { 'data': [...], 'timestamp': ... }
 # }
-REGISTRY_CACHE = {}
-# B17: bound the cache - search keys accumulated without limit and
-# enabled a memory-DoS via /api/search (attacker-controlled keys,
-# no eviction). Max-size cap with oldest-first eviction on write.
-_CACHE_MAX_ENTRIES = 512
+class BoundedCache(dict):
+    def __setitem__(self, key, value):
+        if key not in self and len(self) >= 256:
+            self.pop(next(iter(self)))
+        super().__setitem__(key, value)
+
+REGISTRY_CACHE = BoundedCache()
 CACHE_DURATION_POPULAR = timedelta(minutes=60) # Increased to 1 hour
 CACHE_DURATION_SEARCH = timedelta(minutes=10)
 
@@ -48,10 +52,6 @@ async def get_popular_images(registry: str) -> List[Dict]:
             'data': data,
             'timestamp': now
         }
-        # B17: enforce cache bound (evict oldest when over cap).
-        while len(REGISTRY_CACHE) > _CACHE_MAX_ENTRIES:
-            _oldest = min(REGISTRY_CACHE, key=lambda k: REGISTRY_CACHE[k]['timestamp'])
-            del REGISTRY_CACHE[_oldest]
     elif cache_key in REGISTRY_CACHE:
          # Return stale data if fetch failed
          logger.warning(f"Returning stale cache for {registry} popular images")
@@ -259,7 +259,7 @@ async def search_registry(registry: str, query: str) -> List[Dict]:
     return data
 
 async def search_dockerhub(query: str) -> List[Dict]:
-    url = f"https://hub.docker.com/v2/search/repositories?query={query}&page_size=25"
+    url = f"https://hub.docker.com/v2/search/repositories?query={quote(query, safe='')}&page_size=25"
     result = []
     try:
         async with httpx.AsyncClient() as client:
@@ -296,7 +296,7 @@ async def search_ghcr(query: str) -> List[Dict]:
     result = []
     try:
         async with httpx.AsyncClient() as client:
-            url = f"https://api.github.com/search/repositories?q={query}&sort=stars&order=desc"
+            url = f"https://api.github.com/search/repositories?q={quote(query, safe='')}&sort=stars&order=desc"
             resp = await client.get(url, timeout=5.0)
             if resp.status_code == 200:
                 data = resp.json()
@@ -338,23 +338,15 @@ async def get_image_tags(registry: str, image: str) -> List[str]:
 
         elif registry == 'ghcr':
              image = drop_registry_prefix(image)
-
-             parts = image.split('/')
-             if len(parts) >= 2:
-                 org = parts[0]
-                 pkg = parts[1]
-                 url = f"https://api.github.com/users/{org}/packages/container/{pkg}/versions"
+             image = image.split("@", 1)[0].split(":", 1)[0]
+             if re.fullmatch(r"[a-z0-9][a-z0-9._-]*(?:/[a-z0-9][a-z0-9._-]*)+", image):
                  async with httpx.AsyncClient() as client:
-                    resp = await client.get(url, timeout=10.0)
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        # `tags` may be present but null; `or []` keeps
-                        # extend(None) from raising TypeError.
-                        raw_tags = [t.get('metadata', {}).get('container', {}).get('tags') or [] for t in data]
-                        flat_tags = []
-                        for tlist in raw_tags:
-                            flat_tags.extend(tlist)
-                        tags = list(set(flat_tags))
+                    auth = await client.get("https://ghcr.io/token", params={"service": "ghcr.io", "scope": f"repository:{image}:pull"}, timeout=10.0)
+                    if auth.status_code == 200:
+                        token = auth.json().get("token")
+                        resp = await client.get(f"https://ghcr.io/v2/{image}/tags/list?n=100", headers={"Authorization": f"Bearer {token}"}, timeout=10.0)
+                        if resp.status_code == 200:
+                            tags = resp.json().get("tags") or []
     except Exception as e:
         logger.error(f"Error fetching tags for {image}: {e}")
 

@@ -9,7 +9,6 @@ import pyotp
 
 from api.routers.auth_2fa import (
     generate_2fa_logic,
-    generate_2fa_get,
     generate_2fa,
     enable_2fa,
     disable_2fa,
@@ -96,14 +95,9 @@ async def test_generate_2fa_logic_user_not_found(db):
 
 # --- Router wrappers --------------------------------------------------------
 
-@pytest.mark.asyncio
-async def test_generate_2fa_get():
-    mock_db = MagicMock()
-    mock_auth = AsyncMock()
-    with patch("api.routers.auth_2fa.generate_2fa_logic", return_value={"status": "ok"}) as mock_logic:
-        result = await generate_2fa_get(mock_db, mock_auth)
-    assert result == {"status": "ok"}
-    mock_logic.assert_awaited_once_with(mock_db, mock_auth)
+def test_generate_2fa_get_is_not_a_route():
+    from api.routers.auth_2fa import router
+    assert not any(r.path == "/generate" and "GET" in r.methods for r in router.routes)
 
 
 @pytest.mark.asyncio

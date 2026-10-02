@@ -35,6 +35,7 @@ def _async_db(status_row=None, user_count=0):
     scalars_result = MagicMock()
     scalars_result.first.return_value = status_row
     execute_result.scalars.return_value = scalars_result
+    execute_result.first.return_value = None
     # db.execute(select(func.count())).scalar()
     count_result = MagicMock()
     count_result.scalar.return_value = user_count
@@ -152,9 +153,7 @@ def test_register_first_user_error_creating_user(override_db):
          patch("api.routers.setup.setup.create_user", side_effect=boom):
         response = client.post("/api/setup/register", json={"username": "admin", "password": "password"})
     assert response.status_code == 400
-    # Generic client-facing message; the raw exception text must not leak to
-    # an unauthenticated caller (only the server log keeps it).
-    assert response.json() == {"detail": "Could not create user."}
+    assert response.json() == {"detail": "Could not create setup account."}
 
 
 def test_register_first_user_success_existing_user(override_db):
@@ -164,36 +163,62 @@ def test_register_first_user_success_existing_user(override_db):
 
     existing_user = MagicMock()
     existing_user.id = 1
-    updated_user = MagicMock()
-    updated_user.username = "admin"
+    existing_user.username = "admin"
+    existing_user.is_superuser = True
+    existing_user.hashed_password = "stored_hash"
 
-    import jwt as pyjwt
-    from api.settings import get_settings
-    token = pyjwt.encode({"sub": "admin", "setup_pending": True}, get_settings().SECRET_KEY, algorithm="HS256")
-    client.cookies.set("access_token_cookie", token)
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
          patch("api.routers.setup.setup.get_user_by_name", new=AsyncMock(return_value=existing_user)), \
-         patch("api.routers.setup.setup.update_user_by_id", new=AsyncMock(return_value=updated_user)), \
+         patch("api.routers.setup.setup.verify_password", new=AsyncMock(return_value=True)) as verify, \
          patch("api.routers.setup.setup.create_access_token", return_value="fake_token"):
         response = client.post("/api/setup/register", json={"username": "admin", "password": "password"})
     assert response.status_code == 200
     assert response.json() == {"login": "successful", "username": "admin"}
+    verify.assert_awaited_once_with("password", "stored_hash")
+    db.commit.assert_not_awaited()
 
 
-def test_register_first_user_error_updating_user(override_db):
-    db = override_db
+def test_register_first_user_rejects_wrong_password_for_existing_user(override_db):
     auth_wrapper_mock = MagicMock()
     app.dependency_overrides[get_auth_wrapper] = lambda: auth_wrapper_mock
 
     existing_user = MagicMock()
     existing_user.id = 1
+    existing_user.is_superuser = True
+    existing_user.hashed_password = "stored_hash"
 
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
          patch("api.routers.setup.setup.get_user_by_name", new=AsyncMock(return_value=existing_user)), \
-         patch("api.routers.setup.setup.update_user_by_id", new=AsyncMock(return_value=None)):
+         patch("api.routers.setup.setup.verify_password", new=AsyncMock(return_value=False)):
         response = client.post("/api/setup/register", json={"username": "admin", "password": "password"})
-    assert response.status_code == 500
-    assert response.json() == {"detail": "Failed to update user."}
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid setup credentials."}
+    auth_wrapper_mock.set_access_cookies.assert_not_called()
+
+
+def test_register_first_user_rejects_second_username(override_db):
+    auth_wrapper_mock = MagicMock()
+    app.dependency_overrides[get_auth_wrapper] = lambda: auth_wrapper_mock
+    query_result = MagicMock()
+    query_result.first.return_value = (1,)
+    override_db.execute.side_effect = None
+    override_db.execute.return_value = query_result
+
+    with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)), \
+         patch("api.routers.setup.setup.get_user_by_name", new=AsyncMock(return_value=None)), \
+         patch("api.routers.setup.setup.create_user", new=AsyncMock()) as create:
+        response = client.post("/api/setup/register", json={"username": "attacker", "password": "password"})
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Setup account already registered."}
+    create.assert_not_awaited()
+    auth_wrapper_mock.set_access_cookies.assert_not_called()
+
+
+def test_register_first_user_rejects_blank_username(override_db):
+    with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)):
+        response = client.post("/api/setup/register", json={"username": "  ", "password": "password"})
+    assert response.status_code == 422
+    assert response.json() == {"detail": "Username and password are required."}
 
 
 # --- finalize_setup ---------------------------------------------------------

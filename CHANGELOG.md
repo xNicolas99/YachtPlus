@@ -1,5 +1,205 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [3.0.1] - 2026-10-02 — unreleased verification candidate
+
+- Resolve the submitted authentication, permission, session, CSRF, TOTP,
+  SMTP, template, Compose, Docker API and Vue/Vuetify correctness findings.
+  Account credential versions invalidate old sessions after security changes
+  and prevent tokens transferring to a recreated username. API keys are
+  restricted centrally to reading data; refresh rotates and revokes sessions.
+- Add migration `20261001_0001` for account credential versions, consumed
+  TOTP counters, PostgreSQL timestamp types and existing SMTP encryption.
+  Interrupted upgrades can resume without leaving a null credential version.
+  Existing sessions and API keys must be recreated after upgrading.
+- Require current passwords for account credential changes, encrypt and
+  redact SMTP credentials, validate exact request origins and cookie CSRF
+  proofs, and extend mutation/login audit coverage with bounded retention.
+- Make Compose auto-updates opt-in, isolate subprocess credentials and
+  execution, preserve valid YAML on rejected edits, support Compose v2
+  filenames and stop projects before removing their files.
+- Bound and pin template fetches, prevent DNS rebinding and YAML expansion,
+  load async relationships eagerly, support Portainer v2 and validate
+  complete settings imports before replacing catalogs.
+- Correct Docker terminal/log/statistics APIs and Vue 3 controls, charts,
+  theme state, session reset and refresh concurrency. Replace deprecated
+  terminal packages, remove unused frontend dependencies and external fonts.
+- Add universal hashed Python runtime/dev locks, Node 22 image builds,
+  SHA-pinned CI actions, Compose checksum validation and SPA security headers.
+  The published image uses one async worker to enforce in-memory rate limits.
+- Validation before remote integration: 852 backend tests, 197 frontend
+  tests and 42 release/security-script tests passed; production frontend
+  build and bundle gates passed. Fresh, legacy, repeated and interrupted
+  SQLite migrations passed. Final merged-tree evidence is recorded in
+  `docs/AUDIT_REMEDIATION_2026-10-02.md`.
+- Final merged-tree validation: 860 backend tests, 217 frontend tests,
+  42 release/security-script tests, production frontend and bundle gates
+  passed. The eight intervening audit-branch commits are retained in history.
+- Limits: Linux Docker image/runtime and live PostgreSQL/MySQL validation
+  remain unverified on this Windows host. The release claim remains open;
+  CI must validate the container and mandatory fail2ban/proxy deployment.
+  Publication currently targets amd64.
+
+## [3.0.0] - 2026-09-30 — unreleased verification candidate
+
+### Security and breaking configuration changes
+
+- Global LAN-only default covers UI, API, setup and terminal, including
+  authenticated traffic. Public access requires explicit local administrator
+  confirmation and mandatory active fail2ban. The legacy public-login flag no
+  longer opens access.
+- Compose automatically starts real fail2ban as a capability-free, networkless
+  sidecar. Persisted bans are enforced by nginx/backend; missing, stale, invalid
+  or failed mandatory protection fails closed.
+- nginx validates trusted HTTP proxy hops. Backend binds loopback with automatic
+  forwarded rewriting disabled. App runs UID 1000 from startup, read-only with
+  no capabilities; existing mounted data needs correct ownership.
+- New workload profiles default to non-root, read-only rootfs, dropped
+  capabilities and bounded processes. Incompatible images require explicit
+  administrator approval. Saved Compose receives safe defaults; raw YAML edits
+  now require an active administrator.
+- Native rootless update workers use the Docker proxy, replacing direct socket
+  mounts and the [archived Watchtower dependency](https://github.com/containrrr/watchtower).
+  Updates preserve volumes/security/original image references and attempt
+  rollback while retaining originals through startup and health checks.
+- Transactional workload edits preserve originals, volumes and static networks;
+  uncertain creation cleanup requires a unique transaction label. Infrastructure
+  edits and proxy/guard worker updates are rejected before interruption.
+- Required Linux CI security-stack checks real bans/unbans, proxy attribution,
+  local/public policy, persistence and protection outage/recovery. Publication
+  rejects failed, skipped or missing security validation.
+
+### Validation and release limits
+
+- Regression tests cover access, proxy spoofing, stale/malformed guard state,
+  terminal revocation, administrator opt-in/audit failures, workload profiles,
+  mount bypasses, update identity/volumes and rollback failures.
+- Local unit suites, production frontend build and fresh migration results are
+  recorded in the implementation report.
+- This machine has no Docker/usable Linux runtime or connected browser. Actual
+  image build, real fail2ban/Compose smoke, visual UI and staging upgrade checks
+  remain required. Version 3.0.0 is a verification candidate, not a tested or
+  published release. See `docs/SECURITY_DEPLOYMENT.md`.
+
+## [2.0.2] - 2026-09-30
+
+### Changed
+
+- Consolidated GHCR publication into the CI validation run. Trusted push,
+  successful jobs, unchanged commit/ref, canonical package/lock version and
+  release-branch ancestry are required. Independent image publishers removed.
+- Publication checks candidate contents, exact frontend version metadata and
+  OCI labels, startup and Docker health before login; pushes the tested image
+  ID without rebuilding and rechecks remote refs to reject stale queued runs.
+- Local credentials, signing keys, salts and SQLite data are excluded from
+  the Docker context; the candidate smoke test rejects packaged secret or
+  runtime database files before backend initialization.
+- Unified both searches with keyboard navigation and mobile access; search
+  errors retain local results, show retry, cancel pending requests and reject
+  outdated responses or navigation completions. Aborted navigation preserves
+  the query.
+- Removed whole-library Vuetify registration and deferred terminal loading
+  until opening. Loading has timeout/retry/close and ignores cancelled work.
+- Failed page-chunk downloads preserve the current page and offer retry or
+  an explicit reload. No automatic reload discards unsaved form inputs.
+- Production builds now validate asset completeness, exact version metadata,
+  startup byte budgets and the lazy terminal/editor/statistics dependency graph.
+  Main JavaScript shrank from 594076 to 255076 uncompressed bytes.
+
+### Validation and limits
+
+- 579 backend, 164 frontend and 31 publication/smoke guard tests pass, including
+  malformed responses, timeout, cancelled/stale searches, duplicate actions,
+  aborted navigation, failed/skipped/cancelled CI, mismatched versions/commits,
+  modified checkout and moved/deleted release refs, plus packaged secret or
+  database files and filesystem scan failures with empty output.
+- Production frontend build and bundle gates pass: entry JS 255076 bytes,
+  initial JS including static dependencies 489520 bytes, initial CSS 658530 bytes.
+  Fresh and existing SQLite migrations pass in the backend suite.
+- Browser checks on the production frontend cover desktop/mobile searches,
+  keyboard selection with full image names, API failure, terminal load/close,
+  and a real missing chunk after replacing the local build. API data is a
+  local fixture; no Docker operations were performed.
+- Workflow YAML and shell syntax checked. Docker image build, live health
+  checks and GHCR publication remain unverified locally because no Docker
+  CLI/daemon is available. Ruff remains informational; sequential registry
+  pushes can leave partial tags if interrupted. No publication was performed.
+
+## [2.0.1] - 2026-09-30
+
+### Fixed in the interface and resource API
+
+- Resource tables consume paginated API envelopes, load all pages, preserve
+  existing data on request failures and display Docker image dates correctly.
+- Resource details handle direct loading and nullable Docker metadata;
+  destructive actions require confirmation and keep dialogs open on failure.
+- Network creation, settings import/export and template variable editing use
+  working Vue 3 form bindings; failed requests preserve user input.
+- The deployment wizard uses Vuetify 3 steps and panels and sends the entered
+  General, Networking, Volume, Environment and Advanced values after validation.
+- Search uses Vuetify 3 bindings, preserves image namespaces and ignores stale
+  responses. The sidebar can be expanded again and displays the project version.
+- Log streaming calls the existing generator and forwards tail/timestamp
+  options. Resource usage recognizes aiodocker container objects. Pruning uses
+  supported Engine endpoints and reports failures instead of false success.
+- Frontend Node engine requirements match Vite; UI version defaults to the
+  canonical package version. Placeholder notification controls and Docker
+  status/version claims were removed.
+
+### Validation
+
+- 579 backend tests and 116 frontend tests pass. The production frontend build
+  succeeds; backend tests cover fresh and existing SQLite Alembic upgrades.
+- Browser checks use local API fixtures for UI behavior, including API failure
+  paths. No Docker CLI/daemon is available on this host; a complete container
+  release build and real Docker operations remain unverified locally.
+
+### Fixed
+
+- First-run registration now resumes only with the original credentials and
+  atomically reserves the initial administrator across concurrent workers.
+- Startup applies and persists Alembic migrations before serving requests;
+  local and release dependency manifests use the same supported versions.
+- Login, 2FA refresh, setup navigation, mobile drawer, Vuetify 3 activators
+  and resource tables now work with the current frontend stack.
+- Docker resource details/deletion, image pulls with registry ports or digests,
+  non-following container logs and bracketed IPv6 Host headers are handled.
+- Compose examples use valid Docker socket proxy sections and the published
+  image path. Release installation uses the npm lockfile without fallback.
+- `api/routers/smtp.py`: SMTP test connection is now closed on the error path
+  and uses a 10-second timeout, preventing socket leaks when `sendmail()` fails
+  (`_send_test_email_sync`).
+- `api/routers/smtp.py`: Replaced deprecated Pydantic `.dict()` calls with
+  `.model_dump()` in `update_smtp_settings`, removing Pydantic V3 deprecation
+  warnings.
+- `api/actions/compose.py`: `_delete_compose_sync` now resolves the project path
+  with `pathlib` and validates it stays inside `COMPOSE_DIR`, fixing broken path
+  handling when `COMPOSE_DIR` lacks a trailing slash and hardening traversal
+  resistance.
+- `api/utils/image_inspect.py`: `_get_dockerhub_config` strips the image tag
+  before requesting the Docker Hub token, fixing config inspection for tagged
+  images (e.g. `nginx:alpine`) where the token scope previously included the
+  tag and was rejected.
+
+### Added
+
+- Release image health check and CI smoke tests for image contents and a
+  running SPA/setup endpoint.
+- Regression coverage for setup races and the complete wizard, migrations,
+  Docker resource APIs, authentication and UI behavior.
+- Regression tests for SMTP connection cleanup, Docker Hub image config tag
+  handling, and compose delete path traversal resistance.
+
+## Historical run log imported from the audit branch
+
+Historical test counts and CI statements below describe those runs, not the current candidate.
+
 ## 2026-09-10 14:25 — Run R-021: Doku-Sync — Run-Protokoll und CHANGELOG-Pflichtregel
 - Commit: dieser Doku-Sync-Commit
 - Geändert: `AGENTS.md` (neue Pflichtregel Doku-Sync, Run-Protokoll mit R-001 bis R-021, Abschnitt 18 auf behoben in R-020 gesetzt, neuer Abschnitt 18.6, Test-Baseline von 513 auf 543); `CHANGELOG.md` (Run-Einträge R-012 bis R-021)
@@ -66,32 +266,3 @@
 - Geändert: `backend/api` (Self-Privilege-Escalation über auth/me, stats-KeyError, pause und unpause Gate, GET apps name, print durch logger ersetzt, GET zu POST beim pull, Rate-Limit, pool_pre_ping, Pagination) und `frontend/src` (calculated zu computed, snackbar, Login-Auth, api-Präfix, EventSource-URLs, finally- und catch-Fixes, Port-Links, Barrierefreiheit)
 - Ergebnis: Backend- und Frontend-Suiten bestanden
 - Aufgeräumt: `__pycache__`, `.pytest_cache` und `dist`
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-## [Unreleased]
-
-### Fixed
-
-- `api/routers/smtp.py`: SMTP test connection is now closed on the error path
-  and uses a 10-second timeout, preventing socket leaks when `sendmail()` fails
-  (`_send_test_email_sync`).
-- `api/routers/smtp.py`: Replaced deprecated Pydantic `.dict()` calls with
-  `.model_dump()` in `update_smtp_settings`, removing Pydantic V3 deprecation
-  warnings.
-- `api/actions/compose.py`: `_delete_compose_sync` now resolves the project path
-  with `pathlib` and validates it stays inside `COMPOSE_DIR`, fixing broken path
-  handling when `COMPOSE_DIR` lacks a trailing slash and hardening traversal
-  resistance.
-- `api/utils/image_inspect.py`: `_get_dockerhub_config` strips the image tag
-  before requesting the Docker Hub token, fixing config inspection for tagged
-  images (e.g. `nginx:alpine`) where the token scope previously included the
-  tag and was rejected.
-
-### Added
-
-- Regression tests for SMTP connection cleanup, Docker Hub image config tag
-  handling, and compose delete path traversal resistance.

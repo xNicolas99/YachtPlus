@@ -3,7 +3,6 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import vuetify from './plugins/vuetify'
-import { loadFonts } from './plugins/webfontloader'
 import VueUtils from './plugins/vueutils'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
@@ -22,7 +21,6 @@ defineRule('regex', regex);
 defineRule('confirmed', confirmed);
 
 // Load fonts
-loadFonts()
 
 const app = createApp(App)
 
@@ -85,19 +83,19 @@ app.config.globalProperties.$toast = {
 }
 
 // Axios Configuration
-const protocol = window.location.protocol;
-const hostname = window.location.hostname;
-const port = window.location.port ? `:${window.location.port}` : "";
-axios.defaults.baseURL = `${protocol}//${hostname}${port}/api`;
+axios.defaults.baseURL = `${window.location.origin}/api`;
 // Send the access_token_cookie on every request — the setup wizard and
 // all 2FA / refresh calls rely on it. Previously each call site had to
 // opt in via `{ withCredentials: true }`, and the setup actions didn't,
 // so the cookie never reached /auth/2fa/* (401 -> QR never loaded).
 axios.defaults.withCredentials = true;
+axios.defaults.xsrfCookieName = "csrf_access_token";
+axios.defaults.xsrfHeaderName = "X-CSRF-TOKEN";
+let refreshPromise = null;
 
 // Auth Interceptor
 function createAxiosResponseInterceptor() {
-  const interceptor = axios.interceptors.response.use(
+  axios.interceptors.response.use(
     response => response,
     error => {
       // Only handle 401s, honour explicit opt-out, and avoid retry loops.
@@ -114,14 +112,16 @@ function createAxiosResponseInterceptor() {
       // keeps returning 401 or the retry request also comes back 401.
       const refreshCount = error.config._authRefreshCount || 0;
       if (refreshCount >= 1) {
-        store.dispatch("auth/AUTH_LOGOUT");
+        store.commit("auth/AUTH_CLEAR");
+        store.commit("clearUserData");
         router.push("/login");
         return Promise.reject(error);
       }
 
-      axios.interceptors.response.eject(interceptor);
-      return store
-        .dispatch("auth/AUTH_REFRESH")
+      if (!refreshPromise) {
+        refreshPromise = store.dispatch("auth/AUTH_REFRESH").finally(() => { refreshPromise = null; });
+      }
+      return refreshPromise
         .then(() => {
           const retryConfig = {
             ...error.config,
@@ -133,12 +133,10 @@ function createAxiosResponseInterceptor() {
           return axios(retryConfig);
         })
         .catch(() => {
-          store.dispatch("auth/AUTH_LOGOUT");
+          store.commit("auth/AUTH_CLEAR");
+          store.commit("clearUserData");
           router.push("/login");
           return Promise.reject(error);
-        })
-        .finally(() => {
-          createAxiosResponseInterceptor();
         });
     }
   );

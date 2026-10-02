@@ -10,6 +10,7 @@ import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from api.actions import compose as actions_compose
 
@@ -41,10 +42,11 @@ def test_support_bundle_empty_yaml_does_not_crash(empty_compose_file, monkeypatc
         "api.utils.docker_client.get_sync_docker_client",
         return_value=fake_dclient,
     ):
-        result = actions_compose._generate_support_bundle_sync("demo")
+        with pytest.raises(HTTPException) as error:
+            actions_compose._generate_support_bundle_sync("demo")
 
     # Empty compose -> empty (or minimal) zip, but crucially no exception.
-    assert isinstance(result, io.BytesIO)
+    assert error.value.status_code == 422
 
 
 def test_support_bundle_yaml_without_services_key(tmp_path, monkeypatch):
@@ -67,6 +69,7 @@ def test_support_bundle_yaml_without_services_key(tmp_path, monkeypatch):
         "api.utils.docker_client.get_sync_docker_client",
         return_value=fake_dclient,
     ):
-        result = actions_compose._generate_support_bundle_sync("demo")
+        with pytest.raises(HTTPException) as error:
+            actions_compose._generate_support_bundle_sync("demo")
 
-    assert isinstance(result, io.BytesIO)
+    assert error.value.status_code == 422

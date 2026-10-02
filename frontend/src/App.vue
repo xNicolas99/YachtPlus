@@ -20,14 +20,17 @@
     <v-main>
       <!-- Provides the application the proper gutter -->
       <v-container fluid>
+        <ChunkRecovery />
         <!-- If using vue-router -->
-        <transition
-          name="slide"
-          enter-active-class="animated slideInRight delay"
-          leave-active-class="animated slideOutLeft"
-        >
-          <router-view></router-view>
-        </transition>
+        <router-view v-slot="{ Component }">
+          <transition
+            name="slide"
+            enter-active-class="animated slideInRight delay"
+            leave-active-class="animated slideOutLeft"
+          >
+            <component :is="Component" />
+          </transition>
+        </router-view>
       </v-container>
     </v-main>
 
@@ -43,11 +46,13 @@ import { mapGetters, mapActions } from "vuex";
 import Sidebar from "./components/nav/Sidebar.vue";
 import Appbar from "./components/nav/Appbar.vue";
 import Snackbar from "./components/notifications/snackbar.vue";
+import ChunkRecovery from "./components/ChunkRecovery.vue";
 
 export default {
   name: "App",
 
   components: {
+    ChunkRecovery,
     Sidebar: Sidebar,
     Appbar: Appbar,
     Snackbar: Snackbar
@@ -84,7 +89,6 @@ export default {
   },
   methods: {
     ...mapActions({
-      authCheck: "auth/AUTH_CHECK",
       refreshToken: "auth/AUTH_REFRESH",
       logout: "auth/AUTH_LOGOUT"
     }),
@@ -165,22 +169,18 @@ export default {
     },
   },
   created() {
-    this.authCheck();
+    // The router guard performs the initial auth/setup check before the
+    // first navigation. A second check here raced with that guard and sent
+    // fresh installs to /login before /setup/status resolved.
     if (this.isLoggedIn) {
       this.startActivityTracking();
     }
   },
   mounted() {
-    // Basic theme restoration. The Vuetify 3 theme name is a ref; assign
-    // through `.value` when present, otherwise fall back to direct set.
+    // Restore the saved theme through Vuetify's public API.
     const dark_theme = localStorage.getItem("dark_theme");
     const targetTheme = dark_theme == "false" ? 'light' : 'dark';
-
-    if (typeof this.$vuetify.theme.global.name === 'object' && 'value' in this.$vuetify.theme.global.name) {
-      this.$vuetify.theme.global.name.value = targetTheme;
-    } else {
-      this.$vuetify.theme.global.name = targetTheme;
-    }
+    this.$vuetify.theme.change(targetTheme);
   }
 };
 </script>

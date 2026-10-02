@@ -89,10 +89,10 @@ export default {
     // `$vuetify.theme.dark` Vuetify-2 API).
     isDark: {
       get() {
-        return this.$vuetify.theme.global.name.value === "dark";
+        return this.$vuetify.theme.global.name === "dark";
       },
       set(val) {
-        this.$vuetify.theme.global.name.value = val ? "dark" : "light";
+        this.$vuetify.theme.global.name = val ? "dark" : "light";
       }
     }
   },
@@ -118,9 +118,9 @@ export default {
       // Update Runtime — Vuetify 3 theme colors are refs.
       const themes = ['light', 'dark'];
       themes.forEach(t => {
-        if (this.$vuetify.theme.themes.value[t]) {
-          this.$vuetify.theme.themes.value[t].colors.primary = this.primaryColor;
-          this.$vuetify.theme.themes.value[t].colors.secondary = this.secondaryColor;
+        if (this.$vuetify.theme.themes[t]) {
+          this.$vuetify.theme.themes[t].colors.primary = this.primaryColor;
+          this.$vuetify.theme.themes[t].colors.secondary = this.secondaryColor;
         }
       });
 
@@ -128,9 +128,8 @@ export default {
       this.$vuetify.theme.global.current.colors.primary = this.primaryColor;
       this.$vuetify.theme.global.current.colors.secondary = this.secondaryColor;
     },
-    setDarkmode() {
-      // Vuetify 3 toggle — persist the resolved theme name.
-      localStorage.setItem("dark_theme", this.isDark);
+    setDarkmode(value) {
+      localStorage.setItem("dark_theme", value);
     },
     resetTheme() {
       localStorage.removeItem("theme_primary");

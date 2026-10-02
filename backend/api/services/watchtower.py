@@ -1,6 +1,10 @@
 import atexit
-import fcntl
 import os
+try:
+    import fcntl
+except ImportError:  # Windows development and test runs
+    fcntl = None
+    import msvcrt
 from apscheduler.schedulers.background import BackgroundScheduler
 # Watchtower runs inside the *sync* BackgroundScheduler thread, so it
 # must call the sync implementation directly. Previously this file
@@ -50,11 +54,14 @@ def update_compose_project(project_name):
         logger.info(f"Successfully updated {project_name}")
     except Exception as e:
         logger.error(f"Failed to update {project_name}: {e}")
+        raise
 
 def update_all_projects():
     """
     Iterates through all compose projects and updates them.
     """
+    if not get_settings().COMPOSE_AUTO_UPDATE:
+        return
     files = find_yml_files(get_settings().COMPOSE_DIR)
     for project_name in files.keys():
         update_compose_project(project_name)
@@ -71,13 +78,30 @@ def _acquire_leader_lock() -> bool:
     lock_dir = os.path.dirname(settings.COMPOSE_DIR) or "."
     os.makedirs(lock_dir, exist_ok=True)
     lock_path = os.path.join(lock_dir, ".watchtower_leader.lock")
+    fd = None
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        fcntl.flock(fd, fcntl.LOCK_NB | fcntl.LOCK_EX)
+        if fcntl is None:
+            os.lseek(fd, 0, os.SEEK_SET)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+        else:
+            fcntl.flock(fd, fcntl.LOCK_NB | fcntl.LOCK_EX)
         # Keep fd open for the process lifetime; register a cleanup.
-        atexit.register(lambda: (fcntl.flock(fd, fcntl.LOCK_UN), os.close(fd)))
+        def release_lock():
+            try:
+                if fcntl is None:
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
+                else:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
+        atexit.register(release_lock)
         return True
     except (OSError, BlockingIOError):
+        if fd is not None:
+            os.close(fd)
         return False
 
 
@@ -93,13 +117,37 @@ def start_scheduler():
 
     # Schedule update every 24 hours (example)
     # Ideally this should be configurable via DB settings
-    scheduler.add_job(update_all_projects, 'interval', hours=24, id='auto_update_all')
+    if get_settings().COMPOSE_AUTO_UPDATE:
+        scheduler.add_job(update_all_projects, 'interval', hours=24, id='auto_update_all')
+    scheduler.add_job(cleanup_security_records, 'interval', hours=1, id='security_cleanup')
     scheduler.start()
     _scheduler_started = True
     logger.info("Watchtower scheduler started.")
 
 def stop_scheduler():
     global _scheduler_started
+    if not _scheduler_started:
+        return
     scheduler.shutdown()
     _scheduler_started = False
+
+def cleanup_security_records():
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import delete
+    from api.db.database import sync_migration_url
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+    from api.db.models.audit import AuditLog
+    from api.db.models.users import LoginAttempt
+    from api.db.models.settings import TokenBlacklist
+    now = datetime.now(timezone.utc)
+    cleanup_engine = create_engine(sync_migration_url(settings.DATABASE_URL))
+    try:
+        with Session(cleanup_engine) as db:
+            db.execute(delete(AuditLog).where(AuditLog.timestamp < now - timedelta(days=settings.AUDIT_RETENTION_DAYS)))
+            db.execute(delete(LoginAttempt).where(LoginAttempt.timestamp < now - timedelta(days=settings.LOGIN_RETENTION_DAYS)))
+            db.execute(delete(TokenBlacklist).where(TokenBlacklist.expires < now))
+            db.commit()
+    finally:
+        cleanup_engine.dispose()
 # updated

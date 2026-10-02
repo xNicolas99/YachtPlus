@@ -343,7 +343,7 @@ def test_conv_volumes2data_forbidden(mock_session_local):
         conv_volumes2data(data)
 
     assert exc.value.status_code == 403
-    assert "Volume mount prohibited" in str(exc.value.detail)
+    assert "restricted" in str(exc.value.detail)
 
 class MockEnvData:
     def __init__(self, name, default):

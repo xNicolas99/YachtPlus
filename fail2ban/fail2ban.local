@@ -1,0 +1,7 @@
+[Definition]
+loglevel = INFO
+logtarget = STDOUT
+socket = /tmp/fail2ban.sock
+pidfile = /tmp/fail2ban.pid
+dbfile = /run/yachtplus-security/fail2ban.sqlite3
+dbpurgeage = 86400

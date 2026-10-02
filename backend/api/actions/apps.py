@@ -1,3 +1,4 @@
+from api.utils.container_stats import memory_usage
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -34,6 +35,8 @@ import aiostream
 from functools import lru_cache
 import logging
 import aiofiles
+import os
+import hashlib
 from api.settings import get_settings
 settings = get_settings()
 
@@ -78,7 +81,8 @@ async def check_app_update(app_name):
             loop = asyncio.get_event_loop()
             try:
                 # _check_updates performs network I/O, run in executor
-                is_updatable = await loop.run_in_executor(None, _check_updates, config["Image"])
+                from api.utils.container_update import update_image_reference
+                is_updatable = await loop.run_in_executor(None, _check_updates, update_image_reference(config))
                 if is_updatable:
                     attrs["isUpdatable"] = True
             except Exception as e:
@@ -206,11 +210,9 @@ async def get_apps():
 
     except HTTPException:
         raise
-    except Exception:
-         # Log the full traceback server-side; never echo raw daemon/connection
-         # details (daemon URL, host paths) back to the client.
-         logger.exception("Critical error in get_apps (Docker connection)")
-         raise HTTPException(status_code=503, detail="Docker daemon unavailable")
+    except Exception as e:
+         logger.error(f"Critical error in get_apps: {e}")
+         raise HTTPException(status_code=503, detail="Docker unavailable")
 
     return apps_list
 
@@ -341,6 +343,9 @@ async def deploy_app(template: DeployForm):
             template.mem_limit,
             edit=template.edit or False,
             _id=template.id or None,
+            security_profile=template.security_profile,
+            container_user=template.container_user,
+            confirm_image_default=template.confirm_image_default,
         )
     except HTTPException as exc:
         raise exc
@@ -355,8 +360,8 @@ async def deploy_app(template: DeployForm):
             getattr(exc, "explanation", None),
         )
         raise HTTPException(
-            status_code=getattr(exc, "status_code", 500) or 500,
-            detail=getattr(exc, "explanation", None) or "Docker daemon error",
+            status_code=_safe_http_status(exc),
+            detail="Docker deployment failed. Check server logs for details.",
         )
     except (docker.errors.DockerException, aiodocker.exceptions.DockerError) as exc:
         # deploy_app calls launch_app, which still runs the synchronous
@@ -366,8 +371,8 @@ async def deploy_app(template: DeployForm):
         # details to the client.
         logger.warning("Deploy failed (docker error): %s", exc)
         raise HTTPException(
-            status_code=getattr(exc, "status", 500) or 500,
-            detail=getattr(exc, "message", None) or "Docker error",
+            status_code=_safe_http_status(exc),
+            detail="Docker deployment failed. Check server logs for details.",
         )
     except Exception:
         # Don't echo the raw exception message to the client (could leak
@@ -415,6 +420,9 @@ async def launch_app(
     mem_limit,
     edit,
     _id,
+    security_profile="restricted",
+    container_user="1000:1000",
+    confirm_image_default=False,
 ):
     """
     Deprecated: Use launch_app_from_template instead for cleaner signature.
@@ -424,46 +432,86 @@ async def launch_app(
     return await loop.run_in_executor(None, _launch_app_sync,
         name, image, restart_policy, command, ports, portlabels,
         network_mode, network, volumes, env, devices, labels,
-        sysctls, caps, cpus, mem_limit, edit, _id
+        sysctls, caps, cpus, mem_limit, edit, _id,
+        security_profile, container_user, confirm_image_default
     )
 
 def _launch_app_sync(
     name, image, restart_policy, command, ports, portlabels,
     network_mode, network, volumes, env, devices, labels,
-    sysctls, caps, cpus, mem_limit, edit, _id
+    sysctls, caps, cpus, mem_limit, edit, _id,
+    security_profile="restricted", container_user="1000:1000", confirm_image_default=False
 ):
+    from api.utils.container_security import workload_options, ALLOWED_CAPABILITIES
+    security_options = workload_options(security_profile, container_user, confirm_image_default)
+    if security_profile == "restricted" and (network_mode == "host" or network == "host" or devices):
+        raise HTTPException(422, "Host networking and devices require confirmed image compatibility mode.")
+    if security_profile == "restricted" and (
+        not isinstance(caps or [], list) or any(
+            not isinstance(capability, str) or capability.upper().removeprefix("CAP_") not in ALLOWED_CAPABILITIES
+            for capability in caps or []
+        )
+    ):
+        raise HTTPException(422, "Restricted containers cannot request elevated capabilities.")
     from api.utils.docker_client import sync_docker_client
     with sync_docker_client() as dclient:
-        if edit == True:
+        original = None
+        if edit is True:
             try:
-                running_app = dclient.containers.get(_id)
-                running_app.remove(force=True)
+                original = dclient.containers.get(_id)
             except docker.errors.NotFound:
-                # Container might not exist, which is fine
+                # A genuinely absent original becomes a normal deployment.
                 pass
-            except Exception as e:
-                logger.warning(f"Failed to remove existing container {_id} during edit: {e}")
+            except docker.errors.APIError as error:
+                raise HTTPException(status_code=error.status_code or 502, detail="Cannot inspect the original container before editing.") from error
+
+        if original is not None:
+            # An in-process edit must never stop its own API, its only Docker
+            # connection, or mandatory protection. These services are changed
+            # through their deployment configuration / dedicated updater.
+            infrastructure = (original.attrs.get("Config", {}).get("Labels") or {}).get("local.yachtplus.infrastructure")
+            self_id = _read_self_id()
+            if infrastructure in ("application", "docker-proxy", "fail2ban") or (self_id and original.id.startswith(self_id)):
+                raise HTTPException(409, "YachtPlus infrastructure cannot be edited as a workload. Use its deployment configuration.")
+            from urllib.parse import urlsplit
+            endpoint_host = urlsplit(getattr(get_settings(), "DOCKER_HOST", None) or "").hostname
+            if endpoint_host:
+                proxy_names = {original.attrs.get("Name", "").lstrip("/").lower()}
+                for endpoint in original.attrs.get("NetworkSettings", {}).get("Networks", {}).values():
+                    proxy_names.update(alias.lower() for alias in (endpoint.get("Aliases") or []) + (endpoint.get("DNSNames") or []) if isinstance(alias, str))
+                    proxy_names.update(value.lower() for value in (endpoint.get("IPAddress"), endpoint.get("GlobalIPv6Address")) if isinstance(value, str) and value)
+                if endpoint_host.lower() in proxy_names:
+                    raise HTTPException(409, "The configured Docker proxy cannot be edited as a workload. Use its deployment configuration.")
 
         combined_labels = Merge(portlabels, labels)
+        combined_labels = dict(combined_labels or {})
+        combined_labels["local.yachtplus.security.profile"] = security_profile
+        combined_labels["local.yachtplus.update.image"] = image
+        launch_options = {
+            "name": name, "image": image, "restart_policy": restart_policy,
+            "command": command, "ports": ports, "network": network,
+            "network_mode": network_mode, "volumes": volumes, "environment": env,
+            "sysctls": sysctls, "labels": combined_labels, "devices": devices,
+            "cap_add": caps, "nano_cpus": cpus, "mem_limit": mem_limit,
+            "detach": True, **security_options,
+        }
+        if original is not None:
+            from api.utils.container_edit import edit_container
+            try:
+                launch = edit_container(dclient, original, launch_options)
+            except docker.errors.APIError as error:
+                raise HTTPException(status_code=error.status_code or 502, detail="Container edit failed. The original container is retained.") from error
+            except RuntimeError as error:
+                raise HTTPException(502, "Container edit failed. The original container is retained.") from error
+            return AiodockerCompatWrapper(launch)
+        # run() can create successfully and then fail while starting. Only a
+        # unique deployment marker permits cleanup of an uncertain result;
+        # looking up the requested name alone could delete an unrelated app.
+        import uuid
+        deployment_id = uuid.uuid4().hex
+        combined_labels["local.yachtplus.deploy.transaction"] = deployment_id
         try:
-            launch = dclient.containers.run(
-                name=name,
-                image=image,
-                restart_policy=restart_policy,
-                command=command,
-                ports=ports,
-                network=network,
-                network_mode=network_mode,
-                volumes=volumes,
-                environment=env,
-                sysctls=sysctls,
-                labels=combined_labels,
-                devices=devices,
-                cap_add=caps,
-                nano_cpus=cpus,
-                mem_limit=mem_limit,
-                detach=True,
-            )
+            launch = dclient.containers.run(**launch_options)
 
             return AiodockerCompatWrapper(launch)
 
@@ -471,13 +519,16 @@ def _launch_app_sync(
             if e.status_code == 500:
                 try:
                     failed_app = dclient.containers.get(name)
-                    failed_app.remove()
+                    failed_app.reload()
+                    candidate_labels = failed_app.attrs.get("Config", {}).get("Labels", {}) or {}
+                    if candidate_labels.get("local.yachtplus.deploy.transaction") == deployment_id:
+                        failed_app.remove(force=True, v=False)
                 except docker.errors.NotFound:
                     pass
                 except Exception as remove_err:
                     logger.error(f"Failed to cleanup container {name} after API error: {remove_err}")
             raise HTTPException(
-                status_code=e.status_code, detail=e.explanation
+                status_code=_safe_http_status(e), detail="Container deployment failed. Check server logs for details."
             )
 
 class AiodockerCompatWrapper:
@@ -485,7 +536,7 @@ class AiodockerCompatWrapper:
         self.container = container
 
     async def log(self, stdout=True, stderr=True):
-        logs = self.container.logs(stdout=stdout, stderr=stderr)
+        logs = await asyncio.to_thread(self.container.logs, stdout=stdout, stderr=stderr, tail=10000)
         if isinstance(logs, bytes):
             return [logs.decode('utf-8')]
         return [logs]
@@ -498,28 +549,17 @@ async def app_action(app_name, action, background_tasks=None):
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
-        try:
-            async with aiofiles.open("/proc/self/cgroup", "r") as f:
-                content = await f.readline()
-                self_id = content.strip().split("/")[-1]
-        except Exception as e:
-            logger.debug(f"Could not read self cgroup ID: {e}")
-            self_id = None
+        self_id = await _get_self_id()
 
         c_info = await app.show()
         c_id = c_info['Id']
         c_short_id = c_id[:12]
 
         if self_id and (c_id == self_id or c_short_id in self_id) and action == "restart":
-            # B14: the previous code passed the aiodocker Container object
-            # to the background task. Its Docker client closes when this
-            # `async with` block returns, so the restart always failed on
-            # a closed client. Restart-by-name opens its own client and
-            # therefore survives the request lifecycle.
             if background_tasks:
-                 background_tasks.add_task(_restart_by_name, app_name)
+                 background_tasks.add_task(_restart_by_name, c_id)
             else:
-                 asyncio.create_task(_restart_by_name(app_name))
+                 asyncio.create_task(_restart_by_name(c_id))
 
             return await get_apps()
 
@@ -543,19 +583,14 @@ async def app_action(app_name, action, background_tasks=None):
 
     return await get_apps()
 
-
-async def _restart_by_name(container_name: str, timeout: int = 10) -> None:
-    """B14: restart a container by NAME with its own aiodocker client.
-    Must not depend on any client created inside a request handler —
-    those are closed as soon as the handler returns.
-    """
-    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
-        try:
-            container = await docker.containers.get(container_name)
+async def _restart_by_name(container_id, timeout=10):
+    # The request's Docker client has closed by the time BackgroundTasks run.
+    try:
+        async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
+            container = await docker.containers.get(container_id)
             await container.restart(timeout=timeout)
-            logger.info("Self-restart of %s completed.", container_name)
-        except Exception as exc:
-            logger.error("Self-restart of %s failed: %s", container_name, exc)
+    except Exception:
+        logger.exception("Self-restart failed for container %s", container_id)
 
 
 async def app_update(app_name):
@@ -567,22 +602,15 @@ async def app_update(app_name):
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
 
-        config = {
-            "Image": "containrrr/watchtower:latest",
-            "Cmd": ["--cleanup", "--run-once", old_name],
-            "HostConfig": {
-                "Binds": ["/var/run/docker.sock:/var/run/docker.sock"],
-                "AutoRemove": True
-            }
-        }
-
         try:
-            updater = await docker.containers.create_or_replace(
-                name=f"watchtower_{old_name}",
-                config=config
-            )
-            await updater.start()
-            await updater.wait(timeout=120)
+            updater = await _start_update_worker(docker, old_name)
+            result = await updater.wait(timeout=600)
+            if result.get("StatusCode") != 0:
+                raise HTTPException(502, "Container update failed. The original container is retained for rollback; check updater logs.")
+            try:
+                await updater.delete()
+            except aiodocker.exceptions.DockerError:
+                logger.warning("Container update succeeded; completed worker cleanup failed.", exc_info=True)
 
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(status_code=_safe_http_status(exc), detail=_docker_error_detail(exc))
@@ -594,9 +622,16 @@ async def app_update(app_name):
 def _read_self_id():
     # Container ID is immutable for the process lifetime; cache the
     # /proc/self/cgroup read so we don't hit disk on every self-update call.
+    # Modern cgroup v2 containers often return '0::/' rather than an ID.
+    # Docker's default HOSTNAME is the container's immutable short ID.
+    import re
+    hostname = os.environ.get("HOSTNAME", "")
+    if re.fullmatch(r"[0-9a-f]{12,64}", hostname):
+        return hostname
     try:
         with open("/proc/self/cgroup", "r") as f:
-            return f.readline().strip().split("/")[-1]
+            cgroup_id = f.readline().strip().split("/")[-1]
+            return cgroup_id if re.fullmatch(r"[0-9a-f]{64}", cgroup_id) else None
     except Exception as e:
         logger.warning(f"Failed to determine self container ID: {e}")
         return None
@@ -617,23 +652,94 @@ async def _update_self(background_tasks):
         except aiodocker.exceptions.DockerError:
              raise HTTPException(status_code=404, detail="Unable to get YachtPlus container ID")
 
+        from api.utils.container_update import proxy_endpoint
+        try:
+            proxy_endpoint(get_settings().DOCKER_HOST)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        network_name = os.environ.get("YACHT_DOCKER_PROXY_NETWORK")
+        if not network_name or network_name not in self_info.get("NetworkSettings", {}).get("Networks", {}):
+            raise HTTPException(409, "Configure the YachtPlus Docker proxy network before updating.")
+        await docker.networks.get(network_name)
+
     background_tasks.add_task(update_self_in_background, self_name)
     return {"result": "successful"}
+
+async def _start_update_worker(docker, container_name):
+    from api.utils.container_update import proxy_endpoint, validate_update_target
+    try:
+        endpoint = proxy_endpoint(get_settings().DOCKER_HOST)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    network_name = os.environ.get("YACHT_DOCKER_PROXY_NETWORK")
+    if not network_name:
+        raise HTTPException(409, "Configure YACHT_DOCKER_PROXY_NETWORK before updating containers.")
+    target = await docker.containers.get(container_name)
+    try:
+        validate_update_target(await target.show(), endpoint)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    self_id = await _get_self_id()
+    if not self_id:
+        raise HTTPException(409, "Cannot determine the YachtPlus image for the update worker.")
+    own_container = await docker.containers.get(self_id)
+    own_info = await own_container.show()
+    await docker.networks.get(network_name)  # validate before creating a worker
+    if network_name not in own_info.get("NetworkSettings", {}).get("Networks", {}):
+        raise HTTPException(409, "The configured Docker proxy network must be attached to YachtPlus.")
+    config = {
+        "Image": own_info["Image"],
+        "User": "1000:1000",
+        "Entrypoint": ["python3", "-m", "api.utils.container_update"],
+        "Cmd": [],
+        "WorkingDir": "/api",
+        "Healthcheck": {"Test": ["NONE"]},
+        "Env": [f"DOCKER_HOST={endpoint}", f"YACHT_UPDATE_TARGET={container_name}"],
+        "Labels": {"local.yachtplus.update-worker": "true"},
+        "HostConfig": {
+            "AutoRemove": False,
+            "NetworkMode": network_name,
+            "ReadonlyRootfs": True,
+            "CapDrop": ["ALL"],
+            "SecurityOpt": ["no-new-privileges:true"],
+            "PidsLimit": 128,
+            "Memory": 256 * 1024 * 1024,
+            "Tmpfs": {"/tmp": "rw,nosuid,nodev,size=16m"},
+        },
+    }
+    # A stable name rejects overlapping updates instead of killing an active
+    # worker. Successful app updates remove it after collecting exit status;
+    # failed/self-update workers retain their logs for operator inspection.
+    worker_name = "yachtplus_update_" + hashlib.sha256(container_name.encode()).hexdigest()[:20]
+    try:
+        previous = await docker.containers.get(worker_name)
+    except aiodocker.exceptions.DockerError as exc:
+        if getattr(exc, "status", None) != 404:
+            raise
+    else:
+        previous_info = await previous.show()
+        if (
+            previous_info.get("State", {}).get("Status") in ("exited", "dead")
+            and previous_info.get("Config", {}).get("Labels", {}).get("local.yachtplus.update-worker") == "true"
+            and previous_info.get("Config", {}).get("Entrypoint") == ["python3", "-m", "api.utils.container_update"]
+        ):
+            await previous.delete()
+        else:
+            raise HTTPException(409, "An update worker already exists; wait for completion or inspect its logs.")
+    updater = await docker.containers.create(config=config, name=worker_name)
+    try:
+        await updater.start()
+    except Exception:
+        await updater.delete(force=True)
+        raise
+    return updater
+
 
 async def update_self_in_background(container_name):
     async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         logger.info("**** Updating %s ****", container_name)
-        config = {
-            "Image": "containrrr/watchtower:latest",
-            "Cmd": ["--cleanup", "--run-once", container_name],
-            "HostConfig": {
-                "Binds": ["/var/run/docker.sock:/var/run/docker.sock"],
-                "AutoRemove": True
-            }
-        }
         try:
-            updater = await docker.containers.create(config=config)
-            await updater.start()
+            await _start_update_worker(docker, container_name)
         except Exception as e:
             logger.error(f"Error updating self: {e}")
 
@@ -646,7 +752,8 @@ async def check_self_update():
         try:
             self_container = await docker.containers.get(self_id)
             info = await self_container.show()
-            tag = info["Config"]["Image"]
+            from api.utils.container_update import update_image_reference
+            tag = update_image_reference(info["Config"])
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, _check_updates, tag)
         except Exception as exc:
@@ -686,6 +793,10 @@ async def log_generator(request, app_name):
                     yield {"event": "update", "retry": 3000, "data": line}
                     if await request.is_disconnected():
                         break
+            else:
+                for line in await container.log(stdout=True, stderr=True, follow=False, tail=200):
+                    yield {"event": "update", "data": line}
+                yield {"event": "end", "data": "Container stopped"}
         except aiodocker.exceptions.DockerError:
             pass
 
@@ -746,7 +857,7 @@ async def process_app_stats(line, app_name):
     cpu_percent = 0.0
 
     if "memory_stats" in line:
-        mem_current = line["memory_stats"].get("usage", 0)
+        mem_current = memory_usage(line.get("memory_stats", {}))
         mem_total = line["memory_stats"].get("limit", 1)
         mem_percent = (mem_current / mem_total) * 100.0
     else:

@@ -34,7 +34,9 @@ def test_update_compose_project_exception(mock_sync_action, mock_logger):
     mock_compose_action.side_effect = Exception("Test error")
 
     # Act
-    update_compose_project("test_project")
+    import pytest
+    with pytest.raises(Exception, match="Test error"):
+        update_compose_project("test_project")
 
     # Assert
     mock_compose_action.assert_called_once_with("test_project", "pull")

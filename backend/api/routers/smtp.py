@@ -10,9 +10,11 @@ import asyncio
 from api.utils.auth import get_db
 from api.db.models.settings import SMTPSettings
 from api.auth.jwt import get_auth_wrapper
-from api.auth.auth import require_superuser
+from api.auth.auth import auth_check, require_superuser
 from api.utils.security import limiter
 from typing import Optional
+from api.utils.crypto import encrypt
+from api.utils.smtp_delivery import deliver
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +30,6 @@ _test_mail_lock = asyncio.Lock()
 
 
 class SMTPSettingsSchema(BaseModel):
-    # B11: response_model serializes the ORM row; Pydantic v2 needs
-    # from_attributes for that. Without it the endpoint 500s.
     model_config = ConfigDict(from_attributes=True)
     server: str
     port: int
@@ -38,20 +38,16 @@ class SMTPSettingsSchema(BaseModel):
     sender_email: EmailStr
     use_tls: bool = True
 
-class SMTPSettingsPublic(BaseModel):
-    # Read-only projection for GET /: same shape as SMTPSettingsSchema but
-    # WITHOUT `password`, so the stored SMTP credential can never leak in a
-    # response even to a superuser.
-    model_config = ConfigDict(from_attributes=True)
-    server: str
-    port: int
-    username: Optional[str] = None
-    sender_email: EmailStr
-    use_tls: bool = True
-
-
 class TestEmailSchema(BaseModel):
     recipient: EmailStr
+
+class SMTPSettingsPublic(SMTPSettingsSchema):
+    password_configured: bool = False
+
+def _public_settings(row):
+    return SMTPSettingsPublic(server=row.server, port=row.port, username=row.username,
+        sender_email=row.sender_email, use_tls=row.use_tls, password=None,
+        password_configured=bool(row.password))
 
 
 def _send_test_email_sync(settings, recipient: str) -> None:
@@ -61,43 +57,27 @@ def _send_test_email_sync(settings, recipient: str) -> None:
     msg['From'] = settings.sender_email
     msg['To'] = recipient
 
-    server = None
     try:
-        server = smtplib.SMTP(settings.server, settings.port, timeout=10)
-        if settings.use_tls:
-            server.starttls()
-
-        if settings.username and settings.password:
-            server.login(settings.username, settings.password)
-
-        server.sendmail(settings.sender_email, recipient, msg.as_string())
+        deliver(settings, recipient, msg)
     except Exception:
         logger.exception("SMTP test failed for recipient %s", recipient)
         raise HTTPException(
             status_code=500,
             detail="SMTP test failed. Check server logs for details.",
         )
-    finally:
-        if server is not None:
-            try:
-                server.quit()
-            except Exception:
-                pass
 
 
 @router.get("/", response_model=SMTPSettingsPublic)
 async def get_smtp_settings(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    # SMTP config includes the relay password — superuser-only, and the
-    # response model deliberately omits the password field.
     await require_superuser(Authorize, db)
     result = await db.execute(select(SMTPSettings).limit(1))
     settings = result.scalars().first()
     if not settings:
         # Return default or empty
         return SMTPSettingsPublic(server="", port=587, sender_email="admin@example.com")
-    return settings
+    return _public_settings(settings)
 
-@router.post("/", response_model=SMTPSettingsSchema)
+@router.post("/", response_model=SMTPSettingsPublic)
 async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     # SMTP server credentials are instance-global config. A non-admin who
     # could overwrite them could redirect alert mail to a domain they
@@ -106,23 +86,20 @@ async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = 
     await require_superuser(Authorize, db)
     result = await db.execute(select(SMTPSettings).limit(1))
     db_settings = result.scalars().first()
-    # The GET projection deliberately omits `password`, so a client that loads
-    # the form and saves it back posts an empty/None password. Treat that as
-    # "unchanged" and never wipe the stored credential; only a non-empty value
-    # updates it.
-    data = settings.model_dump()
-    new_password = data.pop("password", None)
+    values = settings.model_dump()
+    password = values.pop("password")
+    # A blank field after loading the redacted settings retains the credential.
+    if password:
+        values["password"] = await asyncio.to_thread(encrypt, password)
     if not db_settings:
-        db_settings = SMTPSettings(**data, password=new_password or None)
+        db_settings = SMTPSettings(**values)
         db.add(db_settings)
     else:
-        for key, value in data.items():
+        for key, value in values.items():
             setattr(db_settings, key, value)
-        if new_password:
-            db_settings.password = new_password
     await db.commit()
     await db.refresh(db_settings)
-    return db_settings
+    return _public_settings(db_settings)
 
 @router.post("/test")
 @limiter.limit("5/hour")

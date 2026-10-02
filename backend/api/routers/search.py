@@ -62,7 +62,7 @@ async def search(
             "description": t.description,
             "image": t.image,
             "logo": t.logo,
-            "url": t.url
+            "url": f"/templates/{t.template_id}"
         })
 
     if isinstance(dockerhub_results, list):

@@ -89,4 +89,4 @@ def test_is_private_ip():
     assert is_private_ip("172.16.0.1") is True
     assert is_private_ip("93.184.216.34") is False
     # Test invalid IPs (returns False)
-    assert is_private_ip("not_an_ip") is False
+    assert is_private_ip("not_an_ip") is True

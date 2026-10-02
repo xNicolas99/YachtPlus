@@ -25,14 +25,17 @@ sys.path.insert(0, dirname(dirname(abspath(__file__))))
 # Import Base first, then every model module so their tables are registered
 # in Base.metadata. Importing the package (`api.db.models`) does not register
 # the concrete tables, which broke autogenerate.
-from api.db.database import Base
+from api.db.database import Base, sync_migration_url
 from api.db.models import containers, users  # noqa: F401
 from api.db.models.settings import TokenBlacklist  # noqa: F401
 
 print("--- MODELS ---")
 target_metadata = Base.metadata
 config.set_main_option(
-    "sqlalchemy.url", os.environ.get("DATABASE_URL", "sqlite:///config/data.sqlite")
+    "sqlalchemy.url",
+    sync_migration_url(
+        os.environ.get("DATABASE_URL", "sqlite:////config/yacht.db")
+    ).replace("%", "%%"),
 )
 
 # other values from the config, defined by the needs of env.py,
@@ -95,7 +98,9 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    # SQLite DDL is non-transactional, but Alembic's version-table writes
+    # still need an explicit commit when the connection is closed.
+    with connectable.begin() as connection:
         _ensure_schema(connection)
         context.configure(connection=connection, target_metadata=target_metadata)
 

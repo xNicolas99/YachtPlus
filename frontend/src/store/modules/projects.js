@@ -97,18 +97,17 @@ const actions = {
   writeProject({ commit }, payload) {
     commit("setLoading", true);
     const url = "/compose/";
-    axios
+    return axios
       .post(url, payload)
       .then(response => {
         const projects = response.data;
         commit("setProjects", projects);
+        router.push({ name: "View Projects" });
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
-      })
-      .then(() => {
-        // F38: navigate only on success — finally also ran on errors.
-        router.push({ name: "Projects" });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);
@@ -118,7 +117,7 @@ const actions = {
     commit("setLoading", true);
     commit("setAction", Action);
     const url = `/compose/${Name}/actions/${Action}`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const projects = response.data;
@@ -127,9 +126,11 @@ const actions = {
         commit("snackbar/setMessage", `${Name} has been ${Action}ed.`, {
           root: true
         });
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);

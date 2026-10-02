@@ -1,15 +1,8 @@
 <template>
   <v-card color="foreground" class="mx-4 mt-2" raised>
     <v-card-title class="primary font-weight-bold"> Logs</v-card-title>
-    <v-card-text
-      v-if="app.State.Status != 'running'"
-      class="foreground text-center px-5 py-5"
-    >
-      Start the app to view logs
-    </v-card-text>
     <v-virtual-scroll
       ref="logcontainer"
-      v-else
       :bench="20"
       :items="logs"
       height="600"

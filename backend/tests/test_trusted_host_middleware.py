@@ -108,3 +108,21 @@ def test_strict_mode_accepts_configured_hostname(monkeypatch):
     client = _client(app)
     r = client.get("/api/setup/status", headers={"host": "yachtplus.example.com"})
     assert r.status_code != 400, r.text
+
+
+def test_default_loopback_ipv6_host_with_port_is_accepted(monkeypatch):
+    app = _build_app({"YACHT_ALLOWED_HOSTS": "localhost,127.0.0.1,[::1]"}, monkeypatch)
+    client = _client(app)
+
+    response = client.get("/api/setup/status", headers={"host": "[::1]:8000"})
+
+    assert response.status_code != 400, response.text
+
+
+def test_invalid_bracketed_ipv6_host_is_rejected(monkeypatch):
+    app = _build_app({"YACHT_ALLOWED_HOSTS": "localhost,127.0.0.1,[::1]"}, monkeypatch)
+    client = _client(app)
+
+    response = client.get("/api/setup/status", headers={"host": "[::1]:bad"})
+
+    assert response.status_code == 400

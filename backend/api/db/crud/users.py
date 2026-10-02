@@ -2,22 +2,23 @@ import bcrypt
 import asyncio
 import hashlib
 import jwt as _pyjwt
+import secrets
 
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.orm import selectinload
 from sqlalchemy import func
 
 from api.db.models import users as models
 from api.db.models.settings import TokenBlacklist
 from api.db.schemas import users as schemas
-from api.auth.jwt import create_access_token
+from api.auth.jwt import create_access_token, account_claims
 from fastapi.exceptions import HTTPException
 
 
 async def get_user(db: AsyncSession, user_id: int):
-    result = await db.execute(select(models.User).filter(models.User.id == user_id))
+    result = await db.execute(select(models.User).filter(models.User.id == user_id).execution_options(populate_existing=True))
     return result.scalars().first()
 
 async def get_user_by_name(db: AsyncSession, username: str):
@@ -56,6 +57,10 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
         hashed_password=_hashed_password,
         is_active=user.is_active,
         is_superuser=user.is_superuser,
+        perm_start=user.perm_start,
+        perm_stop=user.perm_stop,
+        perm_restart=user.perm_restart,
+        perm_delete=user.perm_delete,
     )
     db.add(db_user)
     try:
@@ -66,14 +71,17 @@ async def create_user(db: AsyncSession, user: schemas.UserCreate):
         raise HTTPException(status_code=400, detail="Username already in use or database error")
     return db_user
 
-async def update_user(db: AsyncSession, user: schemas.UserUpdate, current_user: str):
-    _hashed_password = await get_password_hash(user.password) if user.password else None
+async def update_user(db: AsyncSession, user: schemas.UserSelfUpdate, current_user: str):
     _user = await get_user_by_name(db=db, username=current_user)
 
     if not _user:
         raise HTTPException(status_code=404, detail="User not found.")
     if not _user.is_active:
         raise HTTPException(status_code=403, detail="User account is disabled.")
+    if user.password or (user.username and normalize_username(user.username) != _user.username):
+        if not user.current_password or not await verify_password(user.current_password, _user.hashed_password):
+            raise HTTPException(400, "Current password is incorrect")
+    _hashed_password = await get_password_hash(user.password) if user.password else None
 
     if user.username:
         canonical_username = normalize_username(user.username)
@@ -83,15 +91,8 @@ async def update_user(db: AsyncSession, user: schemas.UserUpdate, current_user: 
 
     if _hashed_password:
         _user.hashed_password = _hashed_password
-
-    if user.perm_start is not None:
-        _user.perm_start = user.perm_start
-    if user.perm_stop is not None:
-        _user.perm_stop = user.perm_stop
-    if user.perm_restart is not None:
-        _user.perm_restart = user.perm_restart
-    if user.perm_delete is not None:
-        _user.perm_delete = user.perm_delete
+    if _hashed_password or user.username:
+        _user.auth_version = secrets.token_hex(32)
 
     try:
         await db.commit()
@@ -101,10 +102,32 @@ async def update_user(db: AsyncSession, user: schemas.UserUpdate, current_user: 
         raise HTTPException(status_code=400, detail="Database update failed")
     return _user
 
-async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas.UserUpdate):
+async def _lock_admins(db):
+    # Acquire a database write lock before counting administrators. This also
+    # serializes SQLite writers and is shared by edit and delete transactions.
+    await db.execute(update(models.User).where(models.User.is_superuser.is_(True)).values(roles=models.User.roles))
+
+
+async def _guard_last_admin(db, db_user):
+    if db_user.is_superuser and db_user.is_active:
+        remaining = (await db.execute(select(func.count()).select_from(models.User).where(
+            models.User.is_superuser.is_(True), models.User.is_active.is_(True), models.User.id != db_user.id
+        ))).scalar()
+        if not remaining:
+            await db.rollback()
+            raise HTTPException(400, "Cannot remove or disable the last administrator")
+
+
+async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas.UserUpdate, requesting_user_id=None):
+    await _lock_admins(db)
     db_user = await get_user(db, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user_update.is_active is False or user_update.is_superuser is False:
+        if db_user.id == requesting_user_id:
+            await db.rollback()
+            raise HTTPException(400, "You cannot disable or demote your own account")
+        await _guard_last_admin(db, db_user)
 
     if user_update.username:
         canonical_username = normalize_username(user_update.username)
@@ -127,6 +150,7 @@ async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas
         db_user.perm_restart = user_update.perm_restart
     if user_update.perm_delete is not None:
         db_user.perm_delete = user_update.perm_delete
+    db_user.auth_version = secrets.token_hex(32)
 
     try:
         await db.commit()
@@ -137,14 +161,14 @@ async def update_user_by_id(db: AsyncSession, user_id: int, user_update: schemas
     return db_user
 
 async def delete_user(db: AsyncSession, user_id: int):
+    await _lock_admins(db)
     db_user = await get_user(db, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    if db_user.is_superuser:
-        res = await db.execute(select(models.User).filter(models.User.is_superuser == True))
-        if len(res.scalars().all()) <= 1:
-            raise HTTPException(status_code=400, detail="Cannot delete the last superuser")
-
+    await _guard_last_admin(db, db_user)
+    keys = (await db.execute(select(models.APIKEY).where(models.APIKEY.user == user_id))).scalars().all()
+    for key in keys:
+        await _blacklist_key(db, key)
     await db.delete(db_user)
     await db.commit()
     return db_user
@@ -165,9 +189,6 @@ async def get_password_hash(password) -> str:
     """
     if isinstance(password, str):
         password = password.encode('utf-8')
-    # Defense in depth: bcrypt >= 4 raises ValueError for input over 72 bytes.
-    # The request schemas already reject that with a 422, but a direct or
-    # programmatic caller must not turn it into an unhandled 500 either.
     if len(password) > 72:
         raise HTTPException(
             status_code=422,
@@ -204,6 +225,18 @@ async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
     # becomes invalid immediately, even though it may have years of remaining
     # lifetime. Without this, deleting the APIKEY row only removes the lookup
     # record; the bearer token stays usable until exp.
+    await _blacklist_key(db, key)
+
+    await db.delete(key)
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    return {"message": "Key deleted successfully."}
+
+
+async def _blacklist_key(db, key):
     if key.jti:
         expires_at = key.expires
         # If we don't have a stored expiration, fall back to a far-future
@@ -211,15 +244,11 @@ async def blacklist_api_key(key_id, db: AsyncSession, requesting_user=None):
         # to block the token.
         if expires_at is None:
             expires_at = datetime.now(timezone.utc) + timedelta(days=3650)
-        db.add(TokenBlacklist(jti=key.jti, expires=expires_at, revoked=True))
-
-    await db.delete(key)
-    try:
-        await db.commit()
-    except Exception as e:
-        await db.rollback()
-        raise e
-    return {"message": "Key deleted successfully."}
+        existing = await db.get(TokenBlacklist, key.jti)
+        if existing:
+            existing.revoked = True
+        else:
+            db.add(TokenBlacklist(jti=key.jti, expires=expires_at, revoked=True))
 
 async def get_keys(user, db: AsyncSession):
     res = await db.execute(select(models.APIKEY).filter(models.APIKEY.user == user.id))
@@ -227,8 +256,10 @@ async def get_keys(user, db: AsyncSession):
     return keys
 
 async def create_key(key_name, user, Authorize, db: AsyncSession):
+    if not user or not user.is_active:
+        raise HTTPException(401, "Account is inactive or removed")
     api_key = create_access_token(
-        data={"sub": user.username, "type": "api_key"},
+        data=account_claims(user, type="api_key"),
         expires_delta=timedelta(days=3650),
     )
     decoded = _pyjwt.decode(api_key, options={"verify_signature": False})
@@ -248,7 +279,6 @@ async def create_key(key_name, user, Authorize, db: AsyncSession):
     try:
         await db.commit()
     except Exception:
-        # B26: roll back on failure so the session is not left dirty.
         await db.rollback()
         raise
     await db.refresh(db_key)

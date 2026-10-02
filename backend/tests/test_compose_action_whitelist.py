@@ -12,7 +12,6 @@ from api.actions import compose as actions_compose
 
 @pytest.mark.parametrize("bad_action", [
     "; rm -rf /",
-    "rm",          # valid for app actions, not for project actions
     "logs",
     "exec sh",
     "",
@@ -46,7 +45,7 @@ def test_whitelist_constants_are_disjoint_where_expected():
     assert "delete" in actions_compose._ALLOWED_PROJECT_ACTIONS
     assert "delete" not in actions_compose._ALLOWED_APP_ACTIONS
     assert "rm" in actions_compose._ALLOWED_APP_ACTIONS
-    assert "rm" not in actions_compose._ALLOWED_PROJECT_ACTIONS
+    assert "rm" in actions_compose._ALLOWED_PROJECT_ACTIONS
 
 
 def test_whitelist_contains_no_shell_metacharacters():

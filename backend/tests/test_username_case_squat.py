@@ -18,6 +18,7 @@ from fastapi import HTTPException
 
 from api.db.models.users import User
 from api.db.crud.users import (
+    get_password_hash,
     create_user,
     update_user,
     update_user_by_id,
@@ -25,7 +26,7 @@ from api.db.crud.users import (
     normalize_username,
     _username_is_taken,
 )
-from api.db.schemas.users import UserCreate, UserUpdate
+from api.db.schemas.users import UserSelfUpdate, UserCreate, UserUpdate
 
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -49,7 +50,7 @@ async def _add_raw(db, username, **kw):
     """Insert a user *without* going through create_user — used only to
     simulate the pre-fix state where a mixed-case admin name might have
     been persisted by old code paths."""
-    defaults = dict(hashed_password="pw", is_active=True, is_superuser=False)
+    defaults = dict(hashed_password=await get_password_hash("pw"), is_active=True, is_superuser=False)
     defaults.update(kw)
     u = User(username=username, **defaults)
     db.add(u)
@@ -122,7 +123,7 @@ async def test_self_rename_cannot_squat_existing_admin_case_variant(db):
     with pytest.raises(HTTPException) as exc:
         await update_user(
             db,
-            UserUpdate(username="admin"),
+            UserSelfUpdate(username="admin", current_password="pw"),
             current_user="evil",
         )
     assert exc.value.status_code == 409
@@ -136,7 +137,7 @@ async def test_self_rename_cannot_squat_existing_admin_case_variant(db):
 async def test_self_rename_to_unique_name_still_works(db):
     await _add_raw(db, "alice")
     updated = await update_user(
-        db, UserUpdate(username="alice_new"), current_user="alice",
+        db, UserSelfUpdate(username="alice_new", current_password="pw"), current_user="alice",
     )
     assert updated is not None
     assert updated.username == "alice_new"

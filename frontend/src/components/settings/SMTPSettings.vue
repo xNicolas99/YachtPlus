@@ -9,31 +9,31 @@
           v-model="settings.server"
           label="SMTP Server"
           required
-          outlined
+          variant="outlined"
         ></v-text-field>
         <v-text-field
           v-model="settings.port"
           label="Port"
           type="number"
           required
-          outlined
+          variant="outlined"
         ></v-text-field>
         <v-text-field
           v-model="settings.username"
           label="Username"
-          outlined
+          variant="outlined"
         ></v-text-field>
         <v-text-field
           v-model="settings.password"
           label="Password"
           type="password"
-          outlined
+          variant="outlined"
         ></v-text-field>
         <v-text-field
           v-model="settings.sender_email"
           label="Sender Email"
           required
-          outlined
+          variant="outlined"
         ></v-text-field>
         <v-checkbox v-model="settings.use_tls" label="Use TLS"></v-checkbox>
       </v-form>
@@ -51,12 +51,12 @@
           <v-text-field
             v-model="testRecipient"
             label="Recipient Email"
-            outlined
+            variant="outlined"
           ></v-text-field>
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="testDialog = false">Cancel</v-btn>
+          <v-btn variant="text" @click="testDialog = false">Cancel</v-btn>
           <v-btn color="primary" :loading="isTesting" :disabled="isTesting" @click="sendTest">Send</v-btn>
         </v-card-actions>
       </v-card>

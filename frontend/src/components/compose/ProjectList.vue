@@ -47,7 +47,7 @@
         :search="search"
         @click:row="handleRowClick"
       >
-        <template v-slot:no-data>
+        <template #no-data>
           <div>
             No Compose available.
           </div>
@@ -57,7 +57,7 @@
             <v-menu
               :close-on-click="true"
               :close-on-content-click="false"
-              offset-y
+             
             >
               <template v-slot:activator="{ props }">
                 <v-btn icon size="small" v-bind="props" class="" aria-label="Project Actions" title="Project Actions">
@@ -66,16 +66,16 @@
               </template>
               <v-list color="foreground" density="compact">
                 <v-list-group prepend-icon="mdi-gamepad">
-                  <template v-slot:activator="{ active }">
-                    <v-list-item-title>Controls </v-list-item-title></template
+                  <template #activator="{ props }">
+                    <v-list-item v-bind="props" title="Controls" /></template
                   >
                   <v-list color="background" density="compact">
                     <v-list-item
                       @click="ProjectAction({ Name: item.name, Action: 'up' })"
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-arrow-up-bold</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Up</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -83,9 +83,9 @@
                         ProjectAction({ Name: item.name, Action: 'down' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-arrow-down-bold</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Down</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -94,9 +94,9 @@
                         ProjectAction({ Name: item.name, Action: 'start' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-play</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Start</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -104,9 +104,9 @@
                         ProjectAction({ Name: item.name, Action: 'stop' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-stop</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Stop</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -114,9 +114,9 @@
                         ProjectAction({ Name: item.name, Action: 'restart' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-refresh</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Restart</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -125,9 +125,9 @@
                         ProjectAction({ Name: item.name, Action: 'pull' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-update</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Pull</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -135,9 +135,9 @@
                         ProjectAction({ Name: item.name, Action: 'create' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-plus-box-multiple</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Create</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -146,32 +146,32 @@
                         ProjectAction({ Name: item.name, Action: 'kill' })
                       "
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-fire</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Kill</v-list-item-title>
                     </v-list-item>
 
                     <v-list-item
                       @click="ProjectAction({ Name: item.name, Action: 'rm' })"
                     >
-                      <template #prepend><v-icon>
+                      <span>
                         <v-icon>mdi-delete</v-icon>
-                      </v-icon></template>
+                      </span>
                       <v-list-item-title>Remove</v-list-item-title>
                     </v-list-item>
                   </v-list>
                 </v-list-group>
                 <v-list-item @click="projectDetails(item.name)">
-                  <template #prepend><v-icon>
+                  <span>
                     <v-icon>mdi-eye</v-icon>
-                  </v-icon></template>
+                  </span>
                   <v-list-item-title>View</v-list-item-title>
                 </v-list-item>
                 <v-list-item @click="editProject(item.name)">
-                  <template #prepend><v-icon>
+                  <span>
                     <v-icon>mdi-file-document-edit-outline</v-icon>
-                  </v-icon></template>
+                  </span>
                   <v-list-item-title>Edit</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -181,9 +181,9 @@
                     deleteDialog = true;
                   "
                 >
-                  <template #prepend><v-icon>
+                  <span>
                     <v-icon>mdi-delete</v-icon>
-                  </v-icon></template>
+                  </span>
                   <v-list-item-title>Delete</v-list-item-title>
                 </v-list-item>
               </v-list>
@@ -194,7 +194,7 @@
             <v-spacer />
 
             <v-chip
-              outlined
+              variant="outlined"
               small
               color="orange lighten-1"
               class="align-center mt-1"
@@ -238,11 +238,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
             @click="
               ProjectAction({ Name: selectedProject.name, Action: 'delete' });
@@ -271,23 +271,23 @@ export default {
       search: "",
       headers: [
         {
-          text: "Name",
-          value: "name",
+          title: "Name",
+          key: "name",
           sortable: true
         },
         {
-          text: "Version",
-          value: "version",
+          title: "Version",
+          key: "version",
           sortable: true
         },
         {
-          text: "Services",
-          value: "services",
+          title: "Services",
+          key: "services",
           sortable: false
         },
         {
-          text: "Path",
-          value: "path",
+          title: "Path",
+          key: "path",
           sortable: true
         }
       ]

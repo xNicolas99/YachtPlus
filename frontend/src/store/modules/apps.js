@@ -15,7 +15,9 @@ const mutations = {
     state.apps = apps;
   },
   setApp(state, app) {
-    const idx = state.apps.findIndex(x => x.Name === app.Name);
+    const name = app.name || app.Name?.replace(/^\//, "");
+    const idx = state.apps.findIndex(x => (app.Id && x.Id === app.Id) ||
+      (name && (x.name || x.Name?.replace(/^\//, "")) === name));
     if (idx < 0) {
       state.apps.push(app);
     } else {
@@ -160,12 +162,11 @@ const actions = {
     commit("setAction", "Updating " + Name + " ...");
     console.log("Update started for " + Name + ", please wait...");
     const url = `/apps/${Name}/update`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const app = response.data;
-        // F1: response is a single app object, not the full list.
-        commit("setApp", app);
+        commit(Array.isArray(app) ? "setApps" : "setApp", app);
         console.log(Name + " updated successfully");
       })
       .catch(err => {
@@ -187,12 +188,11 @@ const actions = {
     );
 
     const url = `/apps/actions/${Name}/${Action}`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const app = response.data;
-        // F1: single app object, not the full list.
-        commit("setApp", app);
+        commit(Array.isArray(app) ? "setApps" : "setApp", app);
         console.log(Name + " " + Action + "ed successfully");
       })
       .catch(err => {

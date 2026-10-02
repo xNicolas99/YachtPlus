@@ -4,8 +4,7 @@
       <v-toolbar-title>Server Template Variables</v-toolbar-title>
     </v-toolbar>
     <v-card-text>
-      <Form v-slot="{ invalid }">
-        <form>
+      <Form v-slot="{ meta }" @submit="submitFormData">
           <transition-group
             name="slide"
             enter-active-class="animated fadeInLeft fast-anim"
@@ -13,31 +12,31 @@
           >
             <v-row v-for="(item, index) in form.templateVariables" :key="index">
               <v-col>
-                <Field v-bind="field"
-                  name="Variable"
+                <Field
+                  :name="`templateVariables[${index}].variable`"
+                  v-model="item.variable"
                   rules="required"
-                  v-slot="{ field, errors, meta: fieldMeta }"
+                  v-slot="{ componentField, errors }"
                 >
                   <v-text-field
                     label="Variable"
-                    v-bind="field"
+                    v-bind="componentField"
                     :error-messages="errors"
-                    :success="fieldMeta.valid"
                     required
                   ></v-text-field>
                 </Field>
               </v-col>
               <v-col>
-                <Field v-bind="field"
-                  name="Replacement"
+                <Field
+                  :name="`templateVariables[${index}].replacement`"
+                  v-model="item.replacement"
                   rules="required"
-                  v-slot="{ field, errors, meta: fieldMeta }"
+                  v-slot="{ componentField, errors }"
                 >
                   <v-text-field
                     label="Replacement"
-                    v-bind="field"
+                    v-bind="componentField"
                     :error-messages="errors"
-                    :success="fieldMeta.valid"
                     required
                   ></v-text-field>
                 </Field>
@@ -45,6 +44,7 @@
               <v-col class="d-flex justify-end" cols="1">
                 <v-btn
                   icon
+                  :disabled="isSaving"
                   class="align-self-center"
                   @click="removeTemplateVariables(index)"
                 >
@@ -57,6 +57,7 @@
             <v-col cols="12" class="d-flex justify-end">
               <v-btn
                 icon
+                :disabled="isSaving"
                 class="align-self-center"
                 @click="addTemplateVariables"
               >
@@ -66,18 +67,18 @@
           </v-row>
           <v-btn
             class="float-right"
-            @click="submitFormData()"
+            type="submit"
             color="primary"
-            :disabled="invalid"
+            :loading="isSaving"
+            :disabled="!meta.valid || isSaving"
             >Save</v-btn
           >
-        </form>
       </Form>
     </v-card-text>
-    <v-snackbar v-model="saved" bottom color="secondary">
+    <v-snackbar v-model="saved" location="bottom" color="secondary">
       Saved
-      <template v-slot:action="{ attrs }">
-        <v-btn color="primary" text v-bind="attrs" @click="saved = false">
+      <template v-slot:actions="{ props }">
+        <v-btn color="primary" variant="text" v-bind="props" @click="saved = false">
           Close
         </v-btn>
       </template>
@@ -98,7 +99,8 @@ export default {
       form: {
         templateVariables: []
       },
-      saved: false
+      saved: false,
+      isSaving: false
     };
   },
   methods: {
@@ -112,16 +114,25 @@ export default {
     removeTemplateVariables(index) {
       this.form.templateVariables.splice(index, 1);
     },
-    submitFormData() {
-      const payload = [...this.form.templateVariables];
-      this.writeTemplateVariables(payload);
-      this.saved = true;
+    async submitFormData() {
+      if (this.isSaving) return;
+      const payload = this.form.templateVariables.map(item => ({ ...item }));
+      this.saved = false;
+      this.isSaving = true;
+      try {
+        await this.writeTemplateVariables(payload);
+        this.saved = true;
+      } catch {
+        // The store action reports the error through the global snackbar.
+      } finally {
+        this.isSaving = false;
+      }
     },
     async populateForm() {
       try {
         const t_vars = await this.readTemplateVariables();
         this.form = {
-          templateVariables: t_vars || []
+          templateVariables: (t_vars || []).map(item => ({ ...item }))
         };
       } catch (error) {
         console.error(error, error.response);

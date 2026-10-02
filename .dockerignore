@@ -21,7 +21,24 @@ backend/.ftpconfig
 backend/.ftpignore
 
 frontend/node_modules
-frontned/.gitignore
-fronend/.gitignore
+frontend/dist
+frontend/.gitignore
+backend/.venv
+backend/tests
+report/tools
+backend/__pycache__
+backend/.pytest_cache
+backend/test.db
 
 .git
+
+# Local signing keys, encryption salts, credentials and runtime databases
+# must never be sent to the builder or copied into a release image.
+**/.secret_key
+**/.fernet_salt
+**/.env
+**/.env.*
+**/*.db
+**/*.db-*
+**/__pycache__
+**/.pytest_cache

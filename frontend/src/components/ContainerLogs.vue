@@ -199,7 +199,9 @@ export default {
 
       this.eventSource.onerror = err => {
         console.error("EventSource failed:", err);
+        this.closeLogs();
       };
+      this.eventSource.addEventListener("end", () => this.closeLogs());
     },
     closeLogs() {
       if (this.eventSource) {
@@ -242,6 +244,7 @@ export default {
       document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
+      setTimeout(() => URL.revokeObjectURL(element.href), 0);
 
       if (this.$toast) {
         this.$toast.success("Logs downloaded");

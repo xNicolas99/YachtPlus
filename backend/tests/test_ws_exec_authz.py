@@ -47,7 +47,7 @@ async def _add_user(db, username, **kw):
         perm_delete=False,
     )
     defaults.update(kw)
-    u = User(username=username, **defaults)
+    u = User(username=username, auth_version="test-version", **defaults)
     db.add(u)
     await db.commit()
     return u
@@ -63,7 +63,7 @@ def _make_ws(token=None):
 
 
 def _token(payload):
-    return _jwt.encode(payload, SECRET, algorithm="HS256")
+    return _jwt.encode({"av": "test-version", **payload}, SECRET, algorithm="HS256")
 
 
 @pytest.mark.asyncio

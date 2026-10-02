@@ -15,6 +15,17 @@ WebSocket upgrades and Server-Sent Events (SSE).
 
 ## Prerequisites
 
+Set `YACHT_HTTP_TRUSTED_PROXIES` to Apache's exact transport IP as seen by the
+YachtPlus container, then recreate YachtPlus. Docker forwarding may make this
+different from host loopback; verify the actual peer address. Trust only the
+proxy, never an entire client subnet. Keep backend `YACHT_TRUSTED_PROXIES` at
+`127.0.0.1,::1`. Without correct trust, fail2ban cannot distinguish Apache's
+clients. See [protected deployment](SECURITY_DEPLOYMENT.md).
+
+Access remains LAN-only behind Apache until an active administrator explicitly
+enables public access in Server Settings → Security from a local connection.
+Mandatory fail2ban must be healthy before that opt-in succeeds.
+
 Enable necessary Apache modules:
 
 ```bash
@@ -55,6 +66,7 @@ the certificate paths, and `http://localhost:8000` with your real values.
 
     ProxyPreserveHost On
     ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "https"
 
     # Allow encoded slashes
     AllowEncodedSlashes NoDecode

@@ -1,5 +1,6 @@
 import axios from "axios";
 import router from "@/router/index";
+import { readResourcePages } from "@/utils/resourcePages";
 
 const state = {
   volumes: [],
@@ -34,46 +35,36 @@ const mutations = {
 };
 
 const actions = {
-  _readVolumes({ commit }) {
-    const url = "/resources/volumes/";
+  async _readVolumes({ commit }) {
     commit("setLoading", true);
-    return new Promise((resolve, reject) => {
-      axios
-        .get(url)
-        .then(response => {
-          const volumes = response.data;
-          commit("setVolumes", volumes);
-          resolve(volumes);
-        })
-        .catch(error => {
-          commit("snackbar/setErr", error, { root: true });
-          reject(error);
-        })
-        .finally(() => {
-          commit("setLoading", false);
-        });
-    });
+    try {
+      const items = await readResourcePages("/resources/volumes/");
+      commit("setVolumes", items);
+      return items;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      throw error;
+    } finally {
+      commit("setLoading", false);
+    }
   },
-  readVolumes({ commit }) {
+  async readVolumes({ commit }) {
     commit("setLoading", true);
-    const url = "/resources/volumes/";
-    axios
-      .get(url)
-      .then(response => {
-        const volumes = response.data;
-        commit("setVolumes", volumes);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      const items = await readResourcePages("/resources/volumes/");
+      commit("setVolumes", items);
+      return items;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
   readVolume({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/volumes/${id}`;
-    axios
+    return axios
       .get(url)
       .then(response => {
         const volume = response.data;
@@ -86,35 +77,33 @@ const actions = {
         commit("setLoading", false);
       });
   },
-  writeVolume({ commit }, payload) {
+  async writeVolume({ commit, dispatch }, payload) {
     commit("setLoading", true);
-    const url = "/resources/volumes/";
-    axios
-      .post(url, payload)
-      .then(response => {
-        const volumes = response.data;
-        commit("setVolumes", volumes);
-        // M9: navigate only on success — finally also ran on errors.
-        router.push({ name: "Volumes" });
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      await axios.post("/resources/volumes/", payload);
+      await dispatch("readVolumes");
+      await router.push({ name: "Volumes" });
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
   deleteVolume({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/volumes/${id}`;
-    axios
+    return axios
       .delete(url)
       .then(response => {
         const volume = response.data;
         commit("removeVolume", volume);
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);

@@ -1,19 +1,19 @@
 <template lang="html">
-  <div class="images-list component" style="max-width: 90%">
+  <div class="images-list component" style="width: 100%">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
-      <v-card-title class="primary font-weight-bold">
+      <v-card-title class="primary font-weight-bold d-flex flex-wrap ga-2">
         Images
         <v-dialog v-model="pullDialog" max-width="290">
           <template v-slot:activator="{ props }">
-            <v-btn class="ml-2" color="secondary" v-bind="props">
+            <v-btn class="ml-2" color="secondary" v-bind="props" aria-label="Pull image" title="Pull image">
               <v-icon>mdi-plus</v-icon>
             </v-btn>
             <v-tooltip location="bottom">
@@ -22,7 +22,10 @@
                   class="ml-2"
                   color="warning"
                   v-bind="props"
-                  @click="pruneImages"
+                  :loading="pruning"
+                  :disabled="pruning"
+                  aria-label="Prune unused images"
+                  @click="pruneDialog = true"
                 >
                   <v-icon>mdi-broom</v-icon>
                 </v-btn>
@@ -49,16 +52,15 @@
             </form>
             <v-card-actions>
               <v-spacer />
-              <v-btn text @click="pullDialog = false">
+              <v-btn variant="text" @click="pullDialog = false">
                 Cancel
               </v-btn>
               <v-btn
-                text
+                variant="text"
                 color="primary"
-                @click="
-                  submit();
-                  pullDialog = false;
-                "
+                :loading="pulling"
+                :disabled="pulling || !form.image.trim()"
+                @click="submit"
               >
                 Pull
               </v-btn>
@@ -80,12 +82,14 @@
         class="mx-auto image-datatable foreground"
         :headers="headers"
         :items="images"
+        :loading="isLoading"
+        loading-text="Loading images..."
         :items-per-page="25"
         :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
-        <template v-slot:no-data>
+        <template #no-data>
           <div>
             No Images available.
           </div>
@@ -93,44 +97,46 @@
         <template v-slot:item.RepoTags="{ item }">
           <div class="d-flex">
             <span class="align-streatch text-truncate nametext mt-2">{{
-              item.RepoTags[0] || handleDigests(item) || ""
+              item.RepoTags?.[0] || handleDigests(item)
             }}</span>
             <v-spacer />
 
             <v-chip
-              outlined
-              small
+              variant="outlined"
+              size="small"
               color="orange lighten-1"
               class="align-center mt-1"
               label
               v-if="item.inUse == false"
               >Unused</v-chip
             >
-            <v-menu close-on-click close-on-content-click offset-y>
+            <v-menu close-on-click close-on-content-click>
               <template v-slot:activator="{ props }">
                 <v-btn
                   icon
                   class="align-streatch"
                   size="small"
                   v-bind="props"
+                  @click.stop
+                  :aria-label="`Actions for ${item.Id}`"
                 >
                   <v-icon>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
               <v-list color="foreground" density="compact">
                 <v-list-item @click="imageDetails(item.Id)">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-eye</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>View</v-list-item-title>
                 </v-list-item>
                 <v-list-item
-                  v-if="item.RepoTags[0]"
+                  v-if="item.RepoTags?.[0]"
                   @click="updateImage(item.Id)"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-update</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Pull</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -140,9 +146,9 @@
                     deleteDialog = true;
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Delete</v-list-item-title>
                 </v-list-item>
               </v-list>
@@ -159,12 +165,23 @@
         <template v-slot:item.Created="{ item }">
           <span
             class="d-inline-block text-truncate flex-grow-1 flex-shrink-0"
-            >{{ $formatDate(item.Created) }}</span
+            >{{ $formatDate(new Date(item.Created * 1000)) }}</span
           >
         </template>
       </v-data-table>
     </v-card>
 
+    <v-dialog v-model="pruneDialog" max-width="420" :persistent="pruning">
+      <v-card>
+        <v-card-title>Prune unused images?</v-card-title>
+        <v-card-text>Remove unused images on this Docker host. Images required later may need to be downloaded again.</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="pruning" @click="pruneDialog = false">Cancel</v-btn>
+          <v-btn color="warning" :loading="pruning" :disabled="pruning" @click="pruneImages">Prune</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-dialog v-if="selectedImage" v-model="deleteDialog" max-width="290">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
@@ -176,16 +193,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
-            @click="
-              deleteImage(selectedImage.Id);
-              deleteDialog = false;
-            "
+            :loading="deleting"
+            :disabled="deleting"
+            @click="confirmDelete"
           >
             Delete
           </v-btn>
@@ -201,34 +217,46 @@ import { mapActions, mapState } from "vuex";
 export default {
   data() {
     return {
-      pruning: false,
       selectedImage: null,
       deleteDialog: false,
+      deleting: false,
       form: {
         image: ""
       },
       pullDialog: false,
+      pulling: false,
+      pruneDialog: false,
+      pruning: false,
       search: "",
       headers: [
         {
-          text: "Tag",
-          value: "RepoTags",
+          title: "Tag",
+          key: "RepoTags",
           sortable: true
         },
         {
-          text: "ID",
-          value: "Id",
+          title: "ID",
+          key: "Id",
           sortable: true
         },
         {
-          text: "Created",
-          value: "Created",
+          title: "Created",
+          key: "Created",
           sortable: true
         }
       ]
     };
   },
   methods: {
+    async confirmDelete() {
+      if (this.deleting) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteImage(this.selectedImage.Id)) this.deleteDialog = false;
+      } finally {
+        this.deleting = false;
+      }
+    },
     ...mapActions({
       readImages: "images/readImages",
       updateImage: "images/updateImage",
@@ -241,48 +269,35 @@ export default {
     imageDetails(imageid) {
       this.$router.push({ path: `/resources/images/${imageid}` });
     },
-    submit() {
-      const data = this.form;
-      this.writeImage(data);
-    },
-    handleDigests(item) {
-      if (item.RepoDigests[0]) {
-        let _digest = item.RepoDigests[0].split("@")[0];
-        return _digest;
-      } else {
-        let _shortid = item.Id.split(":")[1].substring(0, 10);
-        return _shortid;
+    async submit() {
+      if (this.pulling || !this.form.image.trim()) return;
+      this.pulling = true;
+      try {
+        if (await this.writeImage({ image: this.form.image.trim() })) {
+          this.pullDialog = false;
+          this.form.image = '';
+        }
+      } finally {
+        this.pulling = false;
       }
     },
-    pruneImages() {
-      this.pruning = true;  // F18/F19: snackbar module has no setLoading mutation
-      axios({
-        url: "/settings/prune/images",
-        method: "POST"
-        })
-        .then(response => {
-          let action = Object.keys(response.data)[0];
-          let deletedNumber = 0;
-          if (response.data[action] != null) {
-            deletedNumber = response.data[action].length;
-          }
-          this.$store.commit(
-            "snackbar/setMessage",
-            deletedNumber +
-              " " +
-              action +
-              ". Space Reclaimed: " +
-              (response.data.SpaceReclaimed || 0) +
-              " Bytes"
-          );
-          this.readImages(); // Refresh list
-        })
-        .catch(err => {
-          this.$store.commit("snackbar/setErr", err);
-        })
-        .finally(() => {
-          this.pruning = false;
-        });
+    handleDigests(item) {
+      return item.RepoDigests?.[0]?.split('@')[0] || item.Id?.replace(/^sha256:/, '').slice(0, 10) || 'Untagged image';
+    },
+    async pruneImages() {
+      if (this.pruning) return;
+      this.pruning = true;
+      try {
+        const { data } = await axios.post('/settings/prune/images');
+        const deleted = new Set((data?.ImagesDeleted || []).map(item => item.Deleted).filter(Boolean)).size;
+        this.$store.commit('snackbar/setMessage', `${deleted} images pruned. Space reclaimed: ${data?.SpaceReclaimed || 0} bytes.`);
+        this.pruneDialog = false;
+        await this.readImages();
+      } catch (error) {
+        this.$store.commit('snackbar/setErr', error);
+      } finally {
+        this.pruning = false;
+      }
     }
   },
   computed: {
@@ -302,6 +317,6 @@ export default {
   max-width: 30vw;
 }
 .image-datatable {
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 </style>

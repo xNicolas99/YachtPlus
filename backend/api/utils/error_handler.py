@@ -33,6 +33,7 @@ def safe_http_status(exc, default: int = 503) -> int:
     return default
 
 SENSITIVE_FIELDS = {
+    "current_password",
     "password",
     "token",
     "access_token",

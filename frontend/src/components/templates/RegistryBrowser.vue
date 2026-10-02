@@ -16,8 +16,8 @@
             label="Search images..."
             prepend-inner-icon="mdi-magnify"
             clearable
-            outlined
-            dense
+            variant="outlined"
+            density="compact"
             @input="handleSearch"
             @keydown.enter="fetchImages"
           ></v-text-field>
@@ -58,7 +58,7 @@
               text-color="white"
               style="position: absolute; top: 10px; right: 10px; z-index: 2"
             >
-              <v-icon start x-small>{{ getBadgeIcon(image.source) }}</v-icon>
+              <v-icon start size="x-small">{{ getBadgeIcon(image.source) }}</v-icon>
               {{ getBadgeText(image.source) }}
             </v-chip>
           </div>
@@ -127,11 +127,11 @@
         </v-card-text>
 
         <v-card-actions>
-          <v-btn text :href="getRegistryUrl(selectedImage)" target="_blank" rel="noopener noreferrer">
-            View on Registry <v-icon x-small>mdi-open-in-new</v-icon>
+          <v-btn variant="text" :href="getRegistryUrl(selectedImage)" target="_blank">
+            View on Registry <v-icon size="x-small">mdi-open-in-new</v-icon>
           </v-btn>
           <v-spacer></v-spacer>
-          <v-btn text @click="detailsDialog = false">Close</v-btn>
+          <v-btn variant="text" @click="detailsDialog = false">Close</v-btn>
           <v-btn color="primary" @click="deploy(selectedImage)"
             >Deploy Now</v-btn
           >
@@ -293,10 +293,7 @@ export default {
       }
     },
     async fetchImages() {
-      // F72: out-of-order responses — a slower older request could
-      // overwrite newer results. Each fetch bumps a sequence number;
-      // only the newest is allowed to write state.
-      const seq = (this._fetchSeq = (this._fetchSeq || 0) + 1);
+      const sequence = this._fetchSequence = (this._fetchSequence || 0) + 1;
       this.loading = true;
       this.images = []; // Clear immediately
       try {
@@ -316,20 +313,20 @@ export default {
 
           // Sort by pull count (descending)
           allImages.sort((a, b) => (b.pull_count || 0) - (a.pull_count || 0));
-          if (seq !== this._fetchSeq) return;  // F72: stale response
+          if (sequence !== this._fetchSequence) return;
           this.images = allImages;
 
         } else {
           // Single Registry Search
-          const single = await this.fetchRegistryImages(registry, this.search);
-          if (seq !== this._fetchSeq) return;  // F72: stale response
-          this.images = single;
+          const images = await this.fetchRegistryImages(registry, this.search);
+          if (sequence !== this._fetchSequence) return;
+          this.images = images;
         }
       } catch (error) {
         console.error("Error fetching images:", error);
         if (this.$toast) this.$toast.error("Failed to fetch images");
       } finally {
-        this.loading = false;
+        if (sequence === this._fetchSequence) this.loading = false;
       }
     },
     handleSearch() {

@@ -28,6 +28,7 @@ from slowapi import _rate_limit_exceeded_handler
 import logging
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
 @asynccontextmanager
@@ -189,12 +190,26 @@ def _host_allowed(host_header: str) -> bool:
     if not host_header:
         # An empty Host header is a protocol-level oddity; reject it.
         return False
-    # Strip the port and any IPv6 brackets.
-    hostname = host_header.split(":")[0].strip("[]").lower()
+    # Bracketed IPv6 literals contain colons before the optional port.
+    if host_header.startswith("["):
+        closing_bracket = host_header.find("]")
+        if closing_bracket < 0:
+            return False
+        hostname = host_header[1:closing_bracket].lower()
+        remainder = host_header[closing_bracket + 1:]
+        if remainder and (not remainder.startswith(":") or not remainder[1:].isdigit()):
+            return False
+    else:
+        hostname, separator, port = host_header.partition(":")
+        hostname = hostname.lower()
+        if separator and not port.isdigit():
+            return False
+    if not hostname:
+        return False
     if "*" in _allowed_hosts_raw:
         return True
     for allowed in _allowed_hosts_raw:
-        allowed = allowed.strip().lower()
+        allowed = allowed.strip().strip("[]").lower()
         if not allowed:
             continue
         if allowed == hostname:
@@ -230,8 +245,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
         "img-src 'self' data: https:; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
@@ -263,3 +278,12 @@ app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
 # The SPA is served by nginx from /app in the container. FastAPI intentionally
 # does not mount a static directory here, so API requests that fall through
 # nginx return a 404 instead of accidentally serving stale build artefacts.
+
+# Added last: Starlette executes this before every other middleware. Pure
+# ASGI handling also guards WebSockets and the nginx static auth subrequest.
+from api.utils.access_policy import AccessPolicyMiddleware
+from api.utils.csrf import CSRFProtectionMiddleware
+from api.utils.audit_middleware import MutationAuditMiddleware
+app.add_middleware(MutationAuditMiddleware)
+app.add_middleware(CSRFProtectionMiddleware)
+app.add_middleware(AccessPolicyMiddleware)

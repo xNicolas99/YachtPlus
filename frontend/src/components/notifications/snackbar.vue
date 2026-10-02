@@ -7,7 +7,7 @@
     multi-line
   >
     {{ content }}
-    <template v-slot:action>
+    <template v-slot:actions>
       <v-btn
         variant="text"
         :color="btnColor"
@@ -33,9 +33,12 @@ export default {
       "content",
       "bottom",
       "color",
-      "visible",
       "btnColor"
     ]),
+    visible: {
+      get() { return this.$store.state.snackbar.visible; },
+      set(value) { if (!value) this.clearSnack(); }
+    },
     // Vuetify 3 uses `location` (top/bottom/left/right) instead of the
     // Vuetify 2 `bottom` boolean. Map the legacy store flag to a location.
     location() {

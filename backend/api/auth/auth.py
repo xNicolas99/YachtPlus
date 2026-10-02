@@ -65,7 +65,7 @@ async def require_superuser(Authorize: get_auth_wrapper, db: AsyncSession) -> Us
     if not user:
         raise HTTPException(status_code=401, detail="User not found or deleted")
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account is disabled.")
+        raise HTTPException(401, "User account is disabled")
     if not user.is_superuser:
         raise HTTPException(status_code=403, detail="Superuser required.")
     return user
@@ -85,9 +85,8 @@ async def check_permission(permission_name: str, Authorize: get_auth_wrapper, db
 
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
-
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account is disabled.")
+        raise HTTPException(401, "User account is disabled")
 
     if user.is_superuser:
         return True

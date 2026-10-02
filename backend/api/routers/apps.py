@@ -33,10 +33,8 @@ _DEPLOY_NETWORK_MODES = {"bridge", "host", "none", "default"}
 # Capabilities that are permitted through the deploy form. Keep this an
 # explicit whitelist: Docker adds new capabilities over time, and a
 # blacklist will always lag behind.
-_DEPLOY_ALLOWED_CAPS = {
-    "CHOWN", "DAC_OVERRIDE", "FSETID", "FOWNER", "KILL", "SETGID",
-    "SETUID", "SETPCAP", "NET_BIND_SERVICE", "SYS_CHROOT", "AUDIT_WRITE",
-}
+from api.utils.container_security import ALLOWED_CAPABILITIES
+_DEPLOY_ALLOWED_CAPS = ALLOWED_CAPABILITIES
 
 
 def _validate_deploy_template(template: "schemas.DeployForm") -> None:  # type: ignore[name-defined]
@@ -45,6 +43,12 @@ def _validate_deploy_template(template: "schemas.DeployForm") -> None:  # type: 
     semantic-validity rules. Failures map to 422 so the frontend can
     surface them as input validation errors instead of a 500.
     """
+    from api.utils.container_security import workload_options
+    workload_options(template.security_profile, template.container_user, template.confirm_image_default)
+    if template.security_profile == "restricted" and (
+        template.network_mode == "host" or template.network == "host" or template.devices
+    ):
+        raise HTTPException(422, "Host networking and devices require confirmed image compatibility mode.")
     if not _DEPLOY_NAME_RE.match(template.name or ""):
         raise HTTPException(status_code=422, detail="Invalid container name")
 
@@ -123,7 +127,7 @@ async def _require_superuser(Authorize, db: AsyncSession) -> None:
     if not username:
         raise HTTPException(status_code=401, detail="Not logged in.")
     user = await users_crud.get_user_by_name(db=db, username=username)
-    if not user or not user.is_superuser:
+    if not user or not user.is_superuser or not user.is_active:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
 
@@ -138,9 +142,6 @@ async def index(Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
 
 @router.get("/{app_name}/updates")
 async def check_app_updates(app_name, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
-    # B1: check_app_update() returns the full container inspect payload
-    # (incl. Config.Env -- secrets). Gate behind perm_start (read floor),
-    # same as GET /{app_name}.
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
     return await actions.check_app_update(app_name)
@@ -206,6 +207,8 @@ async def get_support_bundle(
 # were CSRF-triggerable via GET (SameSite=lax sends the auth cookie on
 @router.post("/actions/{app_name}/{action}")
 async def container_actions(app_name, action, background_tasks: BackgroundTasks, Authorize: get_auth_wrapper = Depends(get_auth_wrapper), db: AsyncSession = Depends(get_db)):
+    if action not in {"start", "stop", "restart", "kill", "remove", "pause", "unpause"}:
+        raise HTTPException(400, "Invalid container action")
     await auth_check(Authorize)
 
     # API keys are long-lived credentials. They remain valid for read-only
@@ -256,6 +259,9 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
     # Deploying implies starting/creating
     await check_permission("perm_start", Authorize, db)
 
+    if template.edit:
+        await check_permission("perm_restart", Authorize, db)
+
     # If template_id is provided, fetch defaults from DB and merge.
     if template.template_id:
         try:
@@ -274,6 +280,9 @@ async def deploy_app(template: schemas.DeployForm, Authorize: get_auth_wrapper =
          raise HTTPException(status_code=422, detail="Name field is required.")
 
     _validate_deploy_template(template)
+
+    if template.security_profile == "image-default":
+        await _require_superuser(Authorize, db)
 
     result = await actions.deploy_app(template=template)
 

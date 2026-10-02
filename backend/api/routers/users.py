@@ -1,6 +1,6 @@
 from sqlalchemy.future import select
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
-from api.auth.jwt import get_auth_wrapper, create_access_token, revoke_token, get_current_user_token
+from api.auth.jwt import get_auth_wrapper, create_access_token, revoke_token, get_current_user_token, account_claims
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 import logging
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # "hardcoded password" in the codebase. Tell static analysers explicitly.
 # nosem: generic.secrets.security.detected-generic-secret.detected-generic-secret
 # nosec: B105
-_TIMING_DUMMY_BCRYPT_HASH = "$2b$12$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
+_TIMING_DUMMY_BCRYPT_HASH = "$2b$13$EPB.k0Vz4T5lXl6uT9f9/eG0m7b7mG3aR4jPq4s0q3wY0r7U5/7qC"
 
 
 async def _authenticate_user(
@@ -75,9 +75,8 @@ async def _authenticate_user(
             return _user
 
         try:
-            secret = decrypt(_user.otp_secret)
-            totp = pyotp.TOTP(secret)
-            code_ok = totp.verify(user_data.otp_token)
+            from api.utils.totp import consume_totp
+            code_ok = await consume_totp(db, _user, user_data.otp_token)
         except HTTPException:
             raise
         except Exception as e:
@@ -147,8 +146,7 @@ async def delete_user(
                 detail="Cannot delete the last administrator.",
             )
 
-    await db.delete(user_to_delete)
-    await db.commit()
+    await crud.delete_user(db, user_id)
     return {"message": "User deleted"}
 
 @router.put("/users/{user_id}", response_model=schemas.User)
@@ -166,37 +164,7 @@ async def update_user_admin(
     if not current_user.is_superuser:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    # B22: Last-Admin / Self-Lockout protection on UPDATE (delete_user had
-    # this gate, the update path did not). Mirror the delete_user rules:
-    # a superuser cannot demote/deactivate himself, and the last
-    # superuser cannot be demoted or deactivated.
-    target_user = await crud.get_user(db, user_id)
-    if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if target_user.id == current_user.id and (
-        user_update.is_superuser is False or user_update.is_active is False
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="You cannot demote or deactivate your own account.",
-        )
-    if target_user.is_superuser and (
-        user_update.is_superuser is False or user_update.is_active is False
-    ):
-        res = await db.execute(
-            select(models.User).filter(
-                models.User.is_superuser == True,  # noqa: E712
-                models.User.id != target_user.id,
-            )
-        )
-        remaining_admins = len(res.scalars().all())
-        if remaining_admins == 0:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot demote or deactivate the last administrator.",
-            )
-
-    db_user = await crud.update_user_by_id(db, user_id, user_update)
+    db_user = await crud.update_user_by_id(db, user_id, user_update, requesting_user_id=current_user.id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -238,7 +206,7 @@ async def _perform_login(
     if _user.is_2fa_enabled and not user_data.otp_token:
         return {"login": "2fa_required", "username": _user.username}, None
 
-    access_token = create_access_token(data={"sub": _user.username})
+    access_token = create_access_token(data=account_claims(_user))
     return {"login": "successful", "username": _user.username}, access_token
 
 
@@ -299,7 +267,8 @@ async def refresh(
         Authorize.unset_jwt_cookies(response)
         raise HTTPException(status_code=401, detail="Account is inactive or removed.")
 
-    new_access_token = create_access_token(data={"sub": current_user})
+    await revoke_token(get_current_user_token(request), require_new=True)
+    new_access_token = create_access_token(data=account_claims(user))
     Authorize.set_access_cookies(new_access_token, response)
     return {"refresh": "successful"}
 
@@ -394,8 +363,7 @@ async def update_user(
     # admin path). Build one from the self-update payload so privilege
     # fields (perm_*, is_superuser, is_active) are always None and can
     # never be self-assigned through this endpoint.
-    safe_update = schemas.UserUpdate(username=user.username, password=user.password)
-    return await crud.update_user(db=db, user=safe_update, current_user=current_user)
+    return await crud.update_user(db=db, user=user, current_user=current_user)
 
 
 @router.post("/logout")

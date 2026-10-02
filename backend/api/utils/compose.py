@@ -2,6 +2,7 @@ import os
 import fnmatch
 from fastapi import HTTPException
 import re
+from pathlib import Path
 
 
 
@@ -51,13 +52,16 @@ def find_yml_files(path):
     async contexts, see the wrappers in actions/compose.py)
     """
     matches = {}
-    for root, _, filenames in os.walk(path, followlinks=True):
-        for filename in set().union(
-            fnmatch.filter(filenames, "docker-compose.yml"),
-            fnmatch.filter(filenames, "docker-compose.yaml"),
-        ):
-            key = os.path.basename(os.path.normpath(root))
-            matches[key] = os.path.join(os.getcwd(), root, filename)
+    base = Path(path)
+    if not base.is_dir() or base.is_symlink():
+        return matches
+    directories = [base] + sorted((p for p in base.iterdir() if p.is_dir() and not p.is_symlink()), key=lambda p: p.name)
+    for directory in directories:
+        for filename in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml"):
+            file = directory / filename
+            if file.is_file() and not file.is_symlink():
+                matches[directory.name] = str(file.absolute())
+                break
     return matches
 
 

@@ -117,7 +117,7 @@ async def test_decrypt_failure_still_maps_to_generic_400(db):
     request = MagicMock()
     payload = UserLogin(username="alice", password="rightpw", otp_token="123456")
 
-    with patch("api.routers.users.decrypt", side_effect=ValueError("bad key")), \
+    with patch("api.utils.totp.decrypt", side_effect=ValueError("bad key")), \
          patch("api.routers.users.logger") as mock_logger:
         with pytest.raises(HTTPException) as exc:
             await login(request=request, user_data=payload, db=db, Authorize=MockAuth())

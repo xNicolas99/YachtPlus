@@ -63,6 +63,7 @@ async def test_search_caps_template_results(db, monkeypatch):
     class FakeTemplate:
         def __init__(self, i):
             self.id = i
+            self.template_id = i
             self.title = f"t{i}"
             self.name = f"n{i}"
             self.description = ""

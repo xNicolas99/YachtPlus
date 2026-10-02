@@ -1,5 +1,6 @@
 import axios from "axios";
 import router from "@/router/index";
+import { readResourcePages } from "@/utils/resourcePages";
 
 const state = {
   images: [],
@@ -34,26 +35,23 @@ const mutations = {
 };
 
 const actions = {
-  readImages({ commit }) {
+  async readImages({ commit }) {
     commit("setLoading", true);
-    const url = "/resources/images/";
-    axios
-      .get(url)
-      .then(response => {
-        const images = response.data;
-        commit("setImages", images);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      const items = await readResourcePages("/resources/images/");
+      commit("setImages", items);
+      return items;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
   readImage({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/images/${id}`;
-    axios
+    return axios
       .get(url)
       .then(response => {
         const image = response.data;
@@ -66,35 +64,29 @@ const actions = {
         commit("setLoading", false);
       });
   },
-  writeImage({ commit }, payload) {
+  async writeImage({ commit, dispatch }, payload) {
     commit("setLoading", true);
-    const url = "/resources/images/";
-    axios
-      .post(url, payload)
-      .then(response => {
-        const images = response.data;
-        commit("setImages", images);
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .then(() => {
-        // F38: navigate only on success — finally also ran on errors.
-        router.push({ name: "Images" });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      await axios.post("/resources/images/", payload);
+      await dispatch("readImages");
+      await router.push({ name: "Images" });
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+    }
   },
   updateImage({ commit, dispatch }, id) {
     commit("setLoading", true);
     const url = `/resources/images/${id}/pull`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const image = response.data;
         commit("setImage", image);
-        dispatch("readImages");
+        return dispatch("readImages");
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
@@ -106,14 +98,16 @@ const actions = {
   deleteImage({ commit }, id) {
     commit("setLoading", true);
     const url = `/resources/images/${id}`;
-    axios
+    return axios
       .delete(url)
       .then(response => {
         const image = response.data;
         commit("removeImage", image);
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);

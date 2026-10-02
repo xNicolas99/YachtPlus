@@ -54,7 +54,8 @@ async def test_deploy_app_maps_sync_docker_exception(deploy_form):
             await deploy_app(deploy_form)
 
     assert exc_info.value.status_code == 503
-    assert "connection refused" in exc_info.value.detail
+    assert "connection refused" not in exc_info.value.detail
+    assert "Docker deployment failed" in exc_info.value.detail
 
 
 @pytest.mark.asyncio

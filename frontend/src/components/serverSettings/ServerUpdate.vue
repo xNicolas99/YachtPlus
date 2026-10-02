@@ -13,7 +13,7 @@
     >
     <v-card-text class="mt-2"
       >Update YachtPlus to the latest version. <br />
-      Note: This will spin up a run-once watchtower instance and update YachtPlus.
+      This starts a temporary update worker through the configured Docker proxy.
       In the process YachtPlus will be restarted and you will be logged
       out.</v-card-text
     >
@@ -42,13 +42,13 @@ export default {
   mounted() {
     this.checkUpdate();
   },
+  computed: {
+    ...mapState("auth", ["authDisabled"])
+  },
   methods: {
     ...mapMutations({
       setMessage: "snackbar/setMessage",
       setErr: "snackbar/setErr"
-    }),
-    ...mapState({
-      authDisabled: "auth/authDisabled"
     }),
     ...mapActions({
       logout: "auth/AUTH_LOGOUT"
@@ -58,7 +58,7 @@ export default {
       axios({
         url: "/settings/check/update",
         method: "GET"
-        })
+      })
         .then(response => {
           this.isLoading = false;
           this.updatable = response.data;
@@ -68,34 +68,18 @@ export default {
           this.setErr(err);
         });
     },
-    update() {
+    async update() {
       this.isLoading = true;
-      axios({
-        url: "/settings/update",
-        method: "POST"
-        })
-        .then(() => {
-          this.isLoading = false;
-          this.setMessage(
-            "YachtPlus is updating now. You will be logged out to complete the update."
-          );
-        })
-        .finally(() => {
-          this.isLoading = true;
-          const sleep = delay =>
-            new Promise(resolve => setTimeout(resolve, delay));
-          sleep(5000);
-          if (this.authDisabled == true) {
-            this.$forceUpdate();
-          } else {
-            this.logout();
-            this.$forceUpdate();
-          }
-        })
-        .catch(err => {
-          this.isLoading = false;
-          this.setErr(err);
-        });
+      try {
+        await axios.post("/settings/update");
+        this.setMessage("YachtPlus accepted the update. Check the updater container for its result.");
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (!this.authDisabled) await this.logout();
+      } catch (err) {
+        this.setErr(err);
+      } finally {
+        this.isLoading = false;
+      }
     }
   }
 };

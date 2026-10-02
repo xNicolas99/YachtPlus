@@ -1,7 +1,7 @@
 <template lang="html">
   <div class="networks-list component" style="max-width: 90%">
     <v-card color="foreground">
-      <Form ref="general" v-slot="{ invalid, meta }">
+      <Form ref="general" v-slot="{ meta }" @submit="submit">
         <v-fade-transition>
           <v-progress-linear
             indeterminate
@@ -17,54 +17,53 @@
         <v-card-text>
           Create a new Network.
         </v-card-text>
-        <form ref="form" @submit.prevent="submit">
           <v-card-text>
             General
           </v-card-text>
 
-          <Field v-bind="field"
+          <Field
             name="Name"
+            v-model="form.name"
             rules="required"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors }"
           >
             <v-text-field
               label="Name *"
               class="mx-7"
               placeholder="yacht_network"
               :error-messages="errors"
-              :success="fieldMeta.valid"
               required
-              v-bind="field"
+              v-bind="componentField"
             />
           </Field>
-          <Field v-bind="field"
+          <Field
             name="Driver"
+            v-model="form.networkDriver"
             rules="required"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors }"
           >
             <v-select
               class="mx-7"
               label="Driver *"
               placeholder="bridge"
               :error-messages="errors"
-              :success="fieldMeta.valid"
               :items="network_drivers"
-              v-bind="field"
+              v-bind="componentField"
             />
           </Field>
-          <Field v-bind="field"
+          <Field
+            v-if="form.networkDriver == 'macvlan'"
             name="Network Interface"
+            v-model="form.network_devices"
             rules="required"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors }"
           >
             <v-text-field
-              v-if="form.networkDriver == 'macvlan'"
               class="mx-7"
               label="Network Interface *"
               placeholder="eth0"
               :error-messages="errors"
-              :success="fieldMeta.valid"
-              v-bind="field"
+              v-bind="componentField"
             />
           </Field>
           <v-row class="mx-5">
@@ -88,40 +87,28 @@
             <v-card-text> IPv4 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <Field
-                  name="IPv4 Subnet"
-                  v-slot="{ field, errors, meta: fieldMeta }"
-                >
                 <v-text-field
                   label="Subnet"
                   placeholder="10.0.200.0/24"
-                  v-bind="field"
+                  v-model="form.ipv4subnet"
                 />
-                </Field>
               </v-col>
               <v-col>
-                <Field
-                  name="IPv4 Gateway"
-                  v-slot="{ field, errors, meta: fieldMeta }"
-                >
                 <v-text-field
                   label="Gateway"
                   placeholder="10.0.200.1"
-                  v-bind="field"
+                  v-model="form.ipv4gateway"
                 />
-                </Field>
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <Field name="IP Range" v-slot="{ field, errors, meta: fieldMeta }">
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
                   placeholder="10.0.200.0/24"
-                  v-bind="field"
+                  v-model="form.ipv4range"
                 />
-                </Field>
               </v-col>
             </v-row>
           </div>
@@ -133,63 +120,45 @@
             <v-card-text> IPv6 </v-card-text>
             <v-row class="mx-5">
               <v-col>
-                <Field
-                  name="IPv6 Subnet"
-                  v-slot="{ field, errors, meta: fieldMeta }"
-                >
                 <v-text-field
                   label="Subnet"
                   placeholder="2001:db8::/32"
-                  v-bind="field"
+                  v-model="form.ipv6subnet"
                   :disabled="!form.ipv6_enabled"
                 />
-                </Field>
               </v-col>
               <v-col>
-                <Field
-                  name="IPv6 Gateway"
-                  v-slot="{ field, errors, meta: fieldMeta }"
-                >
                 <v-text-field
                   label="Gateway"
                   placeholder="2001:db8::1"
-                  v-bind="field"
+                  v-model="form.ipv6gateway"
                   :disabled="!form.ipv6_enabled"
                 />
-                </Field>
               </v-col>
             </v-row>
             <v-row class="mx-5">
               <v-col>
-                <Field
-                  name="IPv6 Gateway"
-                  v-slot="{ field, errors, meta: fieldMeta }"
-                >
                 <v-text-field
                   v-if="form.networkDriver != 'macvlan'"
                   label="IP Range"
                   placeholder="2001:db8::1"
-                  v-bind="field"
+                  v-model="form.ipv6range"
                   :disabled="!form.ipv6_enabled"
                 />
-                </Field>
               </v-col>
             </v-row>
           </div>
-        </form>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="createDialog = false">
+          <v-btn variant="text" :disabled="isLoading" @click="$router.push({ name: 'Networks' })">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="primary"
-            :disabled="!meta.valid"
-            @click="
-              submit();
-              createDialog = false;
-            "
+            type="submit"
+            :loading="isLoading"
+            :disabled="!meta.valid || isLoading"
           >
             Create
           </v-btn>
@@ -234,28 +203,28 @@ export default {
       network_devices: [],
       headers: [
         {
-          text: "Name",
-          value: "Name",
+          title: "Name",
+          key: "Name",
           sortable: true
         },
         {
-          text: "Project",
-          value: "Project",
+          title: "Project",
+          key: "Project",
           sortable: true
         },
         {
-          text: "ID",
-          value: "Id",
+          title: "ID",
+          key: "Id",
           sortable: true
         },
         {
-          text: "Driver",
-          value: "Driver",
+          title: "Driver",
+          key: "Driver",
           sortable: true
         },
         {
-          text: "Created",
-          value: "Created",
+          title: "Created",
+          key: "Created",
           sortable: true
         }
       ]
@@ -265,20 +234,18 @@ export default {
     ...mapMutations({
       setErr: "snackbar/setErr"
     }),
-    submit() {
+    async submit() {
+      if (this.isLoading) return;
       const payload = { ...this.form };
       this.isLoading = true;
-      const url = `/resources/networks/`;
-      axios
-        .post(url, payload)
-        .then(() => {
-          this.isLoading = false;
-          this.$router.push({ name: "Networks" });
-        })
-        .catch(err => {
-          this.isLoading = false;
-          this.setErr(err);
-        });
+      try {
+        await axios.post("/resources/networks/", payload);
+        await this.$router.push({ name: "Networks" });
+      } catch (err) {
+        this.setErr(err);
+      } finally {
+        this.isLoading = false;
+      }
     }
   }
 };

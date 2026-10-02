@@ -15,7 +15,7 @@
       <v-card-title>Note:</v-card-title>
       <v-card-text v-html="$sanitize(notes)"></v-card-text>
     </v-card>
-    <v-stepper class="foreground" v-model="deployStep" alt-labels non-linear>
+    <v-stepper class="foreground" v-model="deployStep" alt-labels non-linear hide-actions>
       <v-fade-transition>
         <v-progress-linear
           indeterminate
@@ -25,55 +25,55 @@
         />
       </v-fade-transition>
       <v-stepper-header>
-        <v-stepper-step
-          step="1"
+        <v-stepper-item
+          :value="1"
+          title="General"
           editable
           edit-icon="mdi-check"
           :complete="deployStep > 1"
         >
-          General
-        </v-stepper-step>
+        </v-stepper-item>
         <v-divider></v-divider>
-        <v-stepper-step
-          step="2"
+        <v-stepper-item
+          :value="2"
+          title="Networking"
           editable
           edit-icon="mdi-check"
           :complete="deployStep > 2"
         >
-          Networking
-        </v-stepper-step>
+        </v-stepper-item>
         <v-divider></v-divider>
-        <v-stepper-step
-          step="3"
+        <v-stepper-item
+          :value="3"
+          title="Volumes"
           editable
           edit-icon="mdi-check"
           :complete="deployStep > 3"
         >
-          Volumes
-        </v-stepper-step>
+        </v-stepper-item>
         <v-divider></v-divider>
-        <v-stepper-step
-          step="4"
+        <v-stepper-item
+          :value="4"
+          title="Environment"
           editable
           edit-icon="mdi-check"
           :complete="deployStep > 4"
         >
-          Environment
-        </v-stepper-step>
+        </v-stepper-item>
       </v-stepper-header>
 
-      <v-stepper-items>
-        <v-stepper-content step="1">
+      <v-stepper-window>
+        <v-stepper-window-item :value="1" eager>
           <Form ref="obs1" v-slot="{ meta }" as="div">
             <form>
               <Field
-                name="Name"
+                name="name"
                 rules="required"
                 v-model="form.name"
-                v-slot="{ field, errors, meta: fieldMeta }"
+                v-slot="{ componentField, errors, meta: fieldMeta }"
               >
                 <v-text-field
-                  v-bind="field"
+                  v-bind="componentField"
                   label="Name"
                   placeholder="My Container"
                   :error-messages="errors"
@@ -82,13 +82,13 @@
                 ></v-text-field>
               </Field>
               <Field
-                name="Image"
+                name="image"
                 rules="required"
                 v-model="form.image"
-                v-slot="{ field, errors, meta: fieldMeta }"
+                v-slot="{ componentField, errors, meta: fieldMeta }"
               >
                 <v-text-field
-                  v-bind="field"
+                  v-bind="componentField"
                   label="Image"
                   placeholder="image:my-image"
                   :error-messages="errors"
@@ -97,13 +97,13 @@
                 ></v-text-field>
               </Field>
               <Field
-                name="Restart Policy"
+                name="restart_policy"
                 rules="required"
                 v-model="form['restart_policy']"
-                v-slot="{ field, errors, meta: fieldMeta }"
+                v-slot="{ componentField, errors, meta: fieldMeta }"
               >
                 <v-select
-                  v-bind="field"
+                  v-bind="componentField"
                   :items="['always', 'on-failure', 'unless-stopped', 'none']"
                   label="Restart Policy"
                   :error-messages="errors"
@@ -115,39 +115,34 @@
             <v-btn
               color="primary"
               @click="deployStep = 2"
-              :disabled="!meta.valid"
+              :disabled="!meta.valid || isLoading"
               class="float-right"
             >
               Continue
             </v-btn>
           </Form>
-        </v-stepper-content>
+        </v-stepper-window-item>
 
-        <v-stepper-content step="2">
+        <v-stepper-window-item :value="2" eager>
           <Form ref="obs2" v-slot="{ meta }" as="div">
             <form>
               <v-row>
                 <v-col>
                   <v-select
-                    :items="networks"
+                    :items="availableNetworks"
                     label="Network"
                     clearable
                     v-model="form.network"
-                    :disabled="
-                      form.network_mode !== undefined &&
-                        form.network_mode !== ''
-                    "
+                    :disabled="!!form.network_mode"
                   />
                 </v-col>
                 <v-col>
                   <v-select
-                    :items="network_modes"
+                    :items="availableNetworkModes"
                     label="Network Mode"
                     clearable
                     v-model="form.network_mode"
-                    :disabled="
-                      form.network !== undefined && form.network !== ''
-                    "
+                    :disabled="!!form.network"
                   />
                 </v-col>
               </v-row>
@@ -156,29 +151,31 @@
                 name="slide"
                 enter-active-class="animated fadeInLeft fast-anim"
                 leave-active-class="animated fadeOutLeft fast-anim"
-                >item
+                >
                 <v-row v-for="(item, index) in form.ports" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Label"
+                    <Field
+                      v-model="item.label"
+                      :name="`ports[${index}].label`"
                       rules=""
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="string"
                         label="Label"
                         placeholder="webui"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                       ></v-text-field>
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Host"
+                    <Field
+                      v-model="item.hport"
+                      :name="`ports[${index}].hport`"
                       rules=""
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="number"
@@ -186,17 +183,18 @@
                         placeholder="80"
                         min="0"
                         max="65535"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                       ></v-text-field>
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Container"
+                    <Field
+                      v-model="item.cport"
+                      :name="`ports[${index}].cport`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         type="number"
@@ -204,7 +202,7 @@
                         placeholder="80"
                         min="0"
                         max="65535"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -212,15 +210,16 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Protocol"
+                    <Field
+                      v-model="item.proto"
+                      :name="`ports[${index}].proto`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-select
                         :items="['tcp', 'udp']"
                         label="Protocol"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -257,7 +256,7 @@
             <v-btn
               color="primary"
               @click="deployStep = 3"
-              :disabled="!meta.valid"
+              :disabled="!meta.valid || isLoading"
               class="float-right"
             >
               Continue
@@ -270,9 +269,9 @@
               Back
             </v-btn>
           </Form>
-        </v-stepper-content>
+        </v-stepper-window-item>
 
-        <v-stepper-content step="3">
+        <v-stepper-window-item :value="3" eager>
           <Form ref="obs3" v-slot="{ meta }" as="div">
             <form>
               <transition-group
@@ -282,15 +281,16 @@
               >
                 <v-row v-for="(item, index) in form.volumes" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Host"
+                    <Field
+                      v-model="item.bind"
+                      :name="`volumes[${index}].bind`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Host"
                         placeholder="/yachtplus/image/share"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -298,15 +298,16 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Container"
+                    <Field
+                      v-model="item.container"
+                      :name="`volumes[${index}].container`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Container"
                         placeholder="/share"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -335,7 +336,7 @@
             <v-btn
               color="primary"
               @click="deployStep = 4"
-              :disabled="!meta.valid"
+              :disabled="!meta.valid || isLoading"
               class="float-right"
             >
               Continue
@@ -348,9 +349,9 @@
               Back
             </v-btn>
           </Form>
-        </v-stepper-content>
+        </v-stepper-window-item>
 
-        <v-stepper-content step="4">
+        <v-stepper-window-item :value="4" eager>
           <Form ref="obs4" v-slot="{ meta }" as="div">
             <form>
               <transition-group
@@ -360,14 +361,15 @@
               >
                 <v-row v-for="(item, index) in form.env" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Name"
+                    <Field
+                      v-model="item.name"
+                      :name="`env[${index}].name`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
-                        :label="item['label']"
-                        v-bind="field"
+                        :label="item.label || 'Name'"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -375,14 +377,15 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Value"
+                    <Field
+                      v-model="item.default"
+                      :name="`env[${index}].default`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         :messages="item.description"
@@ -413,7 +416,7 @@
               v-if="form.edit == true"
               color="primary"
               @click="editDialog = true"
-              :disabled="!meta.valid"
+              :disabled="!meta.valid || isLoading || !workloadSecurityValid"
               class="float-right"
             >
               <div v-if="isLoading">
@@ -431,7 +434,7 @@
               v-else
               color="primary"
               @click="nextStep(4)"
-              :disabled="!meta.valid"
+              :disabled="!meta.valid || isLoading || !workloadSecurityValid"
               class="float-right"
             >
               <div v-if="isLoading">
@@ -453,8 +456,8 @@
               Back
             </v-btn>
           </Form>
-        </v-stepper-content>
-      </v-stepper-items>
+        </v-stepper-window-item>
+      </v-stepper-window>
     </v-stepper>
     <v-card v-if="conflictErrors.length > 0" class="mt-5 error">
       <v-card-title>
@@ -468,21 +471,56 @@
         </ul>
       </v-card-text>
     </v-card>
+    <v-card class="mt-5" data-testid="workload-security">
+      <v-card-title>Container Security</v-card-title>
+      <v-card-text>
+        <v-select
+          :model-value="form.security_profile"
+          :items="securityProfiles"
+          label="Security Profile"
+          :disabled="isLoading"
+          @update:model-value="changeSecurityProfile"
+        />
+        <template v-if="form.security_profile === 'restricted'">
+          <p class="mb-3">Restricted runs as a non-root numeric user with a read-only root filesystem. All capabilities are dropped except any allowed capabilities you explicitly add. Writable temporary storage is provided at /tmp and /run. Host networking and device passthrough are blocked.</p>
+          <v-text-field
+            v-model="form.container_user"
+            label="Container User (UID or UID:GID)"
+            placeholder="1000:1000"
+            :disabled="isLoading"
+            :error-messages="containerUserValid ? [] : ['Enter a nonzero numeric UID and optional nonzero GID (maximum 2147483647).']"
+          />
+          <p>Mount writable volumes for application data and ensure the selected user can access them.</p>
+        </template>
+        <template v-else>
+          <v-alert type="warning" class="mb-3">Image compatibility uses the image's user, which may be root, a writable root filesystem and Docker's default capabilities. Administrator approval is required for each deployment.</v-alert>
+          <v-checkbox
+            v-model="form.confirm_image_default"
+            :disabled="isLoading"
+            label="I understand and approve image compatibility for this deployment"
+            data-testid="confirm-image-default"
+          />
+        </template>
+        <p class="mt-3">Both profiles prevent gaining new privileges and limit the container to 256 processes.</p>
+        <v-alert v-if="workloadSecurityError" type="error" class="mt-3" role="alert">{{ workloadSecurityError }}</v-alert>
+      </v-card-text>
+    </v-card>
     <v-card color="primary" class="mt-5">
       <v-card-title>
         Advanced
       </v-card-title>
-      <v-expansion-panels flat accordion multiple focusable>
+      <Form ref="advanced" as="div">
+      <v-expansion-panels v-model="advancedPanels" variant="accordion" multiple>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Command</v-col>
               <v-col cols="4" class="text--secondary">
                 (Container Commands)
               </v-col>
             </v-row>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content color="foreground" class="mt-5">
+          </v-expansion-panel-title>
+          <v-expansion-panel-text eager color="foreground" class="mt-5">
             <form>
               <transition-group
                 name="slide"
@@ -491,14 +529,15 @@
               >
                 <v-row v-for="(item, index) in form.command" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Command"
+                    <Field
+                      v-model="form.command[index]"
+                      :name="`command[${index}]`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         :label="'Command ' + index + ':'"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -524,18 +563,18 @@
                 </v-col>
               </v-row>
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Devices</v-col>
               <v-col cols="4" class="text--secondary">
                 (Passthrough Devices)
               </v-col>
             </v-row>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content color="foreground">
+          </v-expansion-panel-title>
+          <v-expansion-panel-text eager color="foreground">
             <form>
               <transition-group
                 name="slide"
@@ -544,14 +583,15 @@
               >
                 <v-row v-for="(item, index) in form.devices" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Container"
+                    <Field
+                      v-model="item.container"
+                      :name="`devices[${index}].container`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Container"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -559,14 +599,15 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Host"
+                    <Field
+                      v-model="item.host"
+                      :name="`devices[${index}].host`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Host"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -586,24 +627,24 @@
               </transition-group>
               <v-row>
                 <v-col cols="12" class="d-flex justify-end">
-                  <v-btn icon class="align-self-center" @click="addDevices" aria-label="Add device" title="Add device">
+                  <v-btn icon class="align-self-center" :disabled="form.security_profile === 'restricted' || isLoading" @click="addDevices" aria-label="Add device" title="Add device">
                     <v-icon>mdi-plus</v-icon>
                   </v-btn>
                 </v-col>
               </v-row>
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Labels</v-col>
               <v-col cols="4" class="text--secondary">
                 (Container Labels)
               </v-col>
             </v-row>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content color="foreground">
+          </v-expansion-panel-title>
+          <v-expansion-panel-text eager color="foreground">
             <form>
               <transition-group
                 name="slide"
@@ -612,14 +653,15 @@
               >
                 <v-row v-for="(item, index) in form.labels" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Label"
+                    <Field
+                      v-model="item.label"
+                      :name="`labels[${index}].label`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Label"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -627,14 +669,15 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Value"
+                    <Field
+                      v-model="item.value"
+                      :name="`labels[${index}].value`"
                       rules=""
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                       ></v-text-field>
@@ -659,16 +702,16 @@
                 </v-col>
               </v-row>
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Sysctls</v-col>
               <v-col cols="4" class="text--secondary"> (Kernel Options) </v-col>
             </v-row>
-          </v-expansion-panel-header>
-          <v-expansion-panel-content color="foreground">
+          </v-expansion-panel-title>
+          <v-expansion-panel-text eager color="foreground">
             <form>
               <transition-group
                 name="slide"
@@ -677,14 +720,15 @@
               >
                 <v-row v-for="(item, index) in form.sysctls" :key="index">
                   <v-col>
-                    <Field v-bind="field"
-                      name="Name"
+                    <Field
+                      v-model="item.name"
+                      :name="`sysctls[${index}].name`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Name"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -692,14 +736,15 @@
                     </Field>
                   </v-col>
                   <v-col>
-                    <Field v-bind="field"
-                      name="Value"
+                    <Field
+                      v-model="item.value"
+                      :name="`sysctls[${index}].value`"
                       rules="required"
-                      v-slot="{ field, errors, meta: fieldMeta }"
+                      v-slot="{ componentField, errors, meta: fieldMeta }"
                     >
                       <v-text-field
                         label="Value"
-                        v-bind="field"
+                        v-bind="componentField"
                         :error-messages="errors"
                         :success="fieldMeta.valid"
                         required
@@ -725,18 +770,18 @@
                 </v-col>
               </v-row>
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Capabilities</v-col>
               <v-col cols="4" class="text--secondary">
                 (Special Permissions/Capabilities)
               </v-col>
-            </v-row></v-expansion-panel-header
+            </v-row></v-expansion-panel-title
           >
-          <v-expansion-panel-content color="foreground">
+          <v-expansion-panel-text eager color="foreground">
             <form>
               <v-select
                 v-model="form['cap_add']"
@@ -746,21 +791,21 @@
                 hide-selected
                 clearable
                 chips
-                deletable-chips
+                closable-chips
               />
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
         <v-expansion-panel>
-          <v-expansion-panel-header color="foreground">
+          <v-expansion-panel-title color="foreground">
             <v-row no-gutters>
               <v-col cols="2">Runtime</v-col>
               <v-col cols="4" class="text--secondary">
                 (CPU/MEM Limits)
               </v-col>
-            </v-row></v-expansion-panel-header
+            </v-row></v-expansion-panel-title
           >
-          <v-expansion-panel-content color="foreground">
+          <v-expansion-panel-text eager color="foreground">
             <form>
               <v-text-field
                 v-model="form['cpus']"
@@ -774,9 +819,10 @@
                 clearable
               />
             </form>
-          </v-expansion-panel-content>
+          </v-expansion-panel-text>
         </v-expansion-panel>
       </v-expansion-panels>
+      </Form>
     </v-card>
     <v-dialog v-model="editDialog" max-width="290">
       <v-card>
@@ -790,12 +836,13 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="editDialog = false">
+          <v-btn variant="text" @click="editDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="yellow"
+            :disabled="isLoading || !workloadSecurityValid"
             @click="
               nextStep(4);
               editDialog = false;
@@ -811,7 +858,7 @@
 
 <script>
 import axios from "axios";
-import { mapActions, mapMutations, mapState } from "vuex";
+import { mapActions, mapMutations } from "vuex";
 import { Form, Field } from "vee-validate";
 
 export default {
@@ -823,6 +870,7 @@ export default {
     return {
       deployStep: 1,
       deploySteps: 4,
+      advancedPanels: [],
       notes: "",
       networks: [],
       volumes: [],
@@ -832,7 +880,7 @@ export default {
         image: "",
         restart_policy: "",
         network: "bridge",
-        network_mode: "bridge",
+        network_mode: "",
         ports: [],
         volumes: [],
         env: [],
@@ -842,43 +890,59 @@ export default {
         sysctls: [],
         cap_add: [],
         cpus: undefined,
-        mem_limit: undefined
+        mem_limit: undefined,
+        security_profile: "restricted",
+        container_user: "1000:1000",
+        confirm_image_default: false
       },
       conflictErrors: [],
       network_modes: ["bridge", "none", "host"],
       isLoading: false,
       cap_options: [
-        "SYS_MODULE",
-        "SYS_RAWIO",
-        "SYS_PACCT",
-        "SYS_ADMIN",
-        "SYS_NICE",
-        "SYS_RESOURCE",
-        "SYS_TIME",
-        "SYS_TTY_CONFIG",
-        "AUDIT_CONTROL",
-        "MAC_ADMIN",
-        "MAC_OVERRIDE",
-        "NET_ADMIN",
-        "SYSLOG",
-        "DAC_READ_SEARCH",
-        "LINUX_IMMUTABLE",
-        "NET_BROADCAST",
-        "IPC_LOCK",
-        "IPC_OWNER",
-        "SYS_PTRACE",
-        "SYS_BOOT",
-        "LEASE",
-        "WAKE_ALARM",
-        "BLOCK_SUSPEND"
+        "CHOWN", "DAC_OVERRIDE", "FSETID", "FOWNER", "KILL", "SETGID",
+        "SETUID", "SETPCAP", "NET_BIND_SERVICE", "SYS_CHROOT", "AUDIT_WRITE"
       ]
     };
   },
   computed: {
-    ...mapState("networks", ["networks"]),
-    ...mapState("volumes", ["volumes"])
+    availableNetworks() {
+      return this.form.security_profile === "restricted" ? this.networks.filter(network => network !== "host") : this.networks;
+    },
+    availableNetworkModes() {
+      return this.form.security_profile === "restricted" ? this.network_modes.filter(mode => mode !== "host") : this.network_modes;
+    },
+    securityProfiles() {
+      return [
+        { title: "Restricted (recommended)", value: "restricted" },
+        { title: "Image compatibility (administrator approval)", value: "image-default" }
+      ];
+    },
+    containerUserValid() {
+      const user = this.form.container_user;
+      return typeof user === "string" && /^[1-9][0-9]{0,9}(?::[1-9][0-9]{0,9})?$/.test(user) &&
+        user.split(":").every(part => Number(part) <= 2147483647);
+    },
+    workloadSecurityError() {
+      if (!["restricted", "image-default"].includes(this.form.security_profile)) return "Select a container security profile.";
+      if (this.form.cap_add.some(capability => !this.cap_options.includes(capability))) return "Remove unsupported capabilities before deploying.";
+      if (this.form.security_profile === "image-default") {
+        return this.form.confirm_image_default === true ? "" : "Confirm image compatibility before deploying.";
+      }
+      if (!this.containerUserValid) return "Restricted containers require a nonzero numeric UID and optional nonzero GID.";
+      if (this.form.network_mode === "host" || this.form.network === "host") return "Restricted containers cannot use host networking. Choose another network or explicitly approve image compatibility.";
+      if (this.form.devices.length) return "Restricted containers cannot use device passthrough. Remove the devices or explicitly approve image compatibility.";
+      return "";
+    },
+    workloadSecurityValid() {
+      return !this.workloadSecurityError;
+    }
   },
   methods: {
+    changeSecurityProfile(profile) {
+      if (this.isLoading || !["restricted", "image-default"].includes(profile)) return;
+      this.form.security_profile = profile;
+      this.form.confirm_image_default = false;
+    },
     ...mapActions({
       readTemplateApp: "templates/readTemplateApp",
       readNetworks: "networks/_readNetworks",
@@ -907,7 +971,7 @@ export default {
       this.form.volumes.splice(index, 1);
     },
     addEnv() {
-      this.form.env.push({ label: "", default: "" });
+      this.form.env.push({ name: "", label: "", default: "" });
     },
     removeEnv(index) {
       this.form.env.splice(index, 1);
@@ -947,7 +1011,7 @@ export default {
           continue;
         }
         var proto = _port[1] || "";
-        var label = app.Config.Labels[`local.yachtplus.port.${hport}`] || "";
+        var label = app.Config.Labels[`local.yacht.port.${hport}`] || "";
         let port_entry = {
           cport: cport,
           hport: hport,
@@ -974,10 +1038,9 @@ export default {
     transform_env(envs) {
       let envlist = [];
       for (let env in envs) {
-        // F28: split("=") truncates values containing "=" (A=b=c -> c).
-        const _env = envs[env].split("=");
-        const name = _env[0];
-        const value = _env.slice(1).join("=");
+        let _env = envs[env].split("=");
+        let name = _env[0];
+        let value = _env.slice(1).join("=");
         let env_entry = {
           label: name,
           name: name,
@@ -1025,7 +1088,23 @@ export default {
         this.deployStep = n + 1;
       }
     },
-    submitFormData() {
+    async submitFormData() {
+      if (this.isLoading) return;
+      if (!this.workloadSecurityValid) return;
+      this.isLoading = true;
+      const refs = ["obs1", "obs2", "obs3", "obs4", "advanced"];
+      const validation = await Promise.all(refs.map(ref => this.$refs[ref].validate()));
+      const invalidStep = validation.findIndex(result => !result.valid);
+      if (invalidStep !== -1) {
+        if (invalidStep < this.deploySteps) this.deployStep = invalidStep + 1;
+        else {
+          const panels = { command: 0, devices: 1, labels: 2, sysctls: 3 };
+          this.advancedPanels = [...new Set(Object.keys(validation[invalidStep].errors)
+            .map(name => panels[name.split("[")[0]]))];
+        }
+        this.isLoading = false;
+        return;
+      }
       const payload = { ...this.form };
 
       // Add template_id if we are deploying from a template
@@ -1033,10 +1112,9 @@ export default {
         payload.template_id = this.$route.params.appId;
       }
 
-      this.isLoading = true;
       this.conflictErrors = []; // Clear previous errors
       const url = `/apps/deploy`;
-      axios
+      return axios
         .post(url, payload)
         .then(() => {
           this.isLoading = false;
@@ -1061,9 +1139,7 @@ export default {
     },
     async populateNetworks() {
       const networks = await this.readNetworks();
-      for (var network in networks) {
-        this.networks.push(networks[network]["Name"]);
-      }
+      this.networks = networks.map(network => network.Name);
     },
     async populateForm() {
       if (this.$route.params.appId) {
@@ -1075,18 +1151,21 @@ export default {
               name: app.name || "",
               image: app.image || "",
               restart_policy: app.restart_policy || "",
-              command: app.command || [],
-              network: app.network || "bridge",
-              network_mode: app.network_mode || "bridge",
-              ports: app.ports || [],
-              volumes: app.volumes || [],
-              env: app.env || [],
-              devices: app.devices || [],
-              labels: app.labels || [],
-              sysctls: app.sysctls || [],
-              cap_add: app.cap_add || [],
+              command: [...(app.command || [])],
+              network: app.network || "",
+              network_mode: app.network_mode || "",
+              ports: (app.ports || []).map(item => ({ ...item })),
+              volumes: (app.volumes || []).map(item => ({ ...item })),
+              env: (app.env || []).map(item => ({ ...item })),
+              devices: (app.devices || []).map(item => ({ ...item })),
+              labels: (app.labels || []).map(item => ({ ...item })),
+              sysctls: (app.sysctls || []).map(item => ({ ...item })),
+              cap_add: [...(app.cap_add || [])],
               cpus: app.cpus,
-              mem_limit: app.mem_limit
+              mem_limit: app.mem_limit,
+              security_profile: "restricted",
+              container_user: "1000:1000",
+              confirm_image_default: false
             };
             this.notes = app.notes || null;
           } catch (error) {
@@ -1099,20 +1178,27 @@ export default {
         const app = await this.readApp(appName);
         this.form = {
           name: app.name || "",
-          image: app.Config.Image || "",
+          image: app.Config.Labels?.['local.yachtplus.update.image'] || app.Config.Image || "",
           restart_policy: app.HostConfig.RestartPolicy.Name || "",
+          command: [...(app.Config.Cmd || [])],
           network: Object.keys(app.NetworkSettings.Networks)[0] || "",
+          network_mode: this.network_modes.includes(app.HostConfig.NetworkMode) ? app.HostConfig.NetworkMode : "",
           ports: this.transform_ports(app.ports, app) || [],
           volumes: this.transform_volumes(app.Mounts) || [],
           env: this.transform_env(app.Config.Env) || [],
-          devices: [],
+          devices: (app.HostConfig.Devices || []).map(device => ({
+            host: device.PathOnHost, container: device.PathInContainer
+          })),
           labels: this.transform_labels(app.Config.Labels) || [],
-          sysctls: this.transform_labels(app.HostConfig.Sysctls),
+          sysctls: Object.entries(app.HostConfig.Sysctls || {}).map(([name, value]) => ({ name, value })),
           cap_add: app.HostConfig.CapAdd || [],
           cpus: this.transform_cpus(app.HostConfig.NanoCpus),
           mem_limit: this.transform_mem_limit(app.HostConfig.Memory),
           edit: true,
-          id: app.Id
+          id: app.Id,
+          security_profile: app.Config.Labels?.["local.yachtplus.security.profile"] === "restricted" ? "restricted" : "image-default",
+          container_user: app.Config.Labels?.["local.yachtplus.security.profile"] === "restricted" ? (app.Config.User || "") : "1000:1000",
+          confirm_image_default: false
         };
       } else if (this.$route.query.image) {
         // Handle deployment from Registry Browser (Unified Search)
@@ -1122,7 +1208,7 @@ export default {
         const namePart = image.split('/').pop().split(':')[0];
         this.form.name = namePart;
         this.form.restart_policy = "unless-stopped"; // Default for new deploys
-        this.form.network_mode = "bridge"; // Default network
+        this.form.network_mode = ""; // Default network
         this.form.network = "bridge";
 
         // Attempt to fetch image config (ports/volumes) from backend
@@ -1152,6 +1238,12 @@ export default {
           this.isLoading = false;
         }
       }
+      // Docker accepts a network or a network mode. Keep one selection active.
+      if (this.form.network && this.form.network_mode) {
+        if (this.form.network_mode === "bridge") this.form.network_mode = "";
+        else this.form.network = "";
+      }
+      if (!this.form.network && !this.form.network_mode) this.form.network = "bridge";
     }
   },
   async created() {

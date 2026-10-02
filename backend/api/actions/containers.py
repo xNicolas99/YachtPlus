@@ -1,3 +1,4 @@
+from api.utils.container_stats import memory_usage
 import aiodocker
 import json
 import asyncio
@@ -68,7 +69,7 @@ async def stream_stats_generator(request, container_id: str):
                 if await request.is_disconnected():
                     break
 
-                mem_usage = stats.get("memory_stats", {}).get("usage", 0)
+                mem_usage = memory_usage(stats.get("memory_stats", {}))
                 mem_limit = stats.get("memory_stats", {}).get("limit", 1)
                 mem_percent = (mem_usage / mem_limit) * 100.0
 
@@ -122,7 +123,7 @@ async def get_logs(
             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
         try:
-            logs = container.log(
+            return await container.log(
                 stdout=True,
                 stderr=True,
                 follow=False,
@@ -132,11 +133,6 @@ async def get_logs(
             )
         except aiodocker.exceptions.DockerError as e:
             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
-
-        lines = []
-        async for line in logs:
-            lines.append(line)
-        return lines
 
     except HTTPException:
         raise
@@ -163,8 +159,13 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
         except aiodocker.exceptions.DockerError as e:
              raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
-        async for line in logs:
-            yield {"data": line}
+        if follow:
+            async for line in logs:
+                yield {"data": line}
+        else:
+            for line in await logs:
+                yield {"data": line}
+        yield {"event": "end", "data": "Log stream ended"}
 
     except asyncio.CancelledError:
         # Client disconnected
@@ -243,7 +244,7 @@ async def get_stats(container_id: str):
         mem_percent = 0
 
         if "memory_stats" in stats:
-             mem_current = stats["memory_stats"].get("usage", 0)
+             mem_current = memory_usage(stats.get("memory_stats", {}))
              mem_total = stats["memory_stats"].get("limit", 0)
 
              # Fallback if limit is extremely high (host memory) or 0
@@ -312,6 +313,8 @@ async def get_all_stats():
         async def fetch_single_stats(container):
             try:
                 stats = await container.stats(stream=False)
+                if isinstance(stats, list):
+                    stats = stats[0] if stats else {}
 
                 # Calculate CPU
                 cpu_percent = 0.0
@@ -350,7 +353,7 @@ async def get_all_stats():
 
                 try:
                     mem_stats = stats.get("memory_stats", {})
-                    mem_current = mem_stats.get("usage", 0)
+                    mem_current = memory_usage(mem_stats)
                     mem_limit = mem_stats.get("limit", 0)
                     if mem_limit > 0:
                         mem_percent = (mem_current / mem_limit) * 100.0

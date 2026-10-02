@@ -64,24 +64,18 @@ const actions = {
   readTemplatesAndItems({ commit }) {
     commit("setLoading", true);
     const url = "/templates/";
-    axios
+    return axios
       .get(url)
       .then(response => {
         const templates = response.data;
-        // F39: fan out item fetches and wait for all of them, so the
-        // loading state is only cleared when every template has its items.
         return Promise.all(
           templates.map(template =>
-            axios.get(`/templates/${template.id}`).then(response => {
-              commit("setTemplate", response.data);
-            })
+            axios.get(`/templates/${template.id}`).then(response => response.data)
           )
         )
-          .then(() => {
-            commit("setTemplates", templates);
-          })
-          .catch(err => {
-            commit("snackbar/setErr", err, { root: true });
+          .then(items => {
+            commit("setTemplates", items);
+            return items;
           });
       })
       .catch(err => {
@@ -129,7 +123,7 @@ const actions = {
     commit("setLoading", true);
     const url = `/templates/${id}/refresh`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const template = response.data;
         commit("setTemplate", template);
@@ -200,14 +194,16 @@ const actions = {
   writeTemplateVariables({ commit }, payload) {
     commit("setLoading", true);
     const url = "/settings/variables";
-    axios
+    return axios
       .post(url, payload, {})
       .then(response => {
         const templateVariables = response.data;
         commit("setTemplateVariables", templateVariables);
+        return templateVariables;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        throw err;
       })
       .finally(() => {
         commit("setLoading", false);
