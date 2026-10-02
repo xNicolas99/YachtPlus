@@ -1,6 +1,7 @@
 """Regression tests for api.utils.image_inspect."""
 import pytest
 from unittest.mock import AsyncMock, patch
+from urllib.parse import urlsplit
 
 from api.utils.image_inspect import _get_dockerhub_config
 
@@ -12,10 +13,14 @@ async def test_dockerhub_config_tag_is_split_before_token_request():
 
     async def fake_get(url, *, headers=None, timeout=None):
         recorded.append((url, headers, timeout))
-        if "auth.docker.io" in url:
+        parsed = urlsplit(url)
+        assert parsed.scheme == "https"
+        if parsed.hostname == "auth.docker.io" and parsed.path == "/token":
             return _FakeResponse({"token": "tok"})
-        if "/manifests/" in url:
+        assert parsed.hostname == "registry-1.docker.io"
+        if parsed.path == "/v2/library/nginx/manifests/alpine":
             return _FakeResponse({"config": {"digest": "sha256:abc"}})
+        assert parsed.path == "/v2/library/nginx/blobs/sha256:abc"
         return _FakeResponse({
             "config": {
                 "ExposedPorts": {"80/tcp": {}},

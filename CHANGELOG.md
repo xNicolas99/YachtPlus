@@ -29,13 +29,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ein frisches SQLite-Alembic-Upgrade. `dist/version.json` enthält exakt
   `3.0.2`. Von 44
   Skriptprüfungen bestanden 43; die POSIX-Rechte-/umask-Prüfung ist auf Windows
-  ausdrücklich übersprungen und muss unter Linux laufen. Die erforderlichen
-  Linux-CI-Prüfungen stehen noch aus. Lokale Logs unter
+  ausdrücklich übersprungen; der anschließende Linux-Lauf führte sie aus.
+  Lokale Logs unter
   `report/audit-ci-*-r023.txt`.
 - Aufgeräumt: keine zusätzlichen Wegwerf-Artefakte aus dieser Dokumentationsänderung.
-- Offen: alle erforderlichen CI-Jobs auf dem aktuellen Kandidaten einschließlich
-  Linux-Schutzstack erfolgreich abschließen. Noch kein grüner Schutzstack-
-  Nachweis und kein Merge nach `master` behauptet. Die Freigabe bleibt offen.
+- Linux-Nachweis auf `ac869d7`: [PR-Lauf 37009114081](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114081)
+  und [Push-Lauf 37009077607](https://github.com/xNicolas99/YachtPlus/actions/runs/37009077607)
+  bestanden Image-Build, Inhalts-/Startprüfungen, Migrationen und alle 44
+  Skriptprüfungen ohne Windows-Skip. Der echte Schutzstack bestätigte
+  Ban/Unban, Persistenz und Ausfall/Wiederherstellung der Pflichtprotection.
+  PR-Image `yachtplus:ci-smoke`, Docker-Image-ID
+  `sha256:aa5fee1f0e53600f37cb48f2ac3a43d783326a0e97a543fe561495441a24efae`;
+  diese lokale Image-ID ist kein veröffentlichtes Registry-Manifest-Digest.
+- Offen: CodeQL-Ergebnisse und alle erforderlichen Checks auf dem zuletzt
+  korrigierten Kandidaten-HEAD müssen erfolgreich sein. Die CI-Nachkorrektur
+  unten gehört zu derselben Lieferung `3.0.2`; Merge nach `master` steht aus.
+
+### Run R-024 — CodeQL-Nachkorrektur derselben Lieferung 3.0.2
+
+- Commit: dieser Folgecommit; kein zusätzlicher Versionsschritt für die
+  Korrektur derselben noch nicht freigegebenen Lieferung.
+- Befund: [CodeQL-Analyse 37009114025](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114025)
+  führte Python-/JavaScript-Analyse erfolgreich aus. Der separate Results-
+  Check `110844629671` schlug wegen drei High-Befunden fehl; grüne Analyze-
+  Jobs reichen damit nicht für den Merge.
+- Geändert: GHCR-Repositoryvalidierung mit einem linearen Parser statt
+  einer für ReDoS anfälligen Regex: Referenz vor URL-Parsing auf 1024 Zeichen,
+  Repository auf 255 Zeichen begrenzt, nur gültige ASCII-Segmente und keine
+  HTTP-Anfrage bei ungültigem Input. Dazu exakte Host-/Pfad-/Titelvergleiche
+  in den beiden gemeldeten URL-Testfixtures.
+- Ergebnis: Die finale Backend-Vollsuite bestand 884 Tests einschließlich
+  24 zusätzlicher Regressionen, protokolliert in
+  `report/audit-ci-backend-r024-final.txt`. Die unveränderten 217 Frontend-
+  Tests, Produktionsbuild/Bundle-Grenzen und Migration wurden für `3.0.2`
+  bereits erfolgreich geprüft. Der Linux-Skript-/Image-/Schutzstack-Nachweis
+  oben gilt für `ac869d7`, noch nicht für diesen Folgecommit.
+- Freigabe: Erst nach erfolgreichen Pflichtchecks inklusive CodeQL-Results
+  auf dem tatsächlichen letzten Commit nach `master` mergen. Der Nachweis
+  auf `ac869d7` allein bestätigt den Folgecommit nicht.
 
 ## [3.0.1] - 2026-10-02 — unreleased verification candidate
 

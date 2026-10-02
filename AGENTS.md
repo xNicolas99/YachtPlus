@@ -1,15 +1,18 @@
 # AGENTS.md — orientation for coding agents
 
-Audit candidate 3.0.1 (2026-10-02): **860 backend + 217 frontend +
-42 release/security-script tests passed**, plus production frontend/bundle
-gates and SQLite migration regressions. Its Linux CI protection stack failed:
-fail2ban's umask hid the ban directory from the app UID, and the read-only
-Docker proxy lacked a writable PID directory. Candidate 3.0.2 corrects these
-deployment defects. Locally it passed 860 backend and 217 frontend tests,
-production build/bundle gates, a fresh SQLite migration and 43 of 44
+Candidate 3.0.2, runs R-023/R-024 (2026-10-02): **884 backend + 217 frontend
+tests passed locally**, plus production frontend/bundle gates, a fresh SQLite
+migration and 43 of 44
 release/security-script tests (one POSIX permissions test is explicitly
-skipped on Windows). `dist/version.json` is exactly 3.0.2; required Linux CI
-checks remain pending.
+skipped on Windows). `dist/version.json` is exactly 3.0.2. On `ac869d7`,
+[PR CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114081)
+and [push CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37009077607)
+passed Linux image build/content/startup, migrations, all 44 script tests
+and real fail2ban ban/unban/persistence/protection-recovery checks.
+CodeQL analysis jobs succeeded, but its results check failed with three High
+findings. The GHCR/fixture corrections and 24 additional regressions passed
+locally as part of the same candidate 3.0.2. Fresh required CI/CodeQL results
+on the corrected actual HEAD and merge to master remain pending.
 See [the remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md).
 `frontend/src/utils/containerLinks.js` centralizes browser-origin-aware,
 IPv6-safe port URLs; settings tabs synchronize with child-route deep links.
@@ -476,6 +479,14 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
 | Docker Hub / GHCR | HTTP for image metadata and image listing | — |
 | Template registries | Bounded `urllib` fetch with DNS-pinned SSRF protection per redirect. Accepts Yacht and Portainer v2 wrapper formats. YAML aliases/deep documents are rejected by `utils/yaml_loader.py`. | `YACHT_DEFAULT_TEMPLATE_URLS`, `YACHT_BUILTIN_CATALOG_DIR` |
 | Email (SMTP) | Encrypted DB credentials; `utils/smtp_delivery.py` centralizes verified TLS and timeout | — |
+
+GHCR tag lookups use `_parse_ghcr_repository` before any HTTP call. Bound the
+complete input reference to 1024 characters before URL parsing and the parsed
+repository to 255 characters. Require at least two nonempty slash-separated
+segments, each starting with lowercase ASCII letter/digit and containing only
+ASCII lowercase letters, digits, `.`, `_` or `-`. Validation scans once without
+regex backtracking; invalid input produces no outbound request. Preserve these
+limits when changing registry parsing.
 
 #### Least-privilege Docker socket proxy matrix (N-01/N-02)
 
@@ -969,6 +980,12 @@ and Linux security-stack checks to succeed on the exact reviewed candidate
 commit. A healthy sidecar alone or historical local test counts do not satisfy
 the stack gate. Keep the correction on its review branch until these required
 checks pass; do not describe pending CI or an unperformed merge as complete.
+CodeQL's Analyze jobs only establish that scanning ran successfully. Inspect
+the separate results check and alert severities: a failed results gate with
+High findings still blocks merging. Verify the corrected candidate's actual
+HEAD and fresh analysis/results, not an earlier green CI run. GHCR repository
+validation must use a bounded linear parser, not a backtracking regex over
+untrusted input; fixture URL routing should compare parsed host/path exactly.
 
 ### Version rules
 
@@ -1165,7 +1182,8 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
-| R-023 | 2026-10-02 | dieser Commit | Kandidat 3.0.2: Fail2ban-Ban-Verzeichnis trotz umask 077 für App UID 1000 lesbar; Proxy-/run-tmpfs, Regressionen und sichere Startdiagnosen | 860/217; Build/Bundle und SQLite-Upgrade grün; Skripte 43 bestanden, 1 POSIX-Prüfung auf Windows übersprungen; Linux-CI ausstehend |
+| R-024 | 2026-10-02 | dieser Commit; Fortsetzung von 3.0.2 | Drei High-CodeQL-Befunde mit linearem GHCR-Parser/exakten Fixture-Vergleichen korrigiert; erster grüner Linux-Schutzstack auf ac869d7 belegt | lokal 884/217, Build/Bundle und Migration grün; ac869d7 alle 44 Linux-Skripte/Image/Schutzstack grün; neue HEAD-CI/CodeQL-Results ausstehend |
+| R-023 | 2026-10-02 | ac869d7 | Kandidat 3.0.2: Fail2ban-Ban-Verzeichnis trotz umask 077 für App UID 1000 lesbar; Proxy-/run-tmpfs, Regressionen und sichere Startdiagnosen | 860/217; Build/Bundle und SQLite-Upgrade grün; lokal Skripte 43 bestanden, 1 POSIX-Prüfung auf Windows übersprungen; Linux-Nachweis in R-024 |
 | R-022 | 2026-10-02 | 0ea2d63; Remote-Integration derselben Lieferung | Credential-Versionen, CSRF/TOTP/SMTP, Docker/Compose/Template- und Vue-Korrekturen; Kandidat 3.0.1, Docker-Prüfung offen | vor Integration 852/197; zusätzlich 42 Policy-Tests; finale Merge-Belege im Behebungsbericht |
 | R-021 | 2026-09-10 | Doku-Sync-Commit | Doku-Sync: Run-Protokoll und CHANGELOG-Pflichtregel, Status Abschnitt 18, Baseline von 513 auf 543 | 543/21 |
 | R-020 | 2026-09-10 | aed5e1f | Audit-Befunde Abschnitt 18 behoben, H1 bis H10, M1 bis M14, L1 bis L4, Backend und Frontend | 543/21 |

@@ -125,12 +125,44 @@ Verträge sowie Startdiagnosen zu Health, UID/GID und Dateimodi ohne Ausgabe
 der Container-Umgebung. Lokal bestanden 860 Backend- und 217 Frontend-Tests,
 Produktionsbuild/Bundle-Grenzen und ein frisches SQLite-Alembic-Upgrade.
 `dist/version.json` enthält exakt `3.0.2`. Die Skriptsuite führte 44 Prüfungen
-aus: 43 bestanden,
-eine POSIX-Rechte-/umask-Prüfung wurde auf Windows ausdrücklich übersprungen
-und muss im Linux-CI laufen. Logs: `report/audit-ci-backend-r023.txt`,
+aus: 43 bestanden, eine POSIX-Rechte-/umask-Prüfung wurde auf Windows
+ausdrücklich übersprungen. Der unten verlinkte Linux-CI-Lauf führte alle
+44 Prüfungen erfolgreich aus. Logs: `report/audit-ci-backend-r023.txt`,
 `report/audit-ci-migration-r023.txt`, `report/audit-ci-script-r023.txt`.
 
-Die erforderlichen Linux-CI-Jobs stehen noch aus. Ein grüner
-Linux-Schutzstack, Veröffentlichung oder Merge nach
-`master` wird hier noch nicht behauptet. Der Merge erfolgt erst nach den
-erforderlichen erfolgreichen Checks auf dem tatsächlichen Kandidaten-Commit.
+Der erste Linux-Nachweis liegt auf `ac869d7` vor:
+[PR-CI 37009114081](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114081)
+und [Push-CI 37009077607](https://github.com/xNicolas99/YachtPlus/actions/runs/37009077607)
+bestanden Image-Build, Inhalts-/Startprüfungen, Migrationen und alle 44
+Skriptprüfungen. Der echte fail2ban-Stack bestand Ban/Unban, persistente Bans
+und Ausfall/Wiederherstellung der Pflichtprotection. Diese Linux-Nachweise
+ergänzen die früheren lokalen Mock-/Browserprüfungen.
+Das PR-Image `yachtplus:ci-smoke` hatte die Docker-Image-ID
+`sha256:aa5fee1f0e53600f37cb48f2ac3a43d783326a0e97a543fe561495441a24efae`.
+Das bezeichnet das lokal im CI gebaute Image, keinen veröffentlichten
+Registry-Manifest-Digest; eine nicht belegte Imagegröße wird hier nicht genannt.
+
+## CodeQL-Nachkorrektur innerhalb von 3.0.2 (Run R-024)
+
+Die [CodeQL-Analyse 37009114025](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114025)
+hat erfolgreiche Python-/JavaScript-Analyze-Jobs; der separate Results-Check
+`110844629671` scheiterte dagegen mit drei High-Befunden. Dieser Unterschied
+blockiert den Merge trotz des erfolgreich gelaufenen Schutzstacks.
+
+Die Nachkorrektur ersetzt die GHCR-Repositoryprüfung mit ReDoS-anfälliger
+Regex durch einen linearen Parser und die zwei gemeldeten URL-Testfixtures
+durch exakte Host-/Pfad-/Titelvergleiche. GHCR-Referenzen sind vor
+URL-Parsing auf 1024 Zeichen, Repositorynamen auf 255 Zeichen begrenzt;
+gültige Segmente verwenden ausschließlich die zugelassene ASCII-Menge.
+Ungültiger Input löst keine HTTP-Anfrage aus. Es bleibt dieselbe Lieferung
+`3.0.2`. Die finale lokale Backend-Vollsuite bestand **884 Tests**, darunter
+24 zusätzliche Regressionen; Log `report/audit-ci-backend-r024-final.txt`.
+Die unveränderten **217 Frontend-Tests**, Produktionsbuild/Bundle-Grenzen und
+frische SQLite-Migration sind für Version `3.0.2` ebenfalls bestanden.
+Ein frischer erfolgreicher CodeQL-Results-Check und die erforderlichen CI-Jobs
+für den zuletzt korrigierten tatsächlichen HEAD stehen noch aus.
+
+Ein Merge nach `master` oder eine Veröffentlichung wird weiterhin nicht
+behauptet. Alle erforderlichen Checks müssen auf dem tatsächlichen letzten
+Kandidaten-Commit erfolgreich sein; der grüne Lauf auf `ac869d7` bestätigt
+keine nachfolgenden Änderungen.

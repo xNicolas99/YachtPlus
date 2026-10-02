@@ -33,7 +33,7 @@ def test_parse_default_template_urls_bare_url_derives_title():
     out = crud_templates._parse_default_template_urls("https://raw.githubusercontent.com/x/y/z.json")
     assert len(out) == 1
     title, url = out[0]
-    assert "raw.githubusercontent.com" in title
+    assert title == "raw.githubusercontent.com"
     assert url == "https://raw.githubusercontent.com/x/y/z.json"
 
 
@@ -99,7 +99,7 @@ async def test_init_templates_swallows_network_failure(monkeypatch, caplog):
     db = MagicMock()
 
     async def fake_add(_db, template):
-        if "broken" in template.url:
+        if template.url == "http://broken":
             raise OSError("network down")
         return template
 
