@@ -2,6 +2,10 @@
 
 Stand: 2026-10-02, lokaler YachtPlus-Arbeitsstand, Version 3.0.1 als unveröffentlichter Prüfkandidat.
 
+Nachprüfung: Der Linux-CI-Lauf des Kandidaten schlug mit den unten ergänzten
+Schutzstack-Startfehlern fehl. Die Korrektur wird als Kandidat 3.0.2 geprüft;
+die Nachweise für 3.0.1 belegen diesen neuen Stand nicht.
+
 Die Prüfung bezog vorhandene lokale Änderungen ein. Bereits korrigierte
 Punkte wurden erneut am aktuellen Code geprüft; zusätzliche Fehler erhielten
 Korrekturen und Regressionstests. Die Tabelle beschreibt den resultierenden
@@ -101,3 +105,32 @@ erhalten. Der Merge schützt weiterhin alle neu eingeführten Sicherheitsverträ
 
 Publikationsziel ist der bestehende Branch `audit-fix-2026-08-21`. Dieser
 Prüfkandidat beansprucht weiterhin keine verifizierte Linux-/Multiarch-Version.
+
+## CI-Nachprüfung und Kandidat 3.0.2 (Run R-023)
+
+Der CI-Lauf [36979071014](https://github.com/xNicolas99/YachtPlus/actions/runs/36979071014)
+für `3adb5ab` zeigte zwei reale Startfehler des geschützten Linux-Stacks:
+
+- Fail2ban 1.0.2 startet Aktionen mit `umask 077`. Dadurch wurde `bans` trotz
+  `mkdir(mode=0755)` tatsächlich mit `0700` erzeugt. Der Guard UID 1001 war
+  gesund, aber die App UID 1000 konnte den Zustand in ihrem RO-Mount nicht
+  lesen und antwortete mit protection-unavailable 503. Die Startaktion setzt
+  den Modus nun ausdrücklich auf `0755` und repariert bestehende Volumes.
+- Der Docker-Socket-Proxy konnte auf seinem schreibgeschützten Root-Dateisystem
+  `/run/haproxy.pid` nicht schreiben. Beide Compose-Dateien geben ihm dafür
+  ein begrenztes `/run`-tmpfs; das Root-Dateisystem bleibt schreibgeschützt.
+
+Kandidat `3.0.2` ergänzt gezielte Regressions-/Smoke-Prüfungen für diese
+Verträge sowie Startdiagnosen zu Health, UID/GID und Dateimodi ohne Ausgabe
+der Container-Umgebung. Lokal bestanden 860 Backend- und 217 Frontend-Tests,
+Produktionsbuild/Bundle-Grenzen und ein frisches SQLite-Alembic-Upgrade.
+`dist/version.json` enthält exakt `3.0.2`. Die Skriptsuite führte 44 Prüfungen
+aus: 43 bestanden,
+eine POSIX-Rechte-/umask-Prüfung wurde auf Windows ausdrücklich übersprungen
+und muss im Linux-CI laufen. Logs: `report/audit-ci-backend-r023.txt`,
+`report/audit-ci-migration-r023.txt`, `report/audit-ci-script-r023.txt`.
+
+Die erforderlichen Linux-CI-Jobs stehen noch aus. Ein grüner
+Linux-Schutzstack, Veröffentlichung oder Merge nach
+`master` wird hier noch nicht behauptet. Der Merge erfolgt erst nach den
+erforderlichen erfolgreichen Checks auf dem tatsächlichen Kandidaten-Commit.

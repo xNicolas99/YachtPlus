@@ -35,7 +35,12 @@ def ban_path(value: str) -> Path:
 def action(arguments: list[str]) -> None:
     operation = arguments[0]
     if operation == 'start':
-        (STATE / 'bans').mkdir(mode=0o755, exist_ok=True)
+        bans = STATE / 'bans'
+        bans.mkdir(mode=0o755, exist_ok=True)
+        # Fail2ban starts actions with umask 077. Set the exact directory mode
+        # after creation (and repair older volumes), so the separate UID 1000
+        # application can traverse its read-only mount. Only UID 1001 writes.
+        bans.chmod(0o755)
         atomic_json(STATE / 'action-ready.json', {'status': 'ready'})
     elif operation == 'stop':
         (STATE / 'action-ready.json').unlink(missing_ok=True)

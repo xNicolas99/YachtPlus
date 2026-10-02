@@ -21,10 +21,16 @@ guard drop all capabilities; their root filesystems are read-only. The guard
 has no network, host socket or firewall privilege. The daemon/socket proxy
 remain powerful infrastructure; this stack does not make Docker rootless.
 
+The Docker socket proxy also keeps its root filesystem read-only. Its bounded
+`/run` tmpfs is required for HAProxy's `/run/haproxy.pid`; `/tmp` alone is
+insufficient. Keep both tmpfs entries when adapting either Compose file.
+
 The Linux stack test uses a unique project/fresh volumes and checks real failed
 logins, bans, unbans, persistence, proxy attribution, protection outage/recovery,
 runtime privileges and loopback backend. It cleans only its test resources.
 Absent Docker fails the gate. This is a required publication CI job.
+Startup failures report container health and app-visible state UID/GID/modes;
+diagnostics never dump container environment variables or secret values.
 The release image also requires fail2ban by default when started without Compose;
 without the guard/state mounts it rejects access. Direct source development has
 an optional guard. Publication tests the exact candidate image in the protected
@@ -64,6 +70,14 @@ frames, including existing terminal sessions. Established HTTP streams are
 not retroactively cancelled. This is an application fail2ban action; it does
 not install host iptables rules or protect unrelated services/TCP traffic.
 
+The state root and `bans` directory must be traversable by the app UID 1000:
+the guard owns them as UID 1001, directories use `0755`, and published JSON
+files use `0644`. The app's state mount remains read-only. Fail2ban 1.0.2
+starts actions with `umask 077`, so `mkdir(mode=0755)` by itself creates a
+`0700` directory. The action explicitly reapplies `0755` on every start,
+including existing state volumes; readiness under the guard UID alone does
+not establish that the app can read those files.
+
 Readiness checks actual jail, action and enforced bans about every 5 seconds.
 Missing, invalid or older than 30 second state fails closed: backend 503, nginx
 500 for an unexpected auth subrequest failure. The UI cannot load during that
@@ -72,6 +86,8 @@ outage. Repair the guard instead of disabling required protection.
 ```bash
 docker compose logs fail2ban yachtplus
 docker compose exec -T fail2ban fail2ban-client -s /tmp/fail2ban.sock get yachtplus banip
+docker compose exec -T fail2ban stat -c '%a %u:%g %n' /run/yachtplus-security /run/yachtplus-security/bans
+docker compose exec -T yachtplus python -c "from pathlib import Path; p = Path('/run/yachtplus-security'); print((p / 'ready.json').read_text()); print([item.name for item in (p / 'bans').iterdir()])"
 # After investigating the failures, recover a known administrator IP:
 docker compose exec -T fail2ban fail2ban-client -s /tmp/fail2ban.sock set yachtplus unbanip 192.168.1.50
 ```
@@ -80,6 +96,15 @@ Database login locks remain independent: an external unban does not clear the
 15-minute IP or 30-minute account failure window. Keep space for persistent
 database/security logs; mandatory log-write failures reject the login. Guard
 state and database survive restarts.
+
+If fail2ban is healthy but the app still returns protection-unavailable 503,
+check directory traversal and JSON readability from inside the app. Rebuild
+and recreate the corrected guard; its start action repairs the ban-directory
+mode without deleting persisted bans. If the proxy log reports a read-only
+`/run/haproxy.pid`, restore its `/run` tmpfs and recreate the proxy. Check
+`docker compose logs dockerproxy` as well as the guard/app logs. Do not
+disable protection, remove read-only mounts or make state world-writable to
+work around either startup failure.
 
 ## Workloads and updates
 
@@ -118,6 +143,11 @@ These access/configuration changes are breaking. Version 3.0.0 remains a
 verification candidate until Linux image/stack, visual and staging migration
 checks pass.
 
+The 3.0.2 patch addresses the CI-confirmed state-directory and proxy-PID
+startup failures. Rebuild/recreate the guard and proxy with both corrected
+Compose contracts when upgrading. Its successful Linux protection-stack
+verification remains required; earlier local test results do not establish it.
+
 1. Stop the old app and back up config/Compose data, preserving database,
    signing key, Fernet salt and setup flag.
 2. Adopt the protected Compose stack while retaining the actual old config
@@ -127,7 +157,9 @@ checks pass.
    The app never runs root or repairs ownership; do not make data world-writable.
 4. Add persistent logs and guard-state volumes with the Compose mount directions.
    Fresh volumes receive ownership from the images. Never mount state writable
-   into the app.
+   into the app. The state root/bans must be traversable by UID 1000; the
+   corrected guard action restores its own bans directory to `0755` on start.
+   Retain the Docker proxy's bounded `/run` tmpfs for its PID file.
 5. Configure exact HTTP proxy trust/hostname, start, verify the real jail and
    log in locally. Public access now requires the confirmed UI setting.
 6. Audit existing workloads before recreating them. Legacy form edits require

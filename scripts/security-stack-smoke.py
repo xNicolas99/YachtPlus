@@ -107,13 +107,56 @@ class Stack:
         require(app['environment']['YACHT_DOCKER_PROXY_NETWORK'] == network['name'], 'Worker proxy network does not match the isolated network')
         self.compose_file.write_text(json.dumps(self.config), encoding='utf-8')
         self.compose('build', *(['fail2ban'] if self.image else ['yachtplus', 'fail2ban']), capture=False, timeout=600)
-        self.compose('up', '-d', '--no-build', '--wait', '--wait-timeout', '180', capture=False, timeout=200)
+        try:
+            self.compose('up', '-d', '--no-build', '--wait', '--wait-timeout', '180', capture=False, timeout=200)
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            self.startup_diagnostics()
+            raise
         for service in ['yachtplus', 'fail2ban', 'dockerproxy']:
             identifier = self.compose('ps', '-q', service).strip()
             require(identifier, f'Missing {service} container')
             inspected = json.loads(self.command(['inspect', identifier]))[0]
             require(inspected['Config']['Labels']['com.docker.compose.project'] == self.project, 'Container escaped test project ownership')
             self.container_ids[service] = identifier
+
+    def startup_diagnostics(self):
+        """Expose failed health and reader permissions without logging secrets."""
+        print('Security stack startup diagnostics:', file=sys.stderr)
+        try:
+            identifiers = self.compose('ps', '-a', '-q', cleanup=True, timeout=15).split()
+            for identifier in identifiers:
+                inspected = json.loads(self.command(['inspect', identifier], cleanup=True, timeout=15))[0]
+                require(inspected['Config']['Labels'].get('com.docker.compose.project') == self.project,
+                        'Refusing diagnostics of another project container')
+                state = inspected['State']
+                health = state.get('Health', {})
+                print(json.dumps({
+                    'service': inspected['Config']['Labels'].get('com.docker.compose.service'),
+                    'status': state.get('Status'), 'exit_code': state.get('ExitCode'),
+                    'health': health.get('Status'),
+                    'health_output': [entry.get('Output', '')[-2000:] for entry in health.get('Log', [])[-2:]],
+                }), file=sys.stderr)
+        except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as exc:
+            print(f'Could not inspect startup health: {exc}', file=sys.stderr)
+        source = '''import json,os,stat
+from pathlib import Path
+paths=["/run/yachtplus-security", "/run/yachtplus-security/bans", "/run/yachtplus-security/ready.json", "/run/yachtplus-security/fail2ban.sqlite3"]
+result={"uid":os.getuid(), "gid":os.getgid(), "paths":{}}
+for name in paths:
+    try:
+        info=os.stat(name)
+        result["paths"][name]={"uid":info.st_uid,"gid":info.st_gid,"mode":oct(stat.S_IMODE(info.st_mode)),"readable":os.access(name,os.R_OK),"searchable":os.access(name,os.X_OK)}
+    except OSError as error:
+        result["paths"][name]={"error":type(error).__name__}
+print(json.dumps(result))
+'''
+        for service, executable in [('yachtplus', 'python'), ('fail2ban', 'python3')]:
+            try:
+                output = self.compose('exec', '-T', service, executable, '-c', source,
+                                      cleanup=True, timeout=15)
+                print(f'{service} protection-state access: {output.strip()}', file=sys.stderr)
+            except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
+                print(f'Could not inspect {service} protection-state access: {exc}', file=sys.stderr)
 
     def python(self, source, service='yachtplus'):
         executable = 'python3' if service == 'fail2ban' else 'python'
@@ -190,6 +233,13 @@ class Stack:
         self.jail('status', 'yachtplus')
         require('yachtplus-state' in self.jail('get', 'yachtplus', 'actions'), 'Real fail2ban jail has no state enforcement action')
         self.python('from api.utils.access_policy import fail2ban_active; assert fail2ban_active()')
+        # The guard's own health is insufficient: fail2ban's umask 077 used to
+        # leave bans/ owner-only while the app had a different UID and RO mount.
+        self.python('import os,stat; from pathlib import Path; from api.utils.access_policy import check_protection; '
+                    'p=Path("/run/yachtplus-security/bans"); s=p.stat(); '
+                    'assert s.st_uid==1001 and stat.S_IMODE(s.st_mode)==0o755; '
+                    'assert os.access(p,os.R_OK|os.X_OK) and not os.access(p,os.W_OK); '
+                    'assert not check_protection("127.0.0.1")')
         app = json.loads(self.command(['inspect', self.container_ids['yachtplus']]))[0]
         require(not next(mount['RW'] for mount in app['Mounts'] if mount['Destination'] == '/run/yachtplus-security'), 'Application can mutate fail2ban protection state')
         addresses = [network['IPAddress'] for network in app['NetworkSettings']['Networks'].values()]

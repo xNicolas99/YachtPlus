@@ -1,9 +1,16 @@
 # AGENTS.md — orientation for coding agents
 
-Final merged audit candidate (2026-10-02): **860 backend + 217 frontend +
+Audit candidate 3.0.1 (2026-10-02): **860 backend + 217 frontend +
 42 release/security-script tests passed**, plus production frontend/bundle
-gates and SQLite migration regressions. Docker/Linux verification remains
-open. See [the remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md).
+gates and SQLite migration regressions. Its Linux CI protection stack failed:
+fail2ban's umask hid the ban directory from the app UID, and the read-only
+Docker proxy lacked a writable PID directory. Candidate 3.0.2 corrects these
+deployment defects. Locally it passed 860 backend and 217 frontend tests,
+production build/bundle gates, a fresh SQLite migration and 43 of 44
+release/security-script tests (one POSIX permissions test is explicitly
+skipped on Windows). `dist/version.json` is exactly 3.0.2; required Linux CI
+checks remain pending.
+See [the remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md).
 `frontend/src/utils/containerLinks.js` centralizes browser-origin-aware,
 IPv6-safe port URLs; settings tabs synchronize with child-route deep links.
 
@@ -352,6 +359,11 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
   action and active bans; age over 30 seconds or invalid state fails closed.
   `bans/<canonical-IP-with-colons-replaced-by-underscores>.json` stores finite
   `expires_at`; IPv4-mapped IPv6 normalizes to IPv4. A ban blocks all HTTP/WS.
+  State directories are guard-owned UID 1001, mode 0755; published JSON is
+  0644 so the separate app UID 1000 can read its RO mount. The start action
+  explicitly chmods `bans` to 0755 after mkdir, repairing old volumes and
+  defeating fail2ban's umask 077. A guard-only healthy check cannot prove
+  application readability; the Linux smoke must exercise the app UID.
 - `YACHT_SECURITY_LOG` defaults `/config/security/auth.log`: one atomic append
   per failed login, UTC timestamp + `yachtplus-auth failure ip=<canonical-IP>`.
   No username, password or arbitrary reason enters the fail2ban filter. Log
@@ -367,6 +379,12 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
   Existing mounted data must already belong to 1000:1000; migration instructions
   are in `docs/SECURITY_DEPLOYMENT.md`. The daemon/socket proxy remain powerful
   infrastructure, and this setup does not automatically make Docker rootless.
+- Docker proxy rootfs remains read-only; both Compose files give it a bounded
+  `/run` tmpfs for HAProxy's PID file, as well as `/tmp`. Do not remove that
+  mount or make the rootfs writable to hide a startup failure. The protection
+  smoke must verify the proxy is running and answers Docker API requests.
+  Startup diagnostics report health and app-visible UID/GID/modes only;
+  never dump container `Config.Env`, tokens or other secrets for diagnostics.
 
 ### New workload and update contracts
 
@@ -865,6 +883,13 @@ migration, every test that touches the DB uses an `AsyncSession`;
   development resolution constrained by the runtime lock; pytest tooling
   and test sources are excluded from the image. CI uses the development lock,
   Docker uses the runtime lock and installs its exact built wheels offline.
+- **Healthy fail2ban plus app 503 can mean unreadable state.** Fail2ban 1.0.2
+  uses umask 077 in actions; mkdir's requested 0755 is insufficient. Keep the
+  explicit `bans.chmod(0o755)` and verify JSON/directory access as app UID 1000,
+  including existing-volume repair. Retain the read-only app state mount.
+- **Read-only proxy requires `/run`.** HAProxy writes `/run/haproxy.pid`.
+  Preserve its bounded tmpfs in both Compose examples and in smoke fixtures;
+  `/tmp` alone does not permit startup.
 - **TestClient sends `Host: testserver`.** Already handled by
   `tests/conftest.py`, but if you spin up a separate test harness, add
   `testserver` to allowed hosts.
@@ -892,6 +917,8 @@ migration, every test that touches the DB uses an `AsyncSession`;
 | 401 immediately after login | Cookie domain / CORS mismatch. Check `YACHT_CORS_ORIGINS` and `Secure` flag vs HTTP/HTTPS. |
 | 400 on every request from a specific host | Add the host to `YACHT_ALLOWED_HOSTS`. |
 | `RuntimeError: SECRET_KEY could not be loaded` | `SECRET_KEY_FILE` path not writable. Set `SECRET_KEY` env or mount a writable `/config`. |
+| App protection-unavailable 503 with a healthy fail2ban container | Check state/bans directory traversal and JSON readability as UID 1000; rebuild/recreate the corrected guard to repair `bans` mode 0755 without deleting bans. |
+| Docker proxy exits with read-only `/run/haproxy.pid` | Restore the proxy's `/run` tmpfs and recreate it; retain read-only rootfs. |
 | `ModuleNotFoundError: uvloop` on Windows | See "common gotchas". |
 | Pytest fails with `unable to open database file` | `DATABASE_URL` not set; defaults to `/config/yacht.db`. Set `DATABASE_URL="sqlite:///./test.db"`. |
 | Frontend build red on `vee-validate`/`vue-chartjs` | These are real packages (`package.json`), not shims. If they don't resolve, run `npm install`. |
@@ -937,6 +964,11 @@ rejects packaged signing keys, salts, `.env` files and runtime databases in
 The remote ref is checked again before login; the tested image ID is pushed
 without rebuilding. Version tags do not move `latest`; master publication does.
 Tag pushes are sequential, so an interruption can leave some tags published.
+Before merging a protection-stack correction, require the backend, frontend
+and Linux security-stack checks to succeed on the exact reviewed candidate
+commit. A healthy sidecar alone or historical local test counts do not satisfy
+the stack gate. Keep the correction on its review branch until these required
+checks pass; do not describe pending CI or an unperformed merge as complete.
 
 ### Version rules
 
@@ -1133,6 +1165,7 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
+| R-023 | 2026-10-02 | dieser Commit | Kandidat 3.0.2: Fail2ban-Ban-Verzeichnis trotz umask 077 für App UID 1000 lesbar; Proxy-/run-tmpfs, Regressionen und sichere Startdiagnosen | 860/217; Build/Bundle und SQLite-Upgrade grün; Skripte 43 bestanden, 1 POSIX-Prüfung auf Windows übersprungen; Linux-CI ausstehend |
 | R-022 | 2026-10-02 | 0ea2d63; Remote-Integration derselben Lieferung | Credential-Versionen, CSRF/TOTP/SMTP, Docker/Compose/Template- und Vue-Korrekturen; Kandidat 3.0.1, Docker-Prüfung offen | vor Integration 852/197; zusätzlich 42 Policy-Tests; finale Merge-Belege im Behebungsbericht |
 | R-021 | 2026-09-10 | Doku-Sync-Commit | Doku-Sync: Run-Protokoll und CHANGELOG-Pflichtregel, Status Abschnitt 18, Baseline von 513 auf 543 | 543/21 |
 | R-020 | 2026-09-10 | aed5e1f | Audit-Befunde Abschnitt 18 behoben, H1 bis H10, M1 bis M14, L1 bis L4, Backend und Frontend | 543/21 |

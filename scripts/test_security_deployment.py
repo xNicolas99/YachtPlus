@@ -2,7 +2,9 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 import tempfile
@@ -56,6 +58,9 @@ class DeploymentTests(unittest.TestCase):
                 self.assertTrue(deployment['networks']['docker_api']['internal'])
                 self.assertEqual(services['dockerproxy']['networks'], ['docker_api'])
                 self.assertEqual(set(app['networks']), {'docker_api', 'app_egress'})
+                proxy = services['dockerproxy']
+                self.assertTrue(proxy['read_only'])
+                self.assertIn('/run:noexec,nosuid,nodev,size=1m,mode=0755', proxy['tmpfs'])
 
     def test_final_image_user_and_forwarding_cannot_bypass_peer_checks(self):
         dockerfile = (ROOT / 'Dockerfile').read_text(encoding='utf-8')
@@ -116,6 +121,30 @@ class Fail2banStateTests(unittest.TestCase):
         state_action.action(['ban', '192.168.1.1', '3600', '1000'])
         self.assertEqual(json.loads((self.state / 'bans/192.168.1.1.json').read_text(encoding='utf-8')), {'expires_at': 4600})
 
+    @unittest.skipIf(os.name == 'nt', 'POSIX ownership and umask are exercised on Linux')
+    def test_start_repairs_private_ban_directory_under_fail2ban_umask(self):
+        bans = self.state / 'bans'
+        bans.rmdir()
+        previous = os.umask(0o077)
+        try:
+            # A fresh volume must allow another UID to search ban filenames.
+            state_action.action(['start'])
+            self.assertEqual(stat.S_IMODE(bans.stat().st_mode), 0o755)
+            # Existing private state from an older image is repaired as well.
+            for mode in (0o700, 0o770):
+                bans.chmod(mode)
+                state_action.action(['start'])
+                self.assertEqual(stat.S_IMODE(bans.stat().st_mode), 0o755)
+            state_action.action(['ban', '192.168.1.10', '3600'])
+            self.assertEqual(stat.S_IMODE(state_action.ban_path('192.168.1.10').stat().st_mode), 0o644)
+            # Fail2ban's private database keeps its restrictive mode.
+            private = self.state / 'fail2ban.sqlite3'
+            private.write_bytes(b'private database fixture')
+            state_action.action(['start'])
+            self.assertEqual(stat.S_IMODE(private.stat().st_mode), 0o600)
+        finally:
+            os.umask(previous)
+
     def test_health_requires_fresh_state_real_jail_and_expected_action(self):
         def client(*arguments):
             if arguments == ('get', 'yachtplus', 'banip'):
@@ -167,6 +196,28 @@ class ProxyConfigurationTests(unittest.TestCase):
 
 
 class SecuritySmokeTests(unittest.TestCase):
+    def test_startup_diagnostics_reports_reader_modes_without_container_environment(self):
+        stack = security_smoke.Stack()
+        inspected = [{
+            'Config': {'Labels': {'com.docker.compose.project': stack.project,
+                                  'com.docker.compose.service': 'yachtplus'},
+                       'Env': ['SECRET_KEY=must-never-print']},
+            'State': {'Status': 'running', 'ExitCode': 0,
+                      'Health': {'Status': 'unhealthy', 'Log': [{'Output': 'HTTP 503'}]}},
+        }]
+        def compose(*arguments, **options):
+            return 'test-container' if arguments[0] == 'ps' else '{"uid":1000,"paths":{"bans":{"mode":"0o700"}}}'
+        with patch.object(stack, 'compose', side_effect=compose), \
+                patch.object(stack, 'command', return_value=json.dumps(inspected)), \
+                patch.object(security_smoke, 'print') as output:
+            stack.startup_diagnostics()
+        messages = '\n'.join(str(call.args[0]) for call in output.call_args_list)
+        self.assertIn('unhealthy', messages)
+        self.assertIn('HTTP 503', messages)
+        self.assertIn('0o700', messages)
+        self.assertNotIn('must-never-print', messages)
+        stack.temporary.cleanup()
+
     def test_http_failure_is_preserved_and_connection_closes_on_timeout(self):
         connection = unittest.mock.Mock()
         response = connection.getresponse.return_value

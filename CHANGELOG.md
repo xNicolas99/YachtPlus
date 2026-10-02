@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-10-02 14:44 — Run R-023: Schutzstack-Startfehler — unreleased verification candidate
+
+- Commit: dieser Commit
+- Version: `3.0.2`; kanonische Paket- und Lockfile-Version stimmen überein.
+- Geändert: Fail2ban setzt das persistente `bans`-Verzeichnis beim Start
+  ausdrücklich auf `0755`, auch bei vorhandenen Volumes und `umask 077`.
+  So kann YachtPlus als UID 1000 den vom Guard UID 1001 geschriebenen Zustand
+  über seinen weiterhin schreibgeschützten Mount lesen.
+- Geändert: Beide Compose-Stacks geben dem Docker-Socket-Proxy ein begrenztes
+  `/run`-tmpfs für die HAProxy-PID-Datei. Das Root-Dateisystem bleibt
+  schreibgeschützt; Schutzstack-Regressions- und Smoke-Prüfungen erfassen die
+  Dateirechte und Proxy-Bereitschaft. Startfehler liefern Health- und
+  UID/GID-/Modusdiagnosen ohne Ausgabe der Container-Umgebung. Betriebs- und
+  Upgradehinweise aktualisiert.
+- Ergebnis: CI-Lauf [36979071014](https://github.com/xNicolas99/YachtPlus/actions/runs/36979071014)
+  auf `3adb5ab` bestätigte die Startfehler des vorherigen Kandidaten: gesunder
+  Guard bei für die App unlesbarem Ban-Verzeichnis und nicht schreibbare
+  `/run/haproxy.pid` im Proxy. Auf dem korrigierten lokalen Kandidaten bestanden
+  860 Backend-Tests, 217 Frontend-Tests, Produktionsbuild/Bundle-Grenzen und
+  ein frisches SQLite-Alembic-Upgrade. `dist/version.json` enthält exakt
+  `3.0.2`. Von 44
+  Skriptprüfungen bestanden 43; die POSIX-Rechte-/umask-Prüfung ist auf Windows
+  ausdrücklich übersprungen und muss unter Linux laufen. Die erforderlichen
+  Linux-CI-Prüfungen stehen noch aus. Lokale Logs unter
+  `report/audit-ci-*-r023.txt`.
+- Aufgeräumt: keine zusätzlichen Wegwerf-Artefakte aus dieser Dokumentationsänderung.
+- Offen: alle erforderlichen CI-Jobs auf dem aktuellen Kandidaten einschließlich
+  Linux-Schutzstack erfolgreich abschließen. Noch kein grüner Schutzstack-
+  Nachweis und kein Merge nach `master` behauptet. Die Freigabe bleibt offen.
+
 ## [3.0.1] - 2026-10-02 — unreleased verification candidate
 
 - Resolve the submitted authentication, permission, session, CSRF, TOTP,
