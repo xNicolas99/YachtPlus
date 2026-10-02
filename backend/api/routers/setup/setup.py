@@ -1,19 +1,19 @@
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Body, Request, Response
-from slowapi import Limiter
-from api.utils.security import rate_limit_key
+from api.utils.security import rate_limit_key, limiter
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError, OperationalError
 from api.db.database import SessionLocal
 from api.db.models.users import User
-from api.db.schemas.users import UserCreate, UserUpdate
-from api.db.crud.users import create_user, get_user_by_name, update_user_by_id
+from api.db.schemas.users import UserCreate
+from api.db.crud.users import create_user, get_user_by_name, verify_password
 from api.utils.auth import get_db
-from api.auth.jwt import create_access_token, get_auth_wrapper
+from api.auth.jwt import create_access_token, get_auth_wrapper, account_claims
 from api.auth.auth import auth_check, auth_check_setup_pending
-from api.db.models.setup import SetupStatus
-from api.settings import Settings
+from api.db.models.setup import SetupStatus, SetupRegistrationClaim
+from api.settings import get_settings
 import logging
 import os
 import asyncio
@@ -31,7 +31,6 @@ router = APIRouter()
 # admin) so without a rate limit it doubles as a CPU exhaust vector via
 # bcrypt — each call invokes the work-factor-12 hash. Cap at a value
 # that's still comfortable for a real install over a flaky connection.
-limiter = Limiter(key_func=rate_limit_key)
 
 # Whitelist the directories the setup flag file is allowed to live under.
 # /config is the production volume mount; $cwd covers dev installs and the
@@ -180,7 +179,7 @@ async def bypass_setup(db: AsyncSession = Depends(get_db)):
     # DISABLE_AUTH=True. That env flag is already documented as dev-only
     # and gated everywhere else; reusing it here means an attacker can't
     # trigger this on a hardened production deploy.
-    if not Settings().DISABLE_AUTH:
+    if not get_settings().DISABLE_AUTH:
         raise HTTPException(
             status_code=404,
             detail="Setup bypass is only available in dev mode (DISABLE_AUTH=True).",
@@ -216,32 +215,48 @@ async def register_first_user(
     if await is_setup_completed_async(db):
          raise HTTPException(status_code=403, detail="Setup already completed.")
 
-    # Check if user already exists
+    if not user.username.strip() or not user.password:
+        raise HTTPException(status_code=422, detail="Username and password are required.")
+
     existing_user = await get_user_by_name(db, user.username)
 
     if existing_user:
-        # If user exists but setup not complete, we allow overwrite/update
-        # This handles the case where setup was aborted halfway
-        user_update = UserUpdate(
-            username=user.username,
-            password=user.password,
-            is_superuser=True,
-            is_active=False
-        )
-        new_user = await update_user_by_id(db, existing_user.id, user_update)
-        if not new_user:
-             raise HTTPException(status_code=500, detail="Failed to update user.")
+        # An interrupted wizard can be resumed with the original credentials.
+        # Never replace the password or grant superuser rights from this public
+        # endpoint after the first account has been created.
+        if not existing_user.is_superuser or not await verify_password(
+            user.password, existing_user.hashed_password
+        ):
+            raise HTTPException(status_code=401, detail="Invalid setup credentials.")
+        new_user = existing_user
     else:
-        # Create the user as superuser
+        # A different username must not create a second administrator while
+        # setup is pending. This also covers a missing legacy setup flag.
+        result = await db.execute(select(User.id).limit(1))
+        if result.first() is not None:
+            raise HTTPException(status_code=403, detail="Setup account already registered.")
+
+        # Claim id=1 is a database-wide singleton. It is inserted in the
+        # same transaction that create_user commits, so concurrent workers
+        # cannot each create their own first administrator.
+        db.add(SetupRegistrationClaim(id=1))
+        try:
+            await db.flush()
+        except (IntegrityError, OperationalError):
+            await db.rollback()
+            raise HTTPException(status_code=409, detail="Setup registration already in progress.")
+
         user.is_superuser = True
         user.is_active = False
         try:
             new_user = await create_user(db=db, user=user)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Error creating user: {str(e)}")
+        except Exception:
+            await db.rollback()
+            logger.exception("Could not create initial setup account")
+            raise HTTPException(status_code=400, detail="Could not create setup account.")
 
     access_token = create_access_token(
-        data={"sub": new_user.username, "setup_pending": True},
+        data=account_claims(new_user, setup_pending=True),
         expires_delta=SETUP_PENDING_TOKEN_LIFETIME,
     )
     Authorize.set_access_cookies(
@@ -280,7 +295,7 @@ async def finalize_setup(
     await mark_setup_completed(db)
 
     # Issue a fresh token WITHOUT setup_pending so the user can access the rest of the application
-    access_token = create_access_token(data={"sub": user.username})
+    access_token = create_access_token(data=account_claims(user))
     Authorize.set_access_cookies(access_token, response)
 
     return {"message": "Setup finalized"}

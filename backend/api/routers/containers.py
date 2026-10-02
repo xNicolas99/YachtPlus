@@ -10,7 +10,8 @@ from aiodocker.exceptions import DockerError
 import logging
 import jwt
 import json
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 import shlex
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,11 +20,18 @@ from api.db.database import SessionLocal
 from api.db.models.users import User
 from api.db.models.settings import TokenBlacklist
 from api.utils.audit import log_activity
+from api.utils.error_handler import safe_http_status
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 router = APIRouter()
+
+@router.get("/stats")
+@limiter.limit("60/minute")
+async def get_all_container_stats(request: Request, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+    await auth_check(Authorize)
+    await check_permission("perm_start", Authorize, db)
+    return await actions.get_all_stats()
 
 
 # Only these shell paths can be invoked through the exec WebSocket. Anything
@@ -80,10 +88,13 @@ async def start_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(403, "Container lifecycle actions are not available via API key")
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
     # Perform action
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.start()
@@ -95,7 +106,7 @@ async def start_container(
         # of collapsing everything to 500 with the raw message — which
         # could echo internal paths / daemon details back to the client.
         logger.error("Error starting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to start container")
     except Exception as e:
         logger.exception("Unexpected error starting container %s", container_id)
@@ -114,9 +125,12 @@ async def stop_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_stop", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(403, "Container lifecycle actions are not available via API key")
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.stop()
@@ -124,7 +138,7 @@ async def stop_container(
         return {"message": "Container stopped"}
     except DockerError as e:
         logger.error("Error stopping container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to stop container")
     except Exception:
         logger.exception("Unexpected error stopping container %s", container_id)
@@ -143,9 +157,12 @@ async def restart_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_restart", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(403, "Container lifecycle actions are not available via API key")
+    container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.restart()
@@ -153,7 +170,7 @@ async def restart_container(
         return {"message": "Container restarted"}
     except DockerError as e:
         logger.error("Error restarting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         raise HTTPException(status_code=status_code, detail="Failed to restart container")
     except Exception:
         logger.exception("Unexpected error restarting container %s", container_id)
@@ -172,10 +189,12 @@ async def delete_container(
 ):
     await auth_check(Authorize)
     await check_permission("perm_delete", Authorize, db)
+    if Authorize.is_api_key():
+        raise HTTPException(403, "Container lifecycle actions are not available via API key")
     container_id = _validate_container_id(container_id)
     user = await Authorize.get_jwt_subject()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         container = await docker.containers.get(container_id)
         await container.delete(force=True)
@@ -187,7 +206,7 @@ async def delete_container(
         # "you deleted something that never existed" from "the docker
         # daemon is unreachable".
         logger.error("Error deleting container %s: %s", container_id, e)
-        status_code = getattr(e, "status", 500) or 500
+        status_code = safe_http_status(e)
         if status_code == 404:
             raise HTTPException(status_code=404, detail="Container not found")
         raise HTTPException(status_code=status_code, detail="Failed to delete container")
@@ -210,16 +229,23 @@ async def get_container_logs(
     await check_permission("perm_start", Authorize, db)
     container_id = _validate_container_id(container_id)
     follow = request.query_params.get("follow", "false").lower() == "true"
-    tail = request.query_params.get("tail", "all")
+    tail = request.query_params.get("tail", "200")
+    try:
+        tail = 10000 if tail == "all" else max(0, min(int(tail), 10000))
+    except ValueError:
+        raise HTTPException(422, "Invalid log tail") from None
     since = request.query_params.get("since", None)
+    timestamps = request.query_params.get("timestamps", "false").lower() == "true"
 
     if follow:
         return EventSourceResponse(
-            actions.stream_logs_generator(request, container_id),
+            actions.get_logs_generator(
+                container_id, tail=tail, follow=True, timestamps=timestamps
+            ),
             media_type="text/event-stream",
         )
 
-    return await actions.get_logs(container_id, tail=tail, since=since)
+    return await actions.get_logs(container_id, tail=tail, since=since, timestamps=timestamps)
 
 
 @router.get("/{container_id}/stats")
@@ -251,7 +277,12 @@ async def container_exec_websocket(
     shell: str = Query(default="/bin/bash"),
 ):
     await websocket.accept()
-    container_id = _validate_container_id(container_id)
+    try:
+        container_id = _validate_container_id(container_id)
+    except HTTPException:
+        await websocket.send_json({"error": "Forbidden: invalid container id"})
+        await websocket.close(code=1008)
+        return
 
     # Whitelist the requested shell before doing any auth work, so token
     # probing attempts get no signal from the docker daemon.
@@ -267,10 +298,6 @@ async def container_exec_websocket(
     token = None
     if hasattr(websocket, "cookies") and websocket.cookies:
         token = websocket.cookies.get("access_token_cookie")
-    if not token and hasattr(websocket, "headers"):
-        auth_header = websocket.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ", 1)[1]
     if isinstance(token, bytes):
         token = token.decode("utf-8")
 
@@ -299,6 +326,10 @@ async def container_exec_websocket(
                 claims.get("sub"),
             )
             await websocket.send_json({"error": "Forbidden: setup not completed"})
+            await websocket.close(code=1008)
+            return
+        if claims.get("type") == "api_key":
+            await websocket.send_json({"error": "Forbidden"})
             await websocket.close(code=1008)
             return
 
@@ -332,7 +363,7 @@ async def container_exec_websocket(
         finally:
             await auth_db.close()
 
-        if not user or not user.is_active:
+        if not user or not user.is_active or not claims.get("av") or claims["av"] != user.auth_version:
             logger.warning("WebSocket exec rejected: inactive or unknown user %r", username)
             await websocket.send_json({"error": "Forbidden"})
             await websocket.close(code=1008)
@@ -356,11 +387,12 @@ async def container_exec_websocket(
     finally:
         await audit_db.close()
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = None
     exec_id = None
     stream = None
 
     try:
+        docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
         # Create exec instance
         # Ensure container exists
         try:
@@ -370,30 +402,25 @@ async def container_exec_websocket(
             await websocket.close(code=1008, reason="Container not found")
             return
 
-        exec_instance = await container.exec(
-            {
-                "AttachStdin": True,
-                "AttachStdout": True,
-                "AttachStderr": True,
-                "Tty": True,
-                "Cmd": [shell.strip(), "-i", "-l"],
-            }
-        )
-        exec_id = exec_instance.get("Id")
+        exec_instance = await container.exec(cmd=[shell.strip(), "-i", "-l"], stdin=True, stdout=True, stderr=True, tty=True)
+        exec_id = exec_instance.id
         if not exec_id:
             logger.error("No exec ID returned")
             await websocket.close(code=1011, reason="Failed to create exec instance")
             return
 
-        stream = await exec_instance.start(detach=False, Tty=True, stdin=True)
+        stream = exec_instance.start(detach=False)
 
         async def docker_to_ws():
             try:
-                async for msg in stream:
-                    if isinstance(msg, bytes):
-                        await websocket.send_bytes(msg)
+                while True:
+                    msg = await stream.read_out()
+                    if msg is None:
+                        break
+                    if isinstance(msg.data, bytes):
+                        await websocket.send_bytes(msg.data)
                     else:
-                        await websocket.send_text(str(msg))
+                        await websocket.send_text(str(msg.data))
             except Exception as e:
                 logger.error(f"Docker to WS error: {e}")
 
@@ -401,18 +428,46 @@ async def container_exec_websocket(
             try:
                 while True:
                     data = await websocket.receive_text()
+                    if data.startswith('{'):
+                        try:
+                            control = json.loads(data)
+                        except (ValueError, TypeError):
+                            control = None
+                        if isinstance(control, dict) and control.get("type") == "resize":
+                            cols, rows = control.get("cols"), control.get("rows")
+                            if type(cols) is int and type(rows) is int and 1 <= cols <= 1000 and 1 <= rows <= 1000:
+                                await exec_instance.resize(h=rows, w=cols)
+                            continue
                     # Respect client-side resize messages without forwarding them to the shell
                     if data.startswith("__resize__:"):
                         continue
                     # Convert CRLF to LF for terminal consistency
-                    data = data.replace("\r\n", "\n").replace("\r", "\n")
-                    await stream.send(data.encode("utf-8"))
+                    await stream.write_in(data.encode("utf-8"))
             except WebSocketDisconnect:
                 logger.info("WebSocket disconnected for container %s", container_id)
             except Exception as e:
                 logger.error(f"WS to Docker error: {e}")
 
-        await asyncio.gather(docker_to_ws(), ws_to_docker())
+        async def session_guard():
+            from api.auth.jwt import _is_jti_revoked
+            while True:
+                await asyncio.sleep(5)
+                if not settings.DISABLE_AUTH:
+                    if claims.get("exp", 0) <= __import__("time").time() or await _is_jti_revoked(claims.get("jti")):
+                        return
+                    async with SessionLocal() as db:
+                        fresh = (await db.execute(select(User).where(User.username == username))).scalars().first()
+                        if not fresh or not fresh.is_active or fresh.auth_version != claims.get("av") or not (fresh.is_superuser or fresh.perm_start):
+                            return
+                # The outer policy middleware also guards each input frame.
+        tasks = [asyncio.create_task(docker_to_ws()), asyncio.create_task(ws_to_docker()), asyncio.create_task(session_guard())]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        await websocket.close(code=1000)
 
     except Exception as e:
         logger.error(f"WebSocket exec error: {e}")
@@ -426,10 +481,5 @@ async def container_exec_websocket(
                 await stream.close()
             except Exception:
                 pass
-        if exec_id:
-            try:
-                exec_obj = docker.executes.object(exec_id)
-                await exec_obj.resize(h=24, w=80)
-            except Exception:
-                pass
-        await docker.close()
+        if docker is not None:
+            await docker.close()

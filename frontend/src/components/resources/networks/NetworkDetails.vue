@@ -1,30 +1,28 @@
 <template>
-  <div class="page">
+  <div v-if="network" class="page">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
       <v-card-title>
-        <v-menu close-on-click close-on-content-click offset-y>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Network Actions" title="Network Actions">
+        <v-menu close-on-click close-on-content-click location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon size="small" v-bind="props" aria-label="Network Actions" title="Network Actions">
               <v-icon>mdi-chevron-down</v-icon>
             </v-btn>
           </template>
-          <v-list color="foreground" dense>
+          <v-list color="foreground" density="compact">
             <v-list-item
-              @click="
-                deleteNetwork(network.Name);
-                router.push({ name: 'Networks' });
-              "
+              :disabled="deleting"
+              @click="deleteDialog = true"
             >
-              <v-list-item-icon
-                ><v-icon>mdi-trash-can-outline</v-icon></v-list-item-icon
+              <span
+                ><v-icon>mdi-trash-can-outline</v-icon></span
               >
               <v-list-item-title>Delete Network</v-list-item-title>
             </v-list-item>
@@ -34,8 +32,8 @@
       </v-card-title>
       <v-card-subtitle>
         <v-chip
-          outlined
-          small
+          variant="outlined"
+          size="small"
           color="orange lighten-1"
           class="align-center mt-1"
           label
@@ -49,78 +47,78 @@
       <v-card-title>
         Network Information
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Name
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Name }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             ID
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Id }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Driver
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Driver }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Scope
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Scope }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Attachable
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Attachable }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Internal
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.Internal }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             IPV6 Enabled
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ network.EnableIPv6 }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content>
+          <div>
             Created
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             {{ $formatDate(network.Created) }}
-          </v-list-item-content>
+          </div>
         </v-list-item>
-        <v-list-item v-if="Object.keys(network.Labels).length > 1">
-          <v-list-item-content>
+        <v-list-item v-if="Object.keys(network.Labels || {}).length > 0">
+          <div>
             Labels
-          </v-list-item-content>
-          <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table class="foreground" dense>
+          </div>
+          <div>
+            <v-card variant="outlined" rounded="0">
+              <v-table class="foreground" density="compact">
                 <tbody>
                   <tr
                     v-for="(value, key, index) in network.Labels"
@@ -137,9 +135,9 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
@@ -148,52 +146,46 @@
       <v-card-title>
         Network Details
       </v-card-title>
-      <v-list color="foreground" dense>
+      <v-list color="foreground" density="compact">
         <v-list-item>
-          <v-list-item-content style="max-width: 30%">
+          <div style="max-width: 30%">
             IPV4 Subnet
-          </v-list-item-content>
-          <v-list-item-content v-if="network.IPAM.Config[0]">
-            {{ network.IPAM.Config[0].Subnet || "-" }}
-          </v-list-item-content>
-          <v-list-item-content v-else>
-            -
-          </v-list-item-content>
+          </div>
+          <div>
+            {{ ipv4Config.Subnet || "-" }}
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content style="max-width: 30%">
+          <div style="max-width: 30%">
             IPV4 Gateway
-          </v-list-item-content>
-          <v-list-item-content v-if="network.IPAM.Config[0]">
-            {{ network.IPAM.Config[0].Gateway || "-" }}
-          </v-list-item-content>
-          <v-list-item-content v-else>
-            -
-          </v-list-item-content>
+          </div>
+          <div>
+            {{ ipv4Config.Gateway || "-" }}
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content style="max-width: 30%">
+          <div style="max-width: 30%">
             IPV6 Subnet
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             -
-          </v-list-item-content>
+          </div>
         </v-list-item>
         <v-list-item>
-          <v-list-item-content style="max-width: 30%">
+          <div style="max-width: 30%">
             IPv6 Gateway
-          </v-list-item-content>
-          <v-list-item-content>
+          </div>
+          <div>
             -
-          </v-list-item-content>
+          </div>
         </v-list-item>
-        <v-list-item v-if="Object.keys(network.Options).length > 0">
-          <v-list-item-content style="max-width: 30%">
+        <v-list-item v-if="Object.keys(network.Options || {}).length > 0">
+          <div style="max-width: 30%">
             Options
-          </v-list-item-content>
-          <v-list-item-content>
-            <v-card outlined tile>
-              <v-simple-table dense>
+          </div>
+          <div>
+            <v-card variant="outlined" rounded="0">
+              <v-table density="compact">
                 <tbody>
                   <tr
                     v-for="(value, key, index) in network.Options"
@@ -210,9 +202,9 @@
                     </td>
                   </tr>
                 </tbody>
-              </v-simple-table>
+              </v-table>
             </v-card>
-          </v-list-item-content>
+          </div>
         </v-list-item>
       </v-list>
     </v-card>
@@ -228,9 +220,9 @@
         :items="conv2array(network.Containers)"
         @click:row="handleRowClick"
       >
-        <template slot="no-data">
+        <template #no-data>
           <div>
-            No Networks available.
+            No containers attached.
           </div>
         </template>
         <template v-slot:item.Name="{ item }">
@@ -269,7 +261,22 @@
         </template>
       </v-data-table>
     </v-card>
+    <v-dialog v-model="deleteDialog" max-width="420" :persistent="deleting">
+      <v-card>
+        <v-card-title>Delete the network?</v-card-title>
+        <v-card-text>
+          Permanently delete {{ network.Name }}? This action cannot be revoked.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">Cancel</v-btn>
+          <v-btn color="error" :loading="deleting" :disabled="deleting" @click="confirmDelete">Delete</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
   </div>
+  <v-progress-linear v-else-if="isLoading" indeterminate color="primary" />
+  <v-alert v-else type="error">Network details are unavailable.</v-alert>
 </template>
 
 <script>
@@ -278,43 +285,48 @@ import { mapActions, mapGetters, mapState } from "vuex";
 export default {
   data() {
     return {
+      deleteDialog: false,
+      deleting: false,
       headers: [
         {
-          text: "Name",
-          value: "Name",
+          title: "Name",
+          key: "Name",
           sortable: true
         },
         {
-          text: "IPv4",
-          value: "ipv4",
+          title: "IPv4",
+          key: "ipv4",
           sortable: true
         },
         {
-          text: "IPv6",
-          value: "ipv6",
+          title: "IPv6",
+          key: "ipv6",
           sortable: true
         },
         {
-          text: "MacAddress",
-          value: "macaddress",
+          title: "MacAddress",
+          key: "macaddress",
           sortable: true
         },
         {
-          text: "ID",
-          value: "ID",
+          title: "ID",
+          key: "ID",
           sortable: true
         }
       ]
     };
   },
   computed: {
-    ...mapState("networks", ["network", "network", "isLoading"]),
+    ...mapState("networks", ["isLoading"]),
     ...mapGetters({
       getNetworkById: "networks/getNetworkById"
     }),
     network() {
       const networkid = this.$route.params.networkid;
       return this.getNetworkById(networkid);
+    },
+    ipv4Config() {
+      return this.network?.IPAM?.Config?.[0] || {};
     }
   },
   methods: {
@@ -323,12 +335,24 @@ export default {
       deleteNetwork: "networks/deleteNetwork"
     }),
     conv2array(containers) {
-      var container_list = Object.values(containers);
-
-      return container_list;
+      return Object.values(containers || {});
     },
-    handleRowClick(app) {
-      this.$router.push({ path: `/apps/${app.Name}/info` });
+    async confirmDelete() {
+      if (this.deleting || !this.deleteDialog || !this.network) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteNetwork(this.network.Id)) {
+          this.deleteDialog = false;
+          await this.$router.push({ name: "Networks" });
+        }
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
+      }
+    },
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/apps/${encodeURIComponent(item.Name.replace(/^\//, ''))}/info` });
     }
   },
   created() {

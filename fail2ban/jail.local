@@ -1,10 +1,14 @@
+[DEFAULT]
+enabled = false
+
 [yachtplus]
 enabled = true
-port = 8000,8080
 filter = yachtplus
-logpath = /path/to/yachtplus/logs/nginx/error.log
-          /path/to/yachtplus/logs/backend/app.log
+backend = polling
+logpath = /config/security/auth.log
+usedns = no
+ignoreip =
 maxretry = 5
-findtime = 600
+findtime = 900
 bantime = 3600
-action = iptables-allports
+action = yachtplus-state[actionstart_on_demand=false]

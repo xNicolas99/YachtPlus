@@ -10,3 +10,11 @@ class SetupStatus(Base):
     is_bypassed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+
+class SetupRegistrationClaim(Base):
+    """The singleton row atomically reserves first-admin registration."""
+
+    __tablename__ = "setup_registration_claim"
+
+    id = Column(Integer, primary_key=True)

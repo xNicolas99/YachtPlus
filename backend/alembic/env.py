@@ -21,18 +21,21 @@ fileConfig(config.config_file_name)
 # target_metadata = mymodel.Base.metadata
 
 sys.path.insert(0, dirname(dirname(abspath(__file__))))
-from api.db import models
+
+# Import Base first, then every model module so their tables are registered
+# in Base.metadata. Importing the package (`api.db.models`) does not register
+# the concrete tables, which broke autogenerate.
+from api.db.database import Base, sync_migration_url
+from api.db.models import containers, users  # noqa: F401
+from api.db.models.settings import TokenBlacklist  # noqa: F401
 
 print("--- MODELS ---")
-# Combine metadata from auth and containers/templates
-combined_meta_data = MetaData()
-for declarative_base in [models.Base]:
-    for (table_name, table) in declarative_base.metadata.tables.items():
-        combined_meta_data._add_table(table_name, table.schema, table)
-
-target_metadata = combined_meta_data
+target_metadata = Base.metadata
 config.set_main_option(
-    "sqlalchemy.url", os.environ.get("DATABASE_URL", "sqlite:///config/data.sqlite")
+    "sqlalchemy.url",
+    sync_migration_url(
+        os.environ.get("DATABASE_URL", "sqlite:////config/yacht.db")
+    ).replace("%", "%%"),
 )
 
 # other values from the config, defined by the needs of env.py,
@@ -62,8 +65,24 @@ def run_migrations_offline():
     )
 
     with context.begin_transaction():
-        context.execute("DROP TABLE IF EXISTS alembic_version;")
         context.run_migrations()
+
+
+def _ensure_schema(connection) -> None:
+    """Create the initial schema on a fresh database before alembic runs.
+
+    YachtPlus historically relied on `Base.metadata.create_all()` at startup
+    rather than a baseline migration. Existing migrations only add/alter
+    columns. Without this guard, `alembic upgrade head` fails on a new
+    database because the first migration references tables that do not yet
+    exist.
+    """
+    from sqlalchemy import inspect
+
+    inspector = inspect(connection)
+    tables = inspector.get_table_names()
+    if not tables or "alembic_version" not in tables:
+        Base.metadata.create_all(connection)
 
 
 def run_migrations_online():
@@ -79,11 +98,13 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
-    with connectable.connect() as connection:
+    # SQLite DDL is non-transactional, but Alembic's version-table writes
+    # still need an explicit commit when the connection is closed.
+    with connectable.begin() as connection:
+        _ensure_schema(connection)
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
-            context.execute("DROP TABLE IF EXISTS alembic_version;")
             context.run_migrations()
 
 

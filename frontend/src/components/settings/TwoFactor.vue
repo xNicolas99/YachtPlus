@@ -27,7 +27,7 @@
             <v-text-field
               v-model="token"
               label="Verification Code"
-              outlined
+              variant="outlined"
               class="mt-4"
               maxlength="6"
               autocomplete="one-time-code"
@@ -36,7 +36,7 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn text @click="setupDialog = false" :disabled="busy">Cancel</v-btn>
+            <v-btn variant="text" @click="setupDialog = false" :disabled="busy">Cancel</v-btn>
             <v-btn color="primary" :loading="busy" :disabled="busy || !token" @click="verifyAndEnable"
               >Verify &amp; Enable</v-btn
             >
@@ -63,13 +63,13 @@
               v-model="disablePassword"
               label="Password"
               type="password"
-              outlined
+              variant="outlined"
               autocomplete="current-password"
             ></v-text-field>
             <v-text-field
               v-model="disableCode"
               label="2FA Code"
-              outlined
+              variant="outlined"
               maxlength="6"
               autocomplete="one-time-code"
               @keyup.enter="confirmDisable"
@@ -77,7 +77,7 @@
           </v-card-text>
           <v-card-actions>
             <v-spacer></v-spacer>
-            <v-btn text @click="closeDisableDialog" :disabled="busy">Cancel</v-btn>
+            <v-btn variant="text" @click="closeDisableDialog" :disabled="busy">Cancel</v-btn>
             <v-btn
               color="error"
               :loading="busy"
@@ -166,6 +166,7 @@ export default {
         this.setupDialog = false;
         this.token = "";
         this.notify("2FA Enabled", "success");
+        await this.$store.dispatch("auth/AUTH_LOGOUT");
       } catch (err) {
         this.notify(
           "Verification failed: " + this.extractError(err, "Invalid code"),
@@ -196,6 +197,7 @@ export default {
         this.isEnabled = false;
         this.closeDisableDialog();
         this.notify("2FA disabled", "success");
+        await this.$store.dispatch("auth/AUTH_LOGOUT");
       } catch (err) {
         // Most common: 400 "Password incorrect" or "Invalid 2FA code".
         this.notify(

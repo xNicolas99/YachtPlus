@@ -1,21 +1,48 @@
+from api.utils.container_stats import memory_usage
 import aiodocker
 import json
 import asyncio
 from fastapi import HTTPException
 import logging
 from datetime import datetime
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.error_handler import safe_http_status, docker_error_detail
 
 logger = logging.getLogger(__name__)
-settings = Settings()
 
 # Cache stats for 5 seconds
 stats_cache = {}
 CACHE_TTL = 5  # seconds
 
+
+def compute_cpu_percent(stats: dict) -> float:
+    """Compute container CPU% from a Docker stats frame, tolerating
+    missing/partial keys.
+
+    Freshly started containers often lack `precpu_stats` (and sometimes
+    parts of `cpu_stats`); direct indexing raised KeyError and killed the
+    SSE stream. Default everything to 0 and only divide when the deltas
+    are actually positive.
+    """
+    cpu_stats = stats.get("cpu_stats", {}) or {}
+    precpu_stats = stats.get("precpu_stats", {}) or {}
+    cpu_usage = cpu_stats.get("cpu_usage", {}) or {}
+    pre_cpu_usage = precpu_stats.get("cpu_usage", {}) or {}
+    total_usage = cpu_usage.get("total_usage", 0)
+    pre_total_usage = pre_cpu_usage.get("total_usage", 0)
+    system_cpu_usage = cpu_stats.get("system_cpu_usage", 0)
+    pre_system_cpu_usage = precpu_stats.get("system_cpu_usage", 0)
+    online_cpus = cpu_stats.get("online_cpus", 1)
+    cpu_delta = total_usage - pre_total_usage
+    system_delta = system_cpu_usage - pre_system_cpu_usage
+    if system_delta > 0 and cpu_delta > 0:
+        return (cpu_delta / system_delta) * online_cpus * 100.0
+    return 0.0
+
+
 async def get_containers():
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             containers = await docker.containers.list(all=True)
             # Normalize container objects to dicts
@@ -29,7 +56,7 @@ async def get_containers():
             raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
 async def stream_stats_generator(request, container_id: str):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         stats_iter = None
         try:
             container = await docker.containers.get(container_id)
@@ -42,14 +69,11 @@ async def stream_stats_generator(request, container_id: str):
                 if await request.is_disconnected():
                     break
 
-                mem_usage = stats.get("memory_stats", {}).get("usage", 0)
+                mem_usage = memory_usage(stats.get("memory_stats", {}))
                 mem_limit = stats.get("memory_stats", {}).get("limit", 1)
                 mem_percent = (mem_usage / mem_limit) * 100.0
 
-                cpu_delta = stats["cpu_stats"]["cpu_usage"]["total_usage"] - stats["precpu_stats"]["cpu_usage"]["total_usage"]
-                system_delta = stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
-                online_cpus = stats["cpu_stats"].get("online_cpus", 1)
-                cpu_percent = (cpu_delta / system_delta) * online_cpus * 100.0 if system_delta > 0 else 0.0
+                cpu_percent = compute_cpu_percent(stats)
 
                 payload = {
                     "cpu_percent": round(cpu_percent, 2),
@@ -77,9 +101,19 @@ async def stream_stats_generator(request, container_id: str):
                         exc_info=True,
                     )
 
-async def get_logs(container_id: str, tail: int = 100, timestamps: bool = False):
-    """Fetch container logs once and return them as a list of lines."""
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+async def get_logs(
+    container_id: str,
+    tail: int = 100,
+    timestamps: bool = False,
+    since: int = None,
+):
+    """Fetch container logs once and return them as a list of lines.
+
+    Consolidates the previous two overloads (timestamps-only vs since-only)
+    into a single signature so callers can request both tail/since filtering
+    and timestamp decoration without shadowing one another.
+    """
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         try:
             container = await docker.containers.get(container_id)
@@ -89,44 +123,16 @@ async def get_logs(container_id: str, tail: int = 100, timestamps: bool = False)
             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
         try:
-            logs = container.log(stdout=True, stderr=True, follow=False, tail=tail, timestamps=timestamps)
+            return await container.log(
+                stdout=True,
+                stderr=True,
+                follow=False,
+                tail=tail,
+                timestamps=timestamps,
+                since=since,
+            )
         except aiodocker.exceptions.DockerError as e:
             raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
-
-        lines = []
-        async for line in logs:
-            lines.append(line)
-        return lines
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error fetching logs for container %r", container_id)
-        raise HTTPException(status_code=500, detail="Failed to fetch container logs.")
-    finally:
-        await docker.close()
-
-
-async def get_logs(container_id: str, tail: int = 100, since: int = None):
-    """Fetch container logs once and return them as a list of lines."""
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
-    try:
-        try:
-            container = await docker.containers.get(container_id)
-        except aiodocker.exceptions.DockerError as e:
-            if e.status == 404:
-                raise HTTPException(status_code=404, detail="Container not found")
-            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
-
-        try:
-            logs = container.log(stdout=True, stderr=True, follow=False, tail=tail, since=since)
-        except aiodocker.exceptions.DockerError as e:
-            raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
-
-        lines = []
-        async for line in logs:
-            lines.append(line)
-        return lines
 
     except HTTPException:
         raise
@@ -138,7 +144,7 @@ async def get_logs(container_id: str, tail: int = 100, since: int = None):
 
 
 async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = True, timestamps: bool = False):
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         try:
             container = await docker.containers.get(container_id)
@@ -153,8 +159,13 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
         except aiodocker.exceptions.DockerError as e:
              raise HTTPException(status_code=safe_http_status(e), detail=docker_error_detail(e))
 
-        async for line in logs:
-            yield {"data": line}
+        if follow:
+            async for line in logs:
+                yield {"data": line}
+        else:
+            for line in await logs:
+                yield {"data": line}
+        yield {"event": "end", "data": "Log stream ended"}
 
     except asyncio.CancelledError:
         # Client disconnected
@@ -173,7 +184,7 @@ async def get_logs_generator(container_id: str, tail: int = 100, follow: bool = 
         await docker.close()
 
 async def get_stats(container_id: str):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             container = await docker.containers.get(container_id)
         except aiodocker.exceptions.DockerError as e:
@@ -233,7 +244,7 @@ async def get_stats(container_id: str):
         mem_percent = 0
 
         if "memory_stats" in stats:
-             mem_current = stats["memory_stats"].get("usage", 0)
+             mem_current = memory_usage(stats.get("memory_stats", {}))
              mem_total = stats["memory_stats"].get("limit", 0)
 
              # Fallback if limit is extremely high (host memory) or 0
@@ -295,13 +306,15 @@ async def get_all_stats():
         if age < CACHE_TTL:
             return stats_cache['data']
 
-    docker = aiodocker.Docker(url=settings.DOCKER_HOST)
+    docker = aiodocker.Docker(url=get_settings().DOCKER_HOST)
     try:
         containers = await docker.containers.list()
 
         async def fetch_single_stats(container):
             try:
                 stats = await container.stats(stream=False)
+                if isinstance(stats, list):
+                    stats = stats[0] if stats else {}
 
                 # Calculate CPU
                 cpu_percent = 0.0
@@ -340,7 +353,7 @@ async def get_all_stats():
 
                 try:
                     mem_stats = stats.get("memory_stats", {})
-                    mem_current = mem_stats.get("usage", 0)
+                    mem_current = memory_usage(mem_stats)
                     mem_limit = mem_stats.get("limit", 0)
                     if mem_limit > 0:
                         mem_percent = (mem_current / mem_limit) * 100.0

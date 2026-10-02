@@ -9,19 +9,19 @@
           mobile-breakpoint="sm"
         >
           <v-tab class="text-left" @click="$router.go(-1)">
-            <v-icon left class="mr-1">mdi-arrow-left-bold-outline</v-icon> Back
+            <v-icon start class="mr-1">mdi-arrow-left-bold-outline</v-icon> Back
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-information-outline</v-icon>Info
+            <v-icon start class="mr-1">mdi-information-outline</v-icon>Info
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-view-list-outline</v-icon>Processes
+            <v-icon start class="mr-1">mdi-view-list-outline</v-icon>Processes
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-book-open-outline</v-icon>Logs
+            <v-icon start class="mr-1">mdi-book-open-outline</v-icon>Logs
           </v-tab>
           <v-tab class="text-left">
-            <v-icon left class="mr-1">mdi-gauge</v-icon>Stats
+            <v-icon start class="mr-1">mdi-gauge</v-icon>Stats
           </v-tab>
         </v-tabs>
         <v-fade-transition>
@@ -38,22 +38,21 @@
           <v-col xs="12" sm="12" md="6" class="flex-grow-1 flex-shrink-0">
             <v-card
               :class="{
-                'mx-4 primary': $vuetify.breakpoint.smAndDown,
+                'mx-4 primary': $vuetify.display.smAndDown,
                 'ml-4 primary flex-shrink-1 flex-grow-0':
-                  $vuetify.breakpoint.mdAndUp
+                  $vuetify.display.mdAndUp
               }"
             >
               <v-card-title>
                 {{ app.name }}
                 <v-spacer />
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
-                      :href="`/api/apps/${app.name}/support`"
+                      v-bind="props"
+                      :href="supportHref(app)"
                       target="_blank"
                       download
                       class="mx-1 my-1 hidden-sm-and-down"
@@ -64,13 +63,12 @@
                   </template>
                   <span>Download Support Bundle</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       class="mx-1 my-1 hidden-sm-and-down"
                       @click="editClick({ Name: app.name })"
                     >
@@ -80,13 +78,12 @@
                   </template>
                   <span>Edit</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="x-small"
                       @click="refresh()"
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       aria-label="Refresh Application Details"
                       title="Refresh Application Details"
@@ -98,36 +95,35 @@
                 <v-menu
                   close-on-click
                   close-on-content-click
-                  offset-y
+
                   class="hidden-md-and-up"
                 >
-                  <template v-slot:activator="{ on, attrs }">
+                  <template v-slot:activator="{ props }">
                     <v-btn
                       size="small"
                       color="secondary"
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       class="hidden-md-and-up mx-1"
                     >
                       <v-icon>mdi-chevron-down</v-icon>
                     </v-btn>
                   </template>
-                  <v-list color="foreground" class="hidden-md-and-up" dense>
+                  <v-list color="foreground" class="hidden-md-and-up" density="compact">
                     <v-list-item @click="editClick({ Name: app.name })">
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-file-document-edit-outline</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Edit</v-list-item-title>
                     </v-list-item>
                     <v-list-item
-                      :href="`/api/apps/${app.name}/support`"
+                      :href="supportHref(app)"
                       target="_blank"
                       color="primary"
                       download
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-help-circle-outline</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Help</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -138,9 +134,9 @@
                         readAppStats(app.name);
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-play</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Start</v-list-item-title>
                     </v-list-item>
                     <v-list-item
@@ -150,17 +146,17 @@
                         closeStats();
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-stop</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Stop</v-list-item-title>
                     </v-list-item>
                     <v-list-item
                       @click="AppAction({ Name: app.name, Action: 'restart' })"
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-refresh</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Restart</v-list-item-title>
                     </v-list-item>
                     <v-divider />
@@ -171,15 +167,15 @@
                         closeStats();
                       "
                     >
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-fire</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Kill</v-list-item-title>
                     </v-list-item>
                     <v-list-item @click="removeDialog = true">
-                      <v-list-item-icon>
+                      <span>
                         <v-icon>mdi-delete</v-icon>
-                      </v-list-item-icon>
+                      </span>
                       <v-list-item-title>Remove</v-list-item-title>
                     </v-list-item>
                   </v-list>
@@ -199,11 +195,11 @@
                     </v-card-text>
                     <v-card-actions>
                       <v-spacer></v-spacer>
-                      <v-btn text @click="removeDialog = false">
+                      <v-btn variant="text" @click="removeDialog = false">
                         Cancel
                       </v-btn>
                       <v-btn
-                        text
+                        variant="text"
                         color="error"
                         @click="
                           AppAction({ Name: app.name, Action: 'remove' });
@@ -223,16 +219,15 @@
           <v-col sm="12" md="6" class="hidden-sm-and-down">
             <v-card
               :class="{
-                'mx-4 primary': $vuetify.breakpoint.smAndDown,
-                'mr-4 primary': $vuetify.breakpoint.mdAndUp
+                'mx-4 primary': $vuetify.display.smAndDown,
+                'mr-4 primary': $vuetify.display.mdAndUp
               }"
             >
               <v-card-title class="d-flex justify-space-between">
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -247,11 +242,10 @@
                   </template>
                   <span>Start</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -266,11 +260,10 @@
                   </template>
                   <span>Stop</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="{ attrs }"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="AppAction({ Name: app.name, Action: 'restart' })"
@@ -281,11 +274,10 @@
                   </template>
                   <span>Restart</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="
@@ -300,11 +292,10 @@
                   </template>
                   <span>Kill</span>
                 </v-tooltip>
-                <v-tooltip bottom>
-                  <template v-slot:activator="{ on, attrs }">
+                <v-tooltip location="bottom">
+                  <template v-slot:activator="{ props }">
                     <v-btn
-                      v-bind="attrs"
-                      v-on="on"
+                      v-bind="props"
                       color="secondary"
                       class="mx-1 my-1"
                       @click="removeDialog = true"
@@ -325,21 +316,21 @@
           leave-active-class="animated slideOutRight"
           mode="out-in"
         >
-          <v-tabs-items v-model="AppTab" touchless class="mt-3">
-            <v-tab-item> </v-tab-item>
-            <v-tab-item>
+          <v-window v-model="AppTab" touchless class="mt-3">
+            <v-window-item> </v-window-item>
+            <v-window-item>
               <Content :app="app" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Processes :app="app" :processes="processes" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Logs :app="app" :logs="logs" />
-            </v-tab-item>
-            <v-tab-item>
+            </v-window-item>
+            <v-window-item>
               <Stats :app="app" :stats="stats" />
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </transition>
       </v-card>
     </v-container>
@@ -387,6 +378,9 @@ export default {
     }
   },
   methods: {
+    supportHref(app) {
+      return `/api/apps/${encodeURIComponent((app?.name || "").replace(/^\//, ""))}/support`;
+    },
     ...mapActions({
       readApp: "apps/readApp",
       readAppProcesses: "apps/readAppProcesses",
@@ -411,18 +405,25 @@ export default {
       if (this.logConnection) {
         this.logConnection.close();
       }
-      this.logConnection = new EventSource(`/api/apps/${appName}/logs`);
+      const origin = window.location.origin;
+      this.logConnection = new EventSource(`${origin}/api/apps/${appName}/logs`);
       this.logConnection.addEventListener("update", event => {
         this.logs.push(event.data);
+        if (this.logs.length > 10000) this.logs.splice(0, this.logs.length - 10000);
       });
+      this.logConnection.addEventListener("end", () => { this.logConnection?.close(); });
+      this.logConnection.onerror = () => { this.logConnection?.close(); };
     },
     readAppStats(appName) {
       if (this.statConnection) {
         this.statConnection.close();
       }
-      this.statConnection = new EventSource(`/api/apps/${appName}/stats`);
+      const origin = window.location.origin;
+      this.statConnection = new EventSource(`${origin}/api/apps/${appName}/stats`);
       this.statConnection.addEventListener("update", event => {
-        let statsGroup = JSON.parse(event.data);
+        let statsGroup;
+        try { statsGroup = JSON.parse(event.data); }
+        catch { return; }
         this.stats.time.push(statsGroup.time);
         this.stats.cpu_percent.push(Math.round(statsGroup.cpu_percent));
         this.stats.mem_percent.push(Math.round(statsGroup.mem_percent));

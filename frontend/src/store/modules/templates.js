@@ -2,6 +2,7 @@ import axios from "axios";
 import router from "@/router/index";
 
 const state = {
+  templateVariables: [],  // F73: was committed but never declared
   templates: [],
   isLoading: false
 };
@@ -27,14 +28,6 @@ const mutations = {
       return;
     }
     state.templates.splice(idx, 1);
-  },
-  setApp(state, app) {
-    const idx = state.apps.findIndex(x => x.id === app.id);
-    if (idx < 0) {
-      state.apps.push(app);
-    } else {
-      state.apps.splice(idx, 1, app);
-    }
   },
   setLoading(state, loading) {
     state.isLoading = loading;
@@ -71,22 +64,19 @@ const actions = {
   readTemplatesAndItems({ commit }) {
     commit("setLoading", true);
     const url = "/templates/";
-    axios
+    return axios
       .get(url)
       .then(response => {
         const templates = response.data;
-        templates.forEach(function(template) {
-          let temp_url = `/templates/${template.id}`;
-          axios
-            .get(temp_url)
-            .then(response => {
-              commit("setTemplate", response.data);
-            })
-            .catch(err => {
-              commit("snackbar/setErr", err, { root: true });
-            });
-        });
-        commit("setTemplates", templates);
+        return Promise.all(
+          templates.map(template =>
+            axios.get(`/templates/${template.id}`).then(response => response.data)
+          )
+        )
+          .then(items => {
+            commit("setTemplates", items);
+            return items;
+          });
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
@@ -119,20 +109,21 @@ const actions = {
       .then(response => {
         const template = response.data;
         commit("addTemplate", template);
+        // M10: navigate only on success — finally also ran on errors.
+        router.push({ name: "View Templates" });
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
       })
       .finally(() => {
         commit("setLoading", false);
-        router.push({ name: "View Templates" });
       });
   },
   updateTemplate({ commit }, id) {
     commit("setLoading", true);
     const url = `/templates/${id}/refresh`;
     axios
-      .get(url)
+      .post(url)
       .then(response => {
         const template = response.data;
         commit("setTemplate", template);
@@ -203,14 +194,16 @@ const actions = {
   writeTemplateVariables({ commit }, payload) {
     commit("setLoading", true);
     const url = "/settings/variables";
-    axios
+    return axios
       .post(url, payload, {})
       .then(response => {
         const templateVariables = response.data;
         commit("setTemplateVariables", templateVariables);
+        return templateVariables;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        throw err;
       })
       .finally(() => {
         commit("setLoading", false);

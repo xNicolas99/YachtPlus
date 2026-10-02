@@ -4,15 +4,15 @@
       <v-col sm="12" md="6">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'ml-4 flex-grow-1 flex-shrink-0 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary">
             {{ app.Config.Image.split(":")[0] }}
           </v-card-title>
-          <v-simple-table class="foreground">
+          <v-table class="foreground">
             <template v-slot:default>
               <tbody>
                 <tr>
@@ -33,36 +33,36 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col>
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mr-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Networking </v-card-title>
           <v-tabs
             background-color="tabs"
-            :show-arrows="$vuetify.breakpoint.smAndDown"
+            :show-arrows="$vuetify.display.smAndDown"
             show-arrows-on-hover
             v-model="network_tab"
           >
             <v-tab> Ports </v-tab>
             <v-tab> Networks </v-tab>
           </v-tabs>
-          <v-tabs-items class="foreground" v-model="network_tab">
-            <v-tab-item>
+          <v-window class="foreground" v-model="network_tab">
+            <v-window-item>
               <v-card-text
                 v-if="app.State.Status != 'running'"
                 class="foreground text-center px-5 py-5"
               >
                 Start the app to view ports
               </v-card-text>
-              <v-simple-table v-else class="foreground px-0 text-center">
+              <v-table v-else class="foreground px-0 text-center">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -82,7 +82,7 @@
                     >
                       <td v-if="network_labels.includes('Label')">
                         {{
-                          app.Config.Labels[`local.yachtplus.port.${port.hport}`]
+                          app.Config.Labels[`local.yacht.port.${port.hport}`]
                         }}
                       </td>
                       <td>{{ port.cport }}</td>
@@ -92,27 +92,27 @@
                           v-if="port.hip == '0.0.0.0'"
                           color="primary"
                           label
-                          :href="'http://' + host_ip + ':' + port.hport"
+                          :href="portHref(port)"
                           target="_blank"
-                          ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                          ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip
                         ><v-chip
                           v-else
                           color="primary"
                           label
-                          :href="'http://' + port.hip + ':' + port.hport"
+                          :href="portHref(port)"
                           target="_blank"
-                          ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                          ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                           >{{ port.hport }}</v-chip
                         >
                       </td>
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
-            </v-tab-item>
-            <v-tab-item>
-              <v-simple-table class="foreground px-0 text-center">
+              </v-table>
+            </v-window-item>
+            <v-window-item>
+              <v-table class="foreground px-0 text-center">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -155,22 +155,22 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
-            </v-tab-item>
-          </v-tabs-items>
+              </v-table>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
       <v-col sm="12" md="6">
         <v-card
           v-if="app.Config.Env"
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'ml-4 flex-grow-1 flex-shrink-0 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Environment </v-card-title>
-          <v-simple-table
+          <v-table
             style="max-height: 500px;overflow-y: auto;"
             class="foreground px-0 text-center"
           >
@@ -191,15 +191,15 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col sm="12" md="6">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mr-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Storage </v-card-title>
@@ -208,14 +208,14 @@
               {{ mount.Destination }}
             </v-tab>
           </v-tabs>
-          <v-tabs-items
+          <v-window
             class="foreground"
             v-model="storage_tab"
-            :show-arrows="$vuetify.breakpoint.smAndDown"
+            :show-arrows="$vuetify.display.smAndDown"
             show-arrows-on-hover
           >
-            <v-tab-item v-for="(mount, index) in app.Mounts" :key="index">
-              <v-simple-table id="storage_table" class="foreground">
+            <v-window-item v-for="(mount, index) in app.Mounts" :key="index">
+              <v-table id="storage_table" class="foreground">
                 <template v-slot:default>
                   <tbody>
                     <tr v-for="(property, pindex) in mount" :key="pindex">
@@ -228,23 +228,23 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
-            </v-tab-item>
-          </v-tabs-items>
+              </v-table>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
       <v-col cols="12">
         <v-card
           :class="{
-            'mx-4 foreground': $vuetify.breakpoint.smAndDown,
+            'mx-4 foreground': $vuetify.display.smAndDown,
             'mx-4 flex-grow-0 flex-shrink-1 foreground':
-              $vuetify.breakpoint.mdAndUp
+              $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary">
             Labels
           </v-card-title>
-          <v-simple-table class="foreground px-0 text-center">
+          <v-table class="foreground px-0 text-center">
             <template v-slot:default>
               <thead>
                 <tr>
@@ -262,7 +262,7 @@
                 </tr>
               </tbody>
             </template>
-          </v-simple-table>
+          </v-table>
         </v-card>
       </v-col>
       <v-col
@@ -276,8 +276,8 @@
       >
         <v-card
           :class="{
-            'mx-4': $vuetify.breakpoint.smAndDown,
-            'mr-4 flex-grow-0 flex-shrink-1': $vuetify.breakpoint.mdAndUp
+            'mx-4': $vuetify.display.smAndDown,
+            'mr-4 flex-grow-0 flex-shrink-1': $vuetify.display.mdAndUp
           }"
         >
           <v-card-title class="primary"> Advanced </v-card-title>
@@ -296,17 +296,17 @@
             <v-tab v-if="app.HostConfig.Sysctls">Sysctls</v-tab>
             <v-tab v-if="app.HostConfig.CapAdd">Capabilities</v-tab>
           </v-tabs>
-          <v-tabs-items class="foreground" v-model="advanced_tab">
-            <v-tab-item v-if="Array.isArray(app.Args) && app.Args.length">
+          <v-window class="foreground" v-model="advanced_tab">
+            <v-window-item v-if="Array.isArray(app.Args) && app.Args.length">
               <v-list class="foreground">
                 <v-list-item v-for="(arg, index) in app.Args" :key="index">
-                  <v-list-item-content>
+                  <div>
                     {{ arg }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </v-list>
-            </v-tab-item>
-            <v-tab-item
+            </v-window-item>
+            <v-window-item
               v-if="
                 app.HostConfig.Devices &&
                   Array.isArray(app.HostConfig.Devices) &&
@@ -314,9 +314,9 @@
               "
             >
               {{ app.HostConfig.Devices }}
-            </v-tab-item>
-            <v-tab-item v-if="app.HostConfig.Sysctls">
-              <v-simple-table class="foreground">
+            </v-window-item>
+            <v-window-item v-if="app.HostConfig.Sysctls">
+              <v-table class="foreground">
                 <template v-slot:default>
                   <thead>
                     <tr>
@@ -340,21 +340,21 @@
                     </tr>
                   </tbody>
                 </template>
-              </v-simple-table>
-            </v-tab-item>
-            <v-tab-item v-if="app.HostConfig.CapAdd">
+              </v-table>
+            </v-window-item>
+            <v-window-item v-if="app.HostConfig.CapAdd">
               <v-list class="foreground">
                 <v-list-item
                   v-for="(item, index) in app.HostConfig.CapAdd"
                   :key="index"
                 >
-                  <v-list-item-content>
+                  <div>
                     {{ item }}
-                  </v-list-item-content>
+                  </div>
                 </v-list-item>
               </v-list>
-            </v-tab-item>
-          </v-tabs-items>
+            </v-window-item>
+          </v-window>
         </v-card>
       </v-col>
     </v-row>
@@ -362,6 +362,7 @@
 </template>
 
 <script>
+import { containerPortLink } from "@/utils/containerLinks";
 export default {
   data() {
     return {
@@ -377,7 +378,7 @@ export default {
       for (var port in this.convPorts(this.app.ports)) {
         if (
           this.app.Config.Labels[
-            `local.yachtplus.port.${this.convPorts(this.app.ports)[port].hport}`
+            `local.yacht.port.${this.convPorts(this.app.ports)[port].hport}`
           ]
         ) {
           var label_found = true;
@@ -392,6 +393,7 @@ export default {
     }
   },
   methods: {
+    portHref(port) { return containerPortLink(port, window.location); },
     convPorts(data) {
       let o = [];
       for (var k in data) {

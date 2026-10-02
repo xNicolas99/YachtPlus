@@ -14,6 +14,18 @@ export default createStore({
     // itemCount: 10
   },
   mutations: {
+    clearUserData(state) {
+      for (const name of ["apps", "projects", "templates", "images", "volumes", "networks", "snackbar"]) {
+        const module = state[name];
+        for (const key of Object.keys(module)) {
+          if (Array.isArray(module[key])) module[key] = [];
+          else if (key.startsWith("isLoading")) module[key] = key === "isLoading" ? false : null;
+          else if (typeof module[key] === "string") module[key] = "";
+          else if (typeof module[key] === "boolean") module[key] = false;
+          else if (module[key] && typeof module[key] === "object") module[key] = {};
+        }
+      }
+    },
     // setTemplates(state, templates) {
     //   state.templates = templates;
     // }

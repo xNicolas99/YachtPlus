@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from api.auth.auth import get_auth_wrapper
+from api.auth.auth import get_auth_wrapper, auth_check
 from api.actions import dashboard as dashboard_actions
 import shutil
 import asyncio
@@ -17,7 +17,8 @@ async def get_dashboard_stats(Authorize: get_auth_wrapper = Depends(get_auth_wra
     Wire the proper aggregating action that returns the full shape, and
     layer disk_usage on top (the action only computes CPU + RAM).
     """
-    await Authorize.jwt_required()
+    # B21: auth_check verifies token + account state (is_active).
+    await auth_check(Authorize)
     stats = await dashboard_actions.get_dashboard_stats()
 
     # Enrich `resources` with disk info; never let a stat failure break

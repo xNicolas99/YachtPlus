@@ -1,61 +1,44 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# Hardened Start Script
-# Runs Nginx and Gunicorn as the current user (appuser).
-# Logs are directed to stdout/stderr.
-
-# --- PERMISSION FIX (RUNS AS ROOT) ---
-echo "Setting permissions..."
-
-# 1. Ensure config directory exists and is writable
-mkdir -p /config
-if [ ! -f /config/yacht.db ]; then
-    touch /config/yacht.db
+if [ "$(id -u)" != "1000" ]; then
+    echo "YachtPlus must run as UID 1000 (image default)." >&2
+    exit 1
 fi
-
-# 2. Fix ownership (Crucial for the "Permission Denied" crash)
-chown -R 1000:1000 /config
-
-# 3. Setup Nginx Logs (Crucial for Nginx crash)
-mkdir -p /var/log/nginx
-touch /var/log/nginx/access.log /var/log/nginx/error.log
-chown -R 1000:1000 /var/log/nginx
-
-# Also ensure other app directories are writable if they were mounted incorrectly
-chown -R 1000:1000 /app /api
-
-# Belt-and-braces: older images may have been built without /home/appuser.
-# Gunicorn 26's control server writes a socket into $HOME; without this,
-# you see `Control server error: [Errno 13] Permission denied: '/home/appuser'`
-# in every boot log (workers run, but the control socket never comes up).
-mkdir -p /home/appuser
-chown 1000:1000 /home/appuser
-
-# Drop privileges and run the application
-echo "Starting Application as appuser (UID 1000)..."
-
-# We use 'exec gosu appuser' to switch user.
-# However, we need to run multiple commands (nginx + gunicorn).
-# So we run a shell as appuser to handle the logic.
-
-exec gosu appuser /bin/bash -c '
-set -e
-echo "Starting Nginx..."
-nginx
-
-# Check if Nginx started correctly
-sleep 2
-if ! pgrep nginx > /dev/null; then
-    echo "Error: Nginx failed to start!"
+for directory in /config /config/security /compose /var/run/nginx /var/www /home/appuser; do
+    if [ ! -d "$directory" ] || [ ! -w "$directory" ]; then
+        echo "YachtPlus cannot write $directory. Stop the stack and set this mounted directory's ownership to 1000:1000, then restart." >&2
+        exit 1
+    fi
+done
+if ! touch /config/security/auth.log; then
+    echo "YachtPlus cannot write /config/security/auth.log; set the log volume ownership to 1000:1000." >&2
     exit 1
 fi
 
-echo "Starting Gunicorn..."
-exec gunicorn -k uvicorn.workers.UvicornWorker \
-    -w 4 \
-    --bind 0.0.0.0:8000 \
-    --access-logfile - \
-    --error-logfile - \
-    api.main:app
-'
+python /api/configure_nginx.py
+export FORWARDED_ALLOW_IPS=''
+echo "Applying database migrations..."
+alembic upgrade head
+nginx -t
+nginx -g 'daemon off;' &
+nginx_pid=$!
+# In-memory rate limits are process-local. One worker keeps the published
+# login and global limits effective; async Docker I/O remains concurrent.
+gunicorn -k uvicorn.workers.UvicornWorker -w 1 \
+    --bind 127.0.0.1:8000 --forwarded-allow-ips='' \
+    --access-logfile - --error-logfile - api.main:app &
+gunicorn_pid=$!
+
+stop() {
+    kill -TERM "$nginx_pid" "$gunicorn_pid" 2>/dev/null || true
+    wait "$nginx_pid" "$gunicorn_pid" 2>/dev/null || true
+}
+trap stop EXIT
+trap 'exit 0' TERM INT
+# Stop both services if either exits: a partial app must not appear healthy.
+set +e
+wait -n "$nginx_pid" "$gunicorn_pid"
+status=$?
+set -e
+exit "${status:-1}"

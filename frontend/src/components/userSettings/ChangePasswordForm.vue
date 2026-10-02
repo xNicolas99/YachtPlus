@@ -5,18 +5,19 @@
         <v-toolbar-title>Change Password</v-toolbar-title>
       </v-toolbar>
       <v-card-text>
-        You can also change just your email here (or both your email and
-        password).
+        Change your username, password, or both. Leave the password blank to
+        keep your current password.
         <v-form @submit.prevent="onSubmit">
+          <v-text-field v-model="currentPassword" label="Current password" type="password" autocomplete="current-password" required />
           <Field
             name="username"
-            rules="required|email"
+            rules="required"
             v-model="username"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors, meta: fieldMeta }"
           >
             <v-text-field
-              v-bind="field"
-              label="Email"
+              v-bind="componentField"
+              label="Username"
               :error-messages="errors"
               :success="fieldMeta.valid"
               required
@@ -25,18 +26,16 @@
 
           <Field
             name="password"
-            rules="required"
             v-model="password"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors, meta: fieldMeta }"
           >
             <v-text-field
-              v-bind="field"
+              v-bind="componentField"
               label="Password"
               :error-messages="errors"
               :success="fieldMeta.valid"
               :type="show1 ? 'text' : 'password'"
               :append-icon="show1 ? 'mdi-eye' : 'mdi-eye-off'"
-              required
               @click:append="show1 = !show1"
             />
           </Field>
@@ -44,10 +43,10 @@
             name="confirm"
             rules="confirmed:@password"
             v-model="confirm"
-            v-slot="{ field, errors, meta: fieldMeta }"
+            v-slot="{ componentField, errors, meta: fieldMeta }"
           >
             <v-text-field
-              v-bind="field"
+              v-bind="componentField"
               label="Confirm Password"
               :error-messages="errors"
               :success="fieldMeta.valid"
@@ -56,11 +55,13 @@
               @click:append="show2 = !show2"
             />
           </Field>
+          <v-alert v-if="error" type="error" class="mb-3">{{ error }}</v-alert>
           <v-btn
             class="float-right"
             @click="onSubmit()"
             color="primary"
-            :disabled="!meta.valid"
+            :loading="loading"
+            :disabled="!meta.valid || loading"
             >Change User Info</v-btn
           >
         </v-form>
@@ -82,20 +83,36 @@ export default {
     return {
       username: this.currentUsername || "",
       password: "",
+      currentPassword: "",
       confirm: "",
       show1: false,
-      show2: false
+      show2: false,
+      loading: false,
+      error: null
     };
   },
   methods: {
     ...mapActions({
       login: "auth/AUTH_CHANGE_PASS"
     }),
-    onSubmit() {
-      this.login({
-        username: this.username,
-        password: this.password
-      });
+    async onSubmit() {
+      if (this.password !== this.confirm) {
+        this.error = "Passwords do not match.";
+        return;
+      }
+      this.error = null;
+      this.loading = true;
+      try {
+        await this.login({
+          username: this.username.trim(),
+          current_password: this.currentPassword,
+          password: this.password || null
+        });
+      } catch (err) {
+        this.error = err.response?.data?.detail || "Could not update your account.";
+      } finally {
+        this.loading = false;
+      }
     }
   }
 };

@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, EmailStr
+import time
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import smtplib
@@ -10,13 +11,26 @@ from api.utils.auth import get_db
 from api.db.models.settings import SMTPSettings
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check, require_superuser
+from api.utils.security import limiter
 from typing import Optional
+from api.utils.crypto import encrypt
+from api.utils.smtp_delivery import deliver
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Global debounce for test-mail sending: even superusers cannot spam the
+# configured SMTP relay. Per-IP rate limiting is applied via @limiter.limit,
+# and this lock prevents any client from sending more than one test mail
+# every TEST_MAIL_COOLDOWN_SECONDS.
+_TEST_MAIL_COOLDOWN_SECONDS = 30.0
+_test_mail_last_sent = 0.0
+_test_mail_lock = asyncio.Lock()
+
+
 class SMTPSettingsSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     server: str
     port: int
     username: Optional[str] = None
@@ -27,6 +41,14 @@ class SMTPSettingsSchema(BaseModel):
 class TestEmailSchema(BaseModel):
     recipient: EmailStr
 
+class SMTPSettingsPublic(SMTPSettingsSchema):
+    password_configured: bool = False
+
+def _public_settings(row):
+    return SMTPSettingsPublic(server=row.server, port=row.port, username=row.username,
+        sender_email=row.sender_email, use_tls=row.use_tls, password=None,
+        password_configured=bool(row.password))
+
 
 def _send_test_email_sync(settings, recipient: str) -> None:
     """Synchronous SMTP send, run in a thread so it never blocks the loop."""
@@ -36,17 +58,7 @@ def _send_test_email_sync(settings, recipient: str) -> None:
     msg['To'] = recipient
 
     try:
-        if settings.use_tls:
-            server = smtplib.SMTP(settings.server, settings.port)
-            server.starttls()
-        else:
-            server = smtplib.SMTP(settings.server, settings.port)
-
-        if settings.username and settings.password:
-            server.login(settings.username, settings.password)
-
-        server.sendmail(settings.sender_email, recipient, msg.as_string())
-        server.quit()
+        deliver(settings, recipient, msg)
     except Exception:
         logger.exception("SMTP test failed for recipient %s", recipient)
         raise HTTPException(
@@ -55,17 +67,17 @@ def _send_test_email_sync(settings, recipient: str) -> None:
         )
 
 
-@router.get("/", response_model=SMTPSettingsSchema)
+@router.get("/", response_model=SMTPSettingsPublic)
 async def get_smtp_settings(db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
-    await auth_check(Authorize)
+    await require_superuser(Authorize, db)
     result = await db.execute(select(SMTPSettings).limit(1))
     settings = result.scalars().first()
     if not settings:
         # Return default or empty
-        return SMTPSettingsSchema(server="", port=587, sender_email="admin@example.com")
-    return settings
+        return SMTPSettingsPublic(server="", port=587, sender_email="admin@example.com")
+    return _public_settings(settings)
 
-@router.post("/", response_model=SMTPSettingsSchema)
+@router.post("/", response_model=SMTPSettingsPublic)
 async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
     # SMTP server credentials are instance-global config. A non-admin who
     # could overwrite them could redirect alert mail to a domain they
@@ -74,23 +86,49 @@ async def update_smtp_settings(settings: SMTPSettingsSchema, db: AsyncSession = 
     await require_superuser(Authorize, db)
     result = await db.execute(select(SMTPSettings).limit(1))
     db_settings = result.scalars().first()
+    values = settings.model_dump()
+    password = values.pop("password")
+    # A blank field after loading the redacted settings retains the credential.
+    if password:
+        values["password"] = await asyncio.to_thread(encrypt, password)
     if not db_settings:
-        db_settings = SMTPSettings(**settings.dict())
+        db_settings = SMTPSettings(**values)
         db.add(db_settings)
     else:
-        for key, value in settings.dict().items():
+        for key, value in values.items():
             setattr(db_settings, key, value)
     await db.commit()
     await db.refresh(db_settings)
-    return db_settings
+    return _public_settings(db_settings)
 
 @router.post("/test")
-async def send_test_email(email_data: TestEmailSchema, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+@limiter.limit("5/hour")
+async def send_test_email(
+    request: Request,
+    email_data: TestEmailSchema,
+    db: AsyncSession = Depends(get_db),
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+):
     # Without a superuser gate this route is an authenticated open relay:
     # any user can fire mail through the configured SMTP server to any
     # arbitrary recipient, which is both a spam vector and a way to burn
     # the configured mail server's reputation.
     await require_superuser(Authorize, db)
+
+    # Debounce globally so a misbehaving client (or a compromised superuser
+    # session) cannot flood the configured SMTP relay. The lock is async
+    # and per-process; combined with the per-IP limiter this is sufficient
+    # for a single-instance deployment.
+    global _test_mail_last_sent
+    async with _test_mail_lock:
+        now = time.monotonic()
+        if now - _test_mail_last_sent < _TEST_MAIL_COOLDOWN_SECONDS:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Test email sent recently; wait {_TEST_MAIL_COOLDOWN_SECONDS:.0f} seconds.",
+            )
+        _test_mail_last_sent = now
+
     result = await db.execute(select(SMTPSettings).limit(1))
     settings = result.scalars().first()
     if not settings:

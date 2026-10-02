@@ -12,6 +12,7 @@ import {
 } from "../actions/auth";
 import axios from "axios";
 import router from "@/router/index";
+let refreshPromise = null;
 
 const state = {
   status: "",
@@ -34,6 +35,7 @@ const getters = {
   authStatus: state => state.status,
   getUsername: state => state.username,
   isSetup: state => state.isSetup,
+  authDisabled: state => state.authDisabled,
   setupStep: state => state.setupStep,
   setupQrCode: state => state.setupQrCode
 };
@@ -42,7 +44,7 @@ const actions = {
   [AUTH_REQUEST]: ({ commit }, credentials) => {
     return new Promise((resolve, reject) => {
       commit(AUTH_REQUEST);
-      const url = "/auth/login";
+      const url = "/auth/login_cookie";
 
       // Fix: Backend expects 'username', but Login.vue sends 'email'.
       // If username is missing but email exists, map it.
@@ -74,80 +76,42 @@ const actions = {
     });
   },
 
-  [AUTH_LOGOUT]: ({ commit }) => {
-    return new Promise(resolve => {
-      commit(AUTH_REQUEST);
-      const url = "/auth/logout";
-      axios
-        .post(url, {}, { withCredentials: true })
-        .then(resp => {
-          let rurl = "/auth/logout/refresh";
-          axios
-            .post(
-              rurl,
-              {},
-              {
-                xsrfCookieName: "csrf_refresh_token",
-                xsrfHeaderName: "X-CSRF-TOKEN",
-                withCredentials: true
-              }
-            )
-            .then(resp => {
-              commit(AUTH_CLEAR, resp);
-              localStorage.removeItem("username");
-              router.push({ path: "/" });
-              resolve(resp);
-            });
-
-          resolve(resp);
-        })
-        .catch(error => {
-          console.error(error);
-          commit(AUTH_CLEAR);
-        });
-    });
+  [AUTH_LOGOUT]: async ({ commit }) => {
+    try {
+      await axios.post("/auth/logout", {}, { withCredentials: true, skipAuthRefresh: true });
+    } catch (error) {
+      console.warn("[AUTH_LOGOUT] Server logout failed; clearing local session.", error);
+    } finally {
+      commit(AUTH_CLEAR);
+      commit("clearUserData", null, { root: true });
+      await router.push({ path: "/login" });
+    }
   },
-  [AUTH_REFRESH]: ({ commit }) => {
-    return new Promise(resolve => {
-      commit(AUTH_REQUEST);
-      const url = "/auth/refresh";
-      axios
-        .post(
-          url,
-          {},
-          {
-            xsrfCookieName: "csrf_refresh_token",
-            xsrfHeaderName: "X-CSRF-TOKEN",
-            withCredentials: true
-          }
-        )
-        .then(resp => {
-          resolve(resp);
-        })
-        .catch(error => {
-          console.error(error);
-          commit(AUTH_CLEAR);
-        });
-    });
+  [AUTH_REFRESH]: () => {
+    // Let failures reject so the caller can stop retrying and clear the
+    // session. Suppress the response interceptor on this request itself.
+    if (refreshPromise) return refreshPromise;
+    refreshPromise = axios.post("/auth/refresh", {}, {
+      xsrfCookieName: "csrf_access_token",
+      xsrfHeaderName: "X-CSRF-TOKEN",
+      withCredentials: true,
+      skipAuthRefresh: true,
+      timeout: 15000
+    }).finally(() => { refreshPromise = null; });
+    return refreshPromise;
   },
-  [AUTH_CHANGE_PASS]: ({ commit }, credentials) => {
-    return new Promise((resolve, reject) => {
-      commit(AUTH_REQUEST);
-      const url = "/auth/me";
-      axios
-        .post(url, credentials)
-        .then(resp => {
-          localStorage.setItem("username", resp.data.username);
-          commit(AUTH_SUCCESS, resp);
-          resolve(resp);
-        })
-        .finally(() => {
-          router.push({ path: `/user/info` });
-        })
-        .catch(err => {
-          reject(err);
-        });
-    });
+  [AUTH_CHANGE_PASS]: async ({ commit }, credentials) => {
+    commit(AUTH_REQUEST);
+    try {
+      const resp = await axios.post("/auth/me", credentials);
+      commit(AUTH_CLEAR);
+      commit("clearUserData", null, { root: true });
+      await router.push({ path: "/login" });
+      return resp;
+    } catch (err) {
+      commit(AUTH_ERROR);
+      throw err;
+    }
   },
   [AUTH_CHECK]: ({ commit, dispatch }) => {
     commit(AUTH_REQUEST);
@@ -163,7 +127,6 @@ const actions = {
           axios.defaults.xsrfHeaderName = "X-CSRF-TOKEN";
 
           if (resp.data.authDisabled == true) {
-            localStorage.setItem("username", resp.data.username);
             commit(AUTH_DISABLED);
             commit(AUTH_SUCCESS, resp);
           } else {
@@ -173,6 +136,8 @@ const actions = {
             // We should treat it as success.
             commit(AUTH_SUCCESS, resp);
           }
+          localStorage.setItem("username", resp.data.username);
+          return true;
         })
         .catch(err => {
           // If 401, we are not logged in.
@@ -184,6 +149,7 @@ const actions = {
             // Other errors
             commit(AUTH_ERROR);
           }
+          return false;
         });
     });
   },
@@ -222,7 +188,7 @@ const actions = {
   },
 
   SETUP_2FA_GENERATE: ({ commit }) => {
-    return axios.get("/auth/2fa/generate")
+    return axios.post("/auth/2fa/generate")
       .then(resp => {
         commit("SET_SETUP_SECRET", resp.data);
         return resp;
@@ -244,7 +210,6 @@ const actions = {
     return axios.post("/setup/finalize")
       .then(resp => {
         commit("SET_SETUP_STATUS", true);
-        commit("SET_SETUP_STEP", 4); // Completed
         return resp;
       });
   }
@@ -298,6 +263,12 @@ const mutations = {
     state.accessToken = "";
     state.refreshToken = "";
     state.username = "";
+    state.authDisabled = null;
+    state.status = "";
+    state.setupSecret = null;
+    state.setupQrCode = null;
+    state.setupStep = 1;
+    localStorage.removeItem("username");
   }
 };
 

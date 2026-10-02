@@ -7,7 +7,7 @@
     @keydown.esc="close"
   >
     <v-card class="d-flex flex-column" style="height: 100vh;">
-      <v-toolbar dark color="primary" dense>
+      <v-toolbar dark color="primary" density="compact">
         <v-toolbar-title>{{ containerName }} - Terminal</v-toolbar-title>
         <v-spacer></v-spacer>
 
@@ -18,29 +18,29 @@
             '/bin/bash',
             '/bin/ash',
             '/bin/zsh',
-            '/usr/bin/fish'
+            '/usr/bin/zsh'
           ]"
-          dense
+          density="compact"
           hide-details
-          outlined
+          variant="outlined"
           class="mr-4"
           style="max-width: 150px;"
           label="Shell"
-          @change="reconnect"
+          @update:model-value="reconnect"
         ></v-select>
 
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="reconnect" v-bind="attrs" v-on="on" aria-label="Reconnect terminal">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="reconnect" v-bind="props" aria-label="Reconnect terminal">
               <v-icon>mdi-refresh</v-icon>
             </v-btn>
           </template>
           <span>Reconnect</span>
         </v-tooltip>
 
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn icon @click="pasteFromClipboard" v-bind="attrs" v-on="on" aria-label="Paste from clipboard">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
+            <v-btn icon @click="pasteFromClipboard" v-bind="props" aria-label="Paste from clipboard">
               <v-icon>mdi-content-paste</v-icon>
             </v-btn>
           </template>
@@ -60,9 +60,9 @@
 </template>
 
 <script>
-import { Terminal } from "xterm";
-import { FitAddon } from "xterm-addon-fit";
-import "xterm/css/xterm.css";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import "@xterm/xterm/css/xterm.css";
 
 export default {
   props: {
@@ -82,14 +82,17 @@ export default {
     copyTimeout: null
   }),
   watch: {
-    visible(val) {
-      this.dialog = val;
-      if (val) {
-        this.$nextTick(() => {
-          this.initTerminal();
-        });
-      } else {
-        this.dispose();
+    visible: {
+      immediate: true,
+      handler(val) {
+        this.dialog = val;
+        if (val) {
+          this.$nextTick(() => {
+            if (this.dialog && this.$refs.terminal) this.initTerminal();
+          });
+        } else {
+          this.dispose();
+        }
       }
     },
     dialog(val) {
@@ -156,7 +159,7 @@ export default {
       if (!text) return;
       try {
         await navigator.clipboard.writeText(text);
-        if (this.$toast) this.$toast.success("Copied to clipboard!");
+        this.$store.commit("snackbar/setMessage", "Copied to clipboard!");
       } catch (err) {
         // Fallback for HTTP
         const textarea = document.createElement("textarea");
@@ -169,8 +172,8 @@ export default {
         textarea.select();
         try {
           const successful = document.execCommand("copy");
-          if (successful && this.$toast)
-            this.$toast.success("Copied to clipboard!");
+          if (successful)
+            this.$store.commit("snackbar/setMessage", "Copied to clipboard!");
         } catch (e) {
           console.error("Failed to copy", e);
         }
@@ -186,11 +189,11 @@ export default {
              this.terminal.paste(text);
           }
         } catch (err) {
-           if (this.$toast) this.$toast.info("Please use Ctrl+V to paste.");
+           this.$store.commit("snackbar/setMessage", "Please use Ctrl+V to paste.");
         }
       } else {
         // Fallback notice
-        if (this.$toast) this.$toast.info("Please use Ctrl+V to paste.");
+        this.$store.commit("snackbar/setMessage", "Please use Ctrl+V to paste.");
       }
     },
     async handleContextPaste(e) {
@@ -218,10 +221,8 @@ export default {
       // Auth runs via the HttpOnly access_token_cookie, which the browser
       // sends automatically with the WebSocket handshake on same-origin.
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const host = window.location.hostname;
-      const port = window.location.port ? `:${window.location.port}` : "";
 
-      const wsUrl = `${protocol}//${host}${port}/api/containers/${this.containerId}/exec?shell=${this.selectedShell}`;
+      const wsUrl = `${protocol}//${window.location.host}/api/containers/${encodeURIComponent(this.containerId)}/exec?shell=${encodeURIComponent(this.selectedShell)}`;
 
       this.websocket = new WebSocket(wsUrl);
 

@@ -12,19 +12,23 @@ import zipfile
 import asyncio
 import functools
 import logging
+import tempfile
+from concurrent.futures import ThreadPoolExecutor
+from api.utils.yaml_loader import load_yaml
 
-from api.settings import Settings
+from api.settings import get_settings
+settings = get_settings()
 from api.utils.compose import find_yml_files, validate_compose_project_name, validate_app_name
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+_compose_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="compose")
 
 """
 Helper for running blocking I/O in thread pool
 """
 async def run_in_thread(func, *args, **kwargs):
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+    return await loop.run_in_executor(_compose_executor, functools.partial(func, *args, **kwargs))
 
 """
 Runs an action on the specified compose project.
@@ -42,7 +46,12 @@ def _run_compose_command(command_args, cwd, env_vars):
     # the few v1-only legacy hosts the operator can symlink `docker-compose`
     # into a wrapper, but the inverse (assuming v1 exists) was guaranteed
     # to fail with ENOENT on a clean install.
-    cmd = ["docker", "compose"] + command_args
+    directory = pathlib.Path(cwd)
+    filenames = ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")
+    if any((directory / name).is_symlink() for name in filenames):
+        raise HTTPException(400, "Compose file cannot be a symlink")
+    selected = find_yml_files(str(directory)).get(directory.name)
+    cmd = ["docker", "compose"] + (["-f", selected] if selected else []) + command_args
     logger.info(f"Executing: {' '.join(cmd)} in {cwd}")
 
     try:
@@ -84,10 +93,10 @@ def _run_compose_command(command_args, cwd, env_vars):
 # (even though we use the array form, a typo could turn into a no-op or a
 # silently-different docker-compose subcommand).
 _ALLOWED_PROJECT_ACTIONS = frozenset({
-    "up", "down", "start", "stop", "restart", "create", "delete", "pull",
+    "up", "down", "start", "stop", "restart", "create", "delete", "pull", "kill", "rm",
 })
 _ALLOWED_APP_ACTIONS = frozenset({
-    "up", "down", "start", "stop", "restart", "create", "rm", "pull",
+    "up", "down", "start", "stop", "restart", "create", "rm", "pull", "kill",
 })
 
 
@@ -95,10 +104,10 @@ def _compose_action_sync(name, action):
     validate_compose_project_name(name)
     if action not in _ALLOWED_PROJECT_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
     # We call the sync version of get_compose here
     compose = _get_compose_sync(name)
-    env = os.environ.copy()
+    env = _compose_environment()
 
     # Check docker host
     _env_vars = check_dockerhost(env)
@@ -114,12 +123,13 @@ def _compose_action_sync(name, action):
         output = _run_compose_command([action, "-d"], _cwd, full_env)
     elif action == "create":
         output = _run_compose_command(["up", "--no-start"], _cwd, full_env)
+    elif action == "rm":
+        output = _run_compose_command(["rm", "--force", "--stop"], _cwd, full_env)
     else:
         output = _run_compose_command([action], _cwd, full_env)
 
-    print(f"""Project {compose['name']} {action} successful.""")
-    print(f"""Output: """)
-    print(output)
+    logger.info("Project %s %s successful.", compose['name'], action)
+    logger.debug("Compose output: %s", output)
     return _get_compose_projects_sync()
 
 async def compose_action(name, action):
@@ -153,9 +163,9 @@ def _compose_app_action_sync(name, action, app):
     validate_app_name(app)
     if action not in _ALLOWED_APP_ACTIONS:
         raise HTTPException(status_code=400, detail=f"Invalid compose action: {action!r}")
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
     compose = _get_compose_sync(name)
-    env = os.environ.copy()
+    env = _compose_environment()
 
     _cwd = os.path.dirname(compose["path"])
     _env_vars = check_dockerhost(env)
@@ -165,7 +175,7 @@ def _compose_app_action_sync(name, action, app):
          del full_env["clear_env"]
 
 
-    print("RUNNING: " + compose["path"] + " docker-compose " + " " + action + " " + app)
+    logger.debug("RUNNING: %s docker-compose %s %s", compose["path"], action, app)
 
     if action == "up":
         output = _run_compose_command(["up", "-d", app], _cwd, full_env)
@@ -176,9 +186,8 @@ def _compose_app_action_sync(name, action, app):
     else:
         output = _run_compose_command([action, app], _cwd, full_env)
 
-    print(f"""Project {compose['name']} App {name} {action} successful.""")
-    print(f"""Output: """)
-    print(output)
+    logger.info("Project %s App %s %s successful.", compose['name'], name, action)
+    logger.debug("Compose output: %s", output)
     return _get_compose_projects_sync()
 
 async def compose_app_action(name, action, app):
@@ -189,7 +198,7 @@ Checks for compose projects in the COMPOSE_DIR and
 returns most of the info inside them.
 """
 def _get_compose_projects_sync():
-    files = find_yml_files(settings.COMPOSE_DIR)
+    files = find_yml_files(get_settings().COMPOSE_DIR)
 
     projects = []
     for project, file in files.items():
@@ -198,12 +207,15 @@ def _get_compose_projects_sync():
         services = {}
         try:
             with open(file, 'r') as compose:
-                loaded_compose = yaml.load(compose, Loader=yaml.SafeLoader)
+                loaded_compose = load_yaml(compose.read(_COMPOSE_MAX_BYTES + 1))
         except Exception:
-            print("ERROR: " + file + " is invalid or empty!")
+            logger.warning("%s is invalid or empty!", file)
             continue
 
-        if loaded_compose:
+        if isinstance(loaded_compose, dict) and isinstance(loaded_compose.get("services"), dict):
+            if any(loaded_compose.get(key) is not None and not isinstance(loaded_compose[key], dict) for key in ("volumes", "networks")):
+                logger.warning("%s contains invalid volumes or networks", file)
+                continue
             if loaded_compose.get("volumes"):
                 for volume in loaded_compose.get("volumes"):
                     volumes.append(volume)
@@ -212,7 +224,9 @@ def _get_compose_projects_sync():
                     networks.append(network)
             if loaded_compose.get("services"):
                 for service in loaded_compose.get("services"):
-                    services[service] = loaded_compose["services"][service]
+                    data = loaded_compose["services"][service]
+                    if isinstance(data, dict):
+                        services[service] = {key: value for key, value in data.items() if key in {"image", "container_name", "ports", "restart", "depends_on"}}
             _project = {
                 "name": project,
                 "path": file,
@@ -223,7 +237,7 @@ def _get_compose_projects_sync():
             }
             projects.append(_project)
         else:
-            print("ERROR: " + file + " is invalid or empty!")
+            logger.warning("%s is invalid or empty!", file)
     return projects
 
 async def get_compose_projects():
@@ -236,7 +250,7 @@ project.
 def _get_compose_sync(name):
     validate_compose_project_name(name)
     try:
-        files = find_yml_files(settings.COMPOSE_DIR + name)
+        files = find_yml_files(str(pathlib.Path(get_settings().COMPOSE_DIR) / name))
     except Exception as exc:
         # Re-raise exceptions properly
         if isinstance(exc, HTTPException):
@@ -250,8 +264,13 @@ def _get_compose_sync(name):
             services = {}
             with open(file, 'r') as compose:
                 try:
-                    loaded_compose = yaml.load(compose, Loader=yaml.SafeLoader)
-                except yaml.scanner.ScannerError as exc:
+                    content = compose.read(_COMPOSE_MAX_BYTES + 1)
+                    if len(content.encode()) > _COMPOSE_MAX_BYTES:
+                        raise HTTPException(413, "Compose file is too large")
+                    loaded_compose = load_yaml(content)
+                    if not isinstance(loaded_compose, dict) or not isinstance(loaded_compose.get("services"), dict):
+                        raise HTTPException(422, "Compose must contain a services mapping")
+                except yaml.YAMLError as exc:
                     raise HTTPException(422, f"{exc.problem_mark.line}:{exc.problem_mark.column} - {exc.problem}")
 
             if loaded_compose:
@@ -309,28 +328,42 @@ def _write_compose_sync(compose):
     if "\x00" in content:
         raise HTTPException(status_code=422, detail="Compose file contains NUL bytes.")
 
+    from api.utils.container_security import secure_compose_content
+    content = secure_compose_content(content)
+    if len(content.encode("utf-8")) > _COMPOSE_MAX_BYTES:
+        raise HTTPException(413, "Normalized Compose file is too large")
+    load_yaml(content)  # Check the final document before changing any file.
+
     # Canonicalise the target directory and guarantee it stays inside the
     # configured compose directory. String concatenation was vulnerable to
     # traversal if COMPOSE_DIR contained a trailing slash mismatch or if a
     # symlink redirected the target; resolve() + is_relative_to() closes
     # both paths.
-    base_dir = pathlib.Path(settings.COMPOSE_DIR).resolve()
+    base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
     target_dir = (base_dir / compose.name).resolve()
     if not target_dir.is_relative_to(base_dir):
         raise HTTPException(status_code=400, detail="Invalid compose project name.")
     target_dir.mkdir(parents=True, exist_ok=True)
+    if any((target_dir / name).is_symlink() for name in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")):
+        raise HTTPException(400, "Compose file cannot be a symlink")
 
-    target_file = target_dir / "docker-compose.yml"
+    selected = find_yml_files(str(target_dir)).get(compose.name)
+    target_file = pathlib.Path(selected) if selected else target_dir / "docker-compose.yml"
+    if target_file.is_symlink():
+        raise HTTPException(400, "Compose file cannot be a symlink")
+    temporary = None
     try:
-        target_file.write_text(content, encoding="utf-8")
-    except TypeError as exc:
-        if "write() argument must be str" in str(exc):
-            raise HTTPException(
-                status_code=422, detail="Compose file cannot be empty."
-            )
-        raise HTTPException(status_code=500, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target_dir, delete=False) as stream:
+            temporary = pathlib.Path(stream.name)
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target_file)
+    except OSError:
+        raise HTTPException(500, "Could not save Compose file") from None
+    finally:
+        if temporary and temporary.exists():
+            temporary.unlink()
 
     return _get_compose_sync(name=compose.name)
 
@@ -342,17 +375,23 @@ Deletes a compose project
 """
 def _delete_compose_sync(project_name):
     validate_compose_project_name(project_name)
-    if not os.path.exists("/" + settings.COMPOSE_DIR + project_name):
+
+    base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
+    target_dir = (base_dir / project_name).resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise HTTPException(status_code=400, detail="Invalid compose project name.")
+
+    compose_file = find_yml_files(str(target_dir)).get(project_name)
+    if not target_dir.exists():
         raise HTTPException(404, "Project directory not found.")
-    elif not os.path.exists(
-        "/" + settings.COMPOSE_DIR + project_name + "/docker-compose.yml"
-    ):
+    if not compose_file:
         raise HTTPException(404, "Project docker-compose.yml not found.")
-    else:
-        pass
 
     try:
-        shutil.rmtree("/" + settings.COMPOSE_DIR + project_name)
+        _run_compose_command(["down"], str(target_dir), _compose_environment())
+        shutil.rmtree(target_dir)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, str(exc))
     return _get_compose_projects_sync()
@@ -360,17 +399,26 @@ def _delete_compose_sync(project_name):
 async def delete_compose(project_name):
     return await run_in_thread(_delete_compose_sync, project_name)
 
+def _compose_environment():
+    # Compose interpolation must not inherit signing keys or server secrets.
+    env = {key: os.environ[key] for key in ("PATH", "HOME", "USERPROFILE", "SYSTEMROOT", "TEMP", "TMP", "LANG", "DOCKER_HOST", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH") if key in os.environ}
+    if get_settings().DOCKER_HOST:
+        env["DOCKER_HOST"] = get_settings().DOCKER_HOST
+    return env
+
 
 def _generate_support_bundle_sync(project_name):
     validate_compose_project_name(project_name)
-    files = find_yml_files(settings.COMPOSE_DIR + project_name)
+    files = find_yml_files(str(pathlib.Path(get_settings().COMPOSE_DIR) / project_name))
     if project_name in files:
         from api.utils.docker_client import sync_docker_client
         stream = io.BytesIO()
         with sync_docker_client() as dclient, zipfile.ZipFile(stream, "w") as zf, open(files[project_name], "r") as fp:
             # yaml.load returns None for an empty or whitespace-only file;
             # coerce to {} so the .get below doesn't blow up the bundle.
-            compose = yaml.load(fp, Loader=yaml.SafeLoader) or {}
+            compose = load_yaml(fp.read(_COMPOSE_MAX_BYTES + 1))
+            if not isinstance(compose, dict) or not isinstance(compose.get("services"), dict):
+                raise HTTPException(422, "Compose must contain a services mapping")
 
             services_list = compose.get("services", {})
             for _service in services_list:
@@ -380,20 +428,18 @@ def _generate_support_bundle_sync(project_name):
                     if container_name:
                         service = dclient.containers.get(container_name)
                     else:
-                        # Fallback logic for default naming
-                        if len(services_list.keys()) < 2:
-                            service = dclient.containers.get(_service)
-                        else:
-                            service = dclient.containers.get(
-                                project_name.lower() + "_" + _service + "_1"
-                            )
+                        matches = dclient.containers.list(all=True, filters={"label": [
+                            f"com.docker.compose.project={project_name.lower()}",
+                            f"com.docker.compose.service={_service}",
+                        ]})
+                        service = matches[0] if matches else None
                 except docker.errors.NotFound:
                     # Log missing container but continue?
                     # The original code raised HTTPException immediately.
                     pass
 
                 if service:
-                    service_log = service.logs()
+                    service_log = service.logs(tail=10000)
                     zf.writestr(f"{_service}.log", service_log)
 
             fp.seek(0)

@@ -46,16 +46,15 @@ const actions = {
         .get(url)
         .then(response => {
           const projects = response.data;
-          commit("setLoading", false);
           commit("setProjects", projects);
           resolve(projects);
-        })
-        .finally(() => {
-          commit("setLoading", false);
         })
         .catch(error => {
           commit("snackbar/setErr", error, { root: true });
           reject(error);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },
@@ -83,41 +82,42 @@ const actions = {
         .get(url)
         .then(response => {
           const project = response.data;
-          commit("setLoading", false);
           commit("setProject", project);
           resolve(project);
-        })
-        .finally(() => {
-          commit("setLoading", false);
         })
         .catch(error => {
           commit("snackbar/setErr", error, { root: true });
           reject(error);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },
   writeProject({ commit }, payload) {
     commit("setLoading", true);
     const url = "/compose/";
-    axios
+    return axios
       .post(url, payload)
       .then(response => {
         const projects = response.data;
         commit("setProjects", projects);
+        router.push({ name: "View Projects" });
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);
-        router.push({ name: "Projects" });
       });
   },
   ProjectAction({ commit, dispatch }, { Name, Action }) {
     commit("setLoading", true);
     commit("setAction", Action);
     const url = `/compose/${Name}/actions/${Action}`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const projects = response.data;
@@ -126,9 +126,11 @@ const actions = {
         commit("snackbar/setMessage", `${Name} has been ${Action}ed.`, {
           root: true
         });
+        return true;
       })
       .catch(err => {
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);

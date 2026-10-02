@@ -60,7 +60,7 @@
                 <v-text-field
                   v-model="token"
                   label="Verification Code"
-                  outlined
+                  variant="outlined"
                   class="mt-4"
                   prepend-icon="mdi-two-factor-authentication"
                   maxlength="6"
@@ -86,7 +86,7 @@
 
           <!-- Global Error Alert -->
           <v-card-text v-if="error">
-            <v-alert type="error" dense dismissible @click:close="error = null">
+            <v-alert type="error" density="compact" dismissible @click:close="error = null">
               {{ error }}
             </v-alert>
           </v-card-text>
@@ -139,8 +139,12 @@ export default {
         this.error = "Passwords do not match";
         return;
       }
-      if (!this.username) {
+      if (!this.username.trim()) {
           this.error = "Username is required";
+          return;
+      }
+      if (!this.password) {
+          this.error = "Password is required";
           return;
       }
       this.error = null;
@@ -176,15 +180,15 @@ export default {
     },
 
     async verify() {
-      if (!this.token) {
-        this.error = "Please enter the verification code.";
+      if (!/^\d{6}$/.test(this.token.trim())) {
+        this.error = "Please enter a six-digit verification code.";
         return;
       }
       this.error = null;
       this.loading = true;
 
       try {
-        await this.SETUP_2FA_ENABLE(this.token);
+        await this.SETUP_2FA_ENABLE(this.token.trim());
         // Success: Store updates setupStep to 3, watcher triggers finalize
       } catch (err) {
         if (err.response && err.response.data && err.response.data.detail) {

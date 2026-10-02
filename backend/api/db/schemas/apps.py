@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel, ConfigDict
 
 
@@ -64,6 +64,9 @@ class DeployForm(BaseModel):
     edit: Optional[bool] = None
     id: Optional[str] = None
     template_id: Optional[int] = None
+    security_profile: Literal["restricted", "image-default"] = "restricted"
+    container_user: str = "1000:1000"
+    confirm_image_default: bool = False
 
 
 # LOGS #

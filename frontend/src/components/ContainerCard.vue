@@ -4,7 +4,7 @@
     <div class="card-header d-flex justify-space-between align-start px-4 pt-4 pb-2">
       <div class="d-flex align-center flex-grow-1" style="min-width: 0;">
         <!-- Status Indicator -->
-        <div class="status-indicator mr-3" :class="statusClass">
+        <div class="status-indicator mr-3" :class="statusClass" role="status" :aria-label="'Container status: ' + container.State.Status">
           <div class="pulse-ring" v-if="statusClass === 'running'"></div>
         </div>
 

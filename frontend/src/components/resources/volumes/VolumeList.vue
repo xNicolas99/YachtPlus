@@ -1,19 +1,19 @@
 <template lang="html">
-  <div class="volumes-list component" style="max-width: 90%">
+  <div class="volumes-list component" style="width: 100%">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
-      <v-card-title class="primary font-weight-bold">
+      <v-card-title class="primary font-weight-bold d-flex flex-wrap ga-2">
         Volumes
         <v-dialog v-model="createDialog" max-width="290">
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn class="ml-2" color="secondary" v-bind="attrs" v-on="on" aria-label="Create volume" title="Create volume">
+          <template v-slot:activator="{ props }">
+            <v-btn class="ml-2" color="secondary" v-bind="props" aria-label="Create volume" title="Create volume">
               <v-icon>mdi-plus</v-icon>
             </v-btn>
             <!-- Prune sits next to the create button so it mirrors the
@@ -51,16 +51,15 @@
             </form>
             <v-card-actions>
               <v-spacer />
-              <v-btn text @click="createDialog = false">
+              <v-btn variant="text" @click="createDialog = false">
                 Cancel
               </v-btn>
               <v-btn
-                text
+                variant="text"
                 color="primary"
-                @click="
-                  submit();
-                  createDialog = false;
-                "
+                :loading="creating"
+                :disabled="creating || !form.name.trim()"
+                @click="submit"
               >
                 Create
               </v-btn>
@@ -82,14 +81,14 @@
         class="mx-auto volume-datatable foreground"
         :headers="headers"
         :items="volumes"
+        :loading="isLoading"
+        loading-text="Loading volumes..."
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
-        <template slot="no-data">
+        <template #no-data>
           <div>
             No Volumes available.
           </div>
@@ -102,31 +101,32 @@
             <v-spacer />
 
             <v-chip
-              outlined
-              small
+              variant="outlined"
+              size="small"
               color="orange lighten-1"
               class="align-center mt-1"
               label
               v-if="item.inUse == false"
               >Unused</v-chip
             >
-            <v-menu close-on-click close-on-content-click offset-y>
-              <template v-slot:activator="{ on, attrs }">
+            <v-menu close-on-click close-on-content-click>
+              <template v-slot:activator="{ props }">
                 <v-btn
                   icon
                   class="align-streatch"
                   size="small"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
+                  @click.stop
+                  :aria-label="`Actions for ${item.Name}`"
                 >
                   <v-icon>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item @click="volumeDetails(item.Name)">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-eye</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>View</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -136,9 +136,9 @@
                     deleteDialog = true;
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Delete</v-list-item-title>
                 </v-list-item>
               </v-list>
@@ -186,9 +186,9 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="pruneDialog = false">Cancel</v-btn>
+          <v-btn variant="text" @click="pruneDialog = false">Cancel</v-btn>
           <v-btn
-            text
+            variant="text"
             color="warning"
             :loading="pruning"
             :disabled="pruning"
@@ -211,16 +211,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
-            @click="
-              deleteVolume(selectedVolume.Name);
-              deleteDialog = false;
-            "
+            :loading="deleting"
+            :disabled="deleting"
+            @click="confirmDelete"
           >
             Delete
           </v-btn>
@@ -238,70 +237,83 @@ export default {
     return {
       selectedVolume: null,
       deleteDialog: false,
+      deleting: false,
       pruneDialog: false,
       pruning: false,
       form: {
         name: ""
       },
       createDialog: false,
+      creating: false,
       search: "",
       headers: [
         {
-          text: "Name",
-          value: "Name",
+          title: "Name",
+          key: "Name",
           sortable: true
         },
         {
-          text: "Project",
-          value: "Project",
+          title: "Project",
+          key: "Project",
           sortable: true
         },
         {
-          text: "Driver",
-          value: "Driver",
+          title: "Driver",
+          key: "Driver",
           sortable: true
         },
         {
-          text: "Created",
-          value: "CreatedAt",
+          title: "Created",
+          key: "CreatedAt",
           sortable: true
         }
       ]
     };
   },
   methods: {
+    async confirmDelete() {
+      if (this.deleting) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteVolume(this.selectedVolume.Name)) this.deleteDialog = false;
+      } finally {
+        this.deleting = false;
+      }
+    },
     ...mapActions({
       readVolumes: "volumes/readVolumes",
       deleteVolume: "volumes/deleteVolume",
       writeVolume: "volumes/writeVolume"
     }),
-    handleRowClick(item) {
+    handleRowClick(event, { item }) {
       this.$router.push({ path: `/resources/volumes/${item.Name}` });
     },
     volumeDetails(volumename) {
       this.$router.push({ path: `/resources/volumes/${volumename}` });
     },
-    submit() {
-      const data = this.form;
-      this.writeVolume(data);
+    async submit() {
+      if (this.creating || !this.form.name.trim()) return;
+      this.creating = true;
+      try {
+        if (await this.writeVolume({ name: this.form.name.trim() })) {
+          this.createDialog = false;
+          this.form.name = '';
+        }
+      } finally {
+        this.creating = false;
+      }
     },
     async pruneVolumes() {
+      if (this.pruning) return;
       this.pruning = true;
       try {
-        // Same route the Images and Networks pages hit. The backend
-        // forwards to docker's /volumes/prune. Returns {Volumes Pruned: […]}
-        // (capitalised key from the daemon).
-        const { data } = await axios.get("/settings/prune/volumes");
-        const action = data ? Object.keys(data)[0] : null;
-        const deleted = action && Array.isArray(data[action]) ? data[action].length : 0;
+        const { data } = await axios.post("/settings/prune/volumes");
+        const deleted = data?.VolumesDeleted?.length || 0;
         this.$store.commit("snackbar/setMessage", `${deleted} volumes pruned.`);
         this.pruneDialog = false;
         await this.readVolumes();
       } catch (err) {
-        // 403 (no superuser), 503 (docker unreachable), 400 (validation)
-        // — surface the backend detail to the user without leaking traces.
-        const detail = err?.response?.data?.detail || "Prune failed";
-        this.$store.commit("snackbar/setMessage", detail);
+        this.$store.commit("snackbar/setErr", err);
       } finally {
         this.pruning = false;
       }
@@ -324,6 +336,6 @@ export default {
   max-width: 30vw;
 }
 .volume-datatable {
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 </style>

@@ -1,6 +1,5 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import PlainTextResponse
@@ -29,6 +28,7 @@ from slowapi import _rate_limit_exceeded_handler
 import logging
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
 
 @asynccontextmanager
@@ -88,7 +88,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)
 app.state.limiter = limiter
-app.state.limiter.default_limits = ["100/minute"]
+
+from slowapi.middleware import SlowAPIMiddleware
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # --- GLOBAL ERROR HANDLING ---
@@ -103,27 +106,44 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 from api.routers.setup.setup import is_setup_completed_async
 
 
+# In-memory cache used by check_setup_status. TTL is short (5s) so that the
+# setup-finalize handshake updates promptly, but most requests avoid a fresh DB
+# round-trip. The cache is keyed by a short time bucket, so concurrent workers
+# still converge within one bucket.
+import time
+_setup_status_cache: dict[str, tuple[bool, float]] = {}
+_SETUP_STATUS_TTL_SECONDS = 5
+
+
 @app.middleware("http")
 async def check_setup_status(request: Request, call_next):
     path = request.url.path
-    # Whitelist static assets and auth endpoints
-    if (path.startswith("/api/auth") or path.startswith("/assets") or
-        path.startswith("/img") or "/favicon.ico" in path or
-        request.method == "OPTIONS"):
+
+    # Only /api paths need setup enforcement. Static assets, the SPA, root,
+    # and CORS preflight must be cheap and never blocked by DB state.
+    if not path.startswith("/api") or request.method == "OPTIONS":
         return await call_next(request)
 
-    # Check setup status using the router's logic (DB + File). We use a fresh
-    # async session for the check to ensure we get the latest DB state. The
-    # async DB access never blocks the event loop.
-    from api.db.database import SessionLocal
-    async with SessionLocal() as db:
-        setup_complete = await is_setup_completed_async(db)
+    # Auth endpoints and setup endpoints are always allowed.
+    if path.startswith("/api/auth") or path.startswith("/api/setup"):
+        return await call_next(request)
+
+    # Cached short-lived setup check to avoid a fresh DB session for every
+    # static-asset poll or dashboard refresh.
+    now = time.monotonic()
+    bucket = str(int(now) // _SETUP_STATUS_TTL_SECONDS)
+    cached = _setup_status_cache.get(bucket)
+    if cached is None or now - cached[1] > _SETUP_STATUS_TTL_SECONDS:
+        from api.db.database import SessionLocal
+        async with SessionLocal() as db:
+            setup_complete = await is_setup_completed_async(db)
+        _setup_status_cache.clear()
+        _setup_status_cache[bucket] = (setup_complete, now)
+    else:
+        setup_complete = cached[0]
 
     if not setup_complete:
-        # Allow access to setup endpoints
-        if not path.startswith("/api/setup"):
-             if path.startswith("/api"):
-                 return JSONResponse(status_code=428, content={"detail": "Setup required"})
+        return JSONResponse(status_code=428, content={"detail": "Setup required"})
 
     return await call_next(request)
 
@@ -157,10 +177,11 @@ app.add_middleware(
 # whitelist for the typical YachtPlus deployment (LAN / private network):
 #
 #   1. YACHT_ALLOWED_HOSTS="*"  -> disable host pinning entirely.
-#   2. ALLOW_PRIVATE_NETWORK_HOSTS=true (default) -> accept any RFC 1918 /
+#   2. ALLOW_PRIVATE_NETWORK_HOSTS=true -> accept any RFC 1918 /
 #      link-local IP literal in addition to the configured list. This is
 #      what unblocks the "I hit http://192.168.1.42:8000/" case without
-#      forcing every user to edit ALLOWED_HOSTS.
+#      forcing every user to edit ALLOWED_HOSTS. The default is false, so
+#      LAN access requires explicitly setting YACHT_ALLOW_PRIVATE_NETWORK_HOSTS=true.
 _host_settings = get_settings()
 _allowed_hosts_raw = list(_host_settings.ALLOWED_HOSTS)
 
@@ -169,12 +190,26 @@ def _host_allowed(host_header: str) -> bool:
     if not host_header:
         # An empty Host header is a protocol-level oddity; reject it.
         return False
-    # Strip the port and any IPv6 brackets.
-    hostname = host_header.split(":")[0].strip("[]").lower()
+    # Bracketed IPv6 literals contain colons before the optional port.
+    if host_header.startswith("["):
+        closing_bracket = host_header.find("]")
+        if closing_bracket < 0:
+            return False
+        hostname = host_header[1:closing_bracket].lower()
+        remainder = host_header[closing_bracket + 1:]
+        if remainder and (not remainder.startswith(":") or not remainder[1:].isdigit()):
+            return False
+    else:
+        hostname, separator, port = host_header.partition(":")
+        hostname = hostname.lower()
+        if separator and not port.isdigit():
+            return False
+    if not hostname:
+        return False
     if "*" in _allowed_hosts_raw:
         return True
     for allowed in _allowed_hosts_raw:
-        allowed = allowed.strip().lower()
+        allowed = allowed.strip().strip("[]").lower()
         if not allowed:
             continue
         if allowed == hostname:
@@ -210,8 +245,8 @@ async def add_security_headers(request: Request, call_next):
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline'; "
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-        "font-src 'self' https://fonts.gstatic.com data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' data:; "
         "img-src 'self' data: https:; "
         "connect-src 'self'; "
         "frame-ancestors 'none'; "
@@ -240,5 +275,15 @@ app.include_router(app_settings.router, prefix="/api/settings", tags=["settings"
 app.include_router(smtp.router, prefix="/api/settings/email", tags=["smtp"]) # Standard convention
 app.include_router(setup.router, prefix="/api/setup", tags=["setup"])
 
-if os.path.exists("../frontend/dist"):
-    app.mount("/", StaticFiles(directory="../frontend/dist", html=True), name="static")
+# The SPA is served by nginx from /app in the container. FastAPI intentionally
+# does not mount a static directory here, so API requests that fall through
+# nginx return a 404 instead of accidentally serving stale build artefacts.
+
+# Added last: Starlette executes this before every other middleware. Pure
+# ASGI handling also guards WebSockets and the nginx static auth subrequest.
+from api.utils.access_policy import AccessPolicyMiddleware
+from api.utils.csrf import CSRFProtectionMiddleware
+from api.utils.audit_middleware import MutationAuditMiddleware
+app.add_middleware(MutationAuditMiddleware)
+app.add_middleware(CSRFProtectionMiddleware)
+app.add_middleware(AccessPolicyMiddleware)

@@ -1,104 +1,107 @@
-# Härtungs-Beispiel: YachtPlus hinter einem Docker-Socket-Proxy
-#
-# Least-Privilege-Prinzip: YachtPlus bekommt KEINEN direkten Zugriff auf
-# /var/run/docker.sock. Stattdessen spricht es einen schreibgeschützten
-# Socket-Proxy an, der nur die API-Endpunkte freigibt, die YachtPlus
-# tatsächlich braucht. Der Proxy selbst mountet den Socket nur lesend (:ro).
-#
-# Empfohlenes Image: tecspirit/docker-socket-proxy (aktiv gepflegter Fork
-# von tecnativa/docker-socket-proxy). Die Umgebungsvariablen steuern, welche
-# Docker-API-Routen erlaubt sind — alles andere wird mit 403 abgelehnt.
-#
-# WICHTIG: Jede hier gesetzte Variable ist ein bewusstes Zugeständnis.
-#   - CONTAINERS/IMAGES/NETWORKS/VOLUMES=1  -> Lese-Zugriff (GET) auf diese
-#     Ressourcen. Nötig für Dashboard, App-Liste, Ressourcen-Ansicht.
-#   - POST=1 -> erlaubt POST (Container starten/stoppen/erstellen). Das ist
-#     für die Steuerung nötig, aber auch der mächtigste Schalter. Nur setzen,
-#     wenn du die App-Steuerung wirklich nutzt.
-#   - Alle anderen Routen (DELETE, exec, attach, build, events, …) bleiben
-#     standardmäßig deaktiviert.
-#
-# Für reine Lese-/Monitoring-Nutzung: POST weglassen und nur die Lese-Flags
-# setzen. Dann kann YachtPlus nichts am Docker-Daemon verändern.
-
-version: "3"
+# Published app deployment; the fail2ban sidecar builds from this checkout.
 services:
   dockerproxy:
-    image: tecspirit/docker-socket-proxy:latest
-    container_name: yachtplus-socket-proxy
-    restart: unless-stopped
+    labels:
+      local.yachtplus.infrastructure: docker-proxy
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      IMAGES: 1
+      NETWORKS: 1
+      VOLUMES: 1
+      INFO: 1
+      BUILD: 1
+      EXEC: 1
+      POST: 1
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    environment:
-      # Lese-Zugriff (GET) auf die Ressourcen, die YachtPlus anzeigt
-      - CONTAINERS=1
-      - IMAGES=1
-      - NETWORKS=1
-      - VOLUMES=1
-      # Steuerung (POST): Container starten/stoppen/erstellen.
-      # Nur setzen, wenn du die App-Steuerung nutzt. Weglassen = read-only.
-      - POST=1
-      # Explizit deaktivierte, gefährliche Routen (Standard ist bereits "aus",
-      # hier zur Verdeutlichung):
-      - DELETE=0
-      - EXEC=0
-      - ATTACH=0
-      - BUILD=0
-      - EVENTS=0
-      - INFO=0
-      - VERSION=0
-      - PING=0
-      - AUTH=0
-      - COMMIT=0
-      - CONTAINERS_CREATE=0
-      - CONTAINERS_START=0
-      - CONTAINERS_STOP=0
-      - CONTAINERS_KILL=0
-      - CONTAINERS_RESTART=0
-      - CONTAINERS_PAUSE=0
-      - CONTAINERS_UNPAUSE=0
-      - CONTAINERS_ATTACH=0
-      - CONTAINERS_EXEC=0
-      - CONTAINERS_LOGS=0
-      - CONTAINERS_TOP=0
-      - CONTAINERS_STATS=0
-      - CONTAINERS_UPDATE=0
-      - CONTAINERS_RENAME=0
-      - CONTAINERS_PRUNE=0
-      - IMAGES_PULL=0
-      - IMAGES_PUSH=0
-      - IMAGES_BUILD=0
-      - IMAGES_TAG=0
-      - IMAGES_PRUNE=0
-      - NETWORKS_CREATE=0
-      - NETWORKS_DELETE=0
-      - NETWORKS_CONNECT=0
-      - NETWORKS_DISCONNECT=0
-      - NETWORKS_PRUNE=0
-      - VOLUMES_CREATE=0
-      - VOLUMES_DELETE=0
-      - VOLUMES_PRUNE=0
     networks:
-      - yachtplus-net
+      - docker_api
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev,size=16m
+      - /run:noexec,nosuid,nodev,size=1m,mode=0755
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    pids_limit: 100
+
+  fail2ban:
+    labels:
+      local.yachtplus.infrastructure: fail2ban
+    build: ./fail2ban
+    user: "1001:1000"
+    network_mode: none
+    volumes:
+      - yacht_security_logs:/config/security:ro
+      - yacht_security_state:/run/yachtplus-security
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1001,gid=1000,mode=0700,noexec,nosuid,nodev,size=16m
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    pids_limit: 50
 
   yachtplus:
-    image: ghcr.io/yachtplus/yachtplus:devel
-    container_name: yachtplus
-    restart: unless-stopped
-    depends_on:
-      - dockerproxy
-    environment:
-      - DOCKER_GID=${DOCKER_GID:-}
-      - DOCKER_HOST=tcp://dockerproxy:2375 # Proxy statt direktem Socket
+    labels:
+      local.yachtplus.infrastructure: application
+    image: ghcr.io/xnicolas99/yachtplus:latest
+    user: "1000:1000"
     ports:
       - "8000:8080"
-    volumes:
-      # Socket ist hier bewusst NICHT gemountet
-      # - /var/run/docker.sock:/var/run/docker.sock
-      - ./config:/config
+    environment:
+      DOCKER_HOST: tcp://dockerproxy:2375
+      YACHT_DOCKER_PROXY_NETWORK: ${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api
+      YACHT_ALLOW_PRIVATE_NETWORK_HOSTS: "true"
+      YACHT_ALLOWED_HOSTS: ${YACHT_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+      YACHT_HTTP_TRUSTED_PROXIES: ${YACHT_HTTP_TRUSTED_PROXIES:-}
+      YACHT_TRUSTED_PROXIES: "127.0.0.1,::1"
+      YACHT_FAIL2BAN_REQUIRED: "true"
+      YACHT_FAIL2BAN_STATE_DIR: /run/yachtplus-security
+      YACHT_SECURITY_LOG: /config/security/auth.log
+      FORWARDED_ALLOW_IPS: ""
+    depends_on:
+      dockerproxy:
+        condition: service_started
+      fail2ban:
+        condition: service_healthy
     networks:
-      - yachtplus-net
+      - docker_api
+      - app_egress
+    restart: unless-stopped
+    volumes:
+      - yacht_config:/config
+      - yacht_compose:/compose
+      - yacht_security_logs:/config/security
+      - yacht_security_state:/run/yachtplus-security:ro
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1000,gid=1000,mode=1777,nosuid,nodev,size=128m
+      - /var/run/nginx:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=8m
+      - /var/www:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=64m
+      - /home/appuser:uid=1000,gid=1000,mode=0700,nosuid,nodev,size=8m
+    cap_drop:
+      - ALL
+    mem_limit: 1g
+    pids_limit: 200
+
+volumes:
+  yacht_config:
+  yacht_compose:
+  yacht_security_logs:
+  yacht_security_state:
 
 networks:
-  yachtplus-net:
-    driver: bridge
+  docker_api:
+    name: ${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api
+    internal: true
+  app_egress:

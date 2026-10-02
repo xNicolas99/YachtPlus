@@ -37,25 +37,25 @@
     <v-divider></v-divider>
 
     <v-card-actions>
-      <v-row dense no-gutters class="caption grey--text">
+      <v-row density="compact" no-gutters class="caption grey--text">
         <v-col cols="4" class="d-flex align-center">
-          <v-icon x-small class="mr-1">mdi-download</v-icon>
+          <v-icon size="x-small" class="mr-1">mdi-download</v-icon>
           {{ formatNumber(image.pull_count) }}
         </v-col>
         <v-col cols="4" class="d-flex align-center">
-          <v-icon x-small class="mr-1">mdi-star</v-icon>
+          <v-icon size="x-small" class="mr-1">mdi-star</v-icon>
           {{ formatNumber(image.star_count) }}
         </v-col>
         <v-col cols="4" class="d-flex align-center" v-if="image.last_updated">
-          <v-icon x-small class="mr-1">mdi-calendar-clock</v-icon>
+          <v-icon size="x-small" class="mr-1">mdi-calendar-clock</v-icon>
           {{ formatDate(image.last_updated) }}
         </v-col>
       </v-row>
       <v-spacer></v-spacer>
-      <v-btn text color="primary" small @click.stop="$emit('deploy', image)"
+      <v-btn variant="text" color="primary" small @click.stop="$emit('deploy', image)"
         >Deploy</v-btn
       >
-      <v-btn text small @click.stop="$emit('details', image)">Details</v-btn>
+      <v-btn variant="text" small @click.stop="$emit('details', image)">Details</v-btn>
     </v-card-actions>
   </v-card>
 </template>

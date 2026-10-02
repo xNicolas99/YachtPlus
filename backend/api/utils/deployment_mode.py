@@ -2,14 +2,12 @@
 
 YachtPlus can run in two conceptually different modes:
 
-  - LOCAL (default): public IP login is blocked, meant for LAN/homelab.
-  - PUBLIC: public IP login is allowed, meant for VPS / reverse-proxy.
+  - LOCAL (default): public access is blocked, meant for LAN/homelab.
+  - PUBLIC: public access is explicitly enabled, meant for VPS / reverse-proxy.
 
-The mode is derived from the same env vars the rest of the app already
-consumes; no new configuration surface is introduced. The checks here only
-log warnings/errors at startup and expose a read-only status endpoint.
-They never refuse to start — a misconfigured instance is still more useful
-than one that silently fails to boot.
+The status endpoint supplies the current persisted access policy. Startup
+diagnostics fall back to the historical login setting until policy is loaded.
+These advisory checks do not grant access; access_policy enforces the policy.
 """
 
 from enum import Enum
@@ -37,7 +35,7 @@ class ConfigCheck(BaseModel):
     config_keys: List[str] = []
 
 
-def detect_deployment_mode(settings) -> Tuple[DeploymentMode, List[ConfigCheck]]:
+def detect_deployment_mode(settings, *, allow_public=None) -> Tuple[DeploymentMode, List[ConfigCheck]]:
     """Derive a deployment mode and a list of config health checks.
 
     The function takes a Settings instance so it can reuse already-parsed
@@ -45,7 +43,7 @@ def detect_deployment_mode(settings) -> Tuple[DeploymentMode, List[ConfigCheck]]
     """
     checks: List[ConfigCheck] = []
 
-    block_public = settings.BLOCK_PUBLIC_IP_LOGIN
+    block_public = not allow_public if allow_public is not None else settings.BLOCK_PUBLIC_IP_LOGIN
     # SECURE_COOKIES is tri-state: None (auto), True, False.
     explicit_secure = settings.SECURE_COOKIES is True
     auto_secure = settings.SECURE_COOKIES is None

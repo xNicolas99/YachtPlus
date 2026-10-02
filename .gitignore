@@ -1,7 +1,12 @@
-.vscode
-versions
+# Keep top-level "versions" ignored (legacy artifact) but allow Alembic migrations
+/versions
+!/backend/alembic/versions
+/backend/alembic/versions/*.pyc
+
 sql_app.db
 venv
+.venv/
+.env
 *.db
 
 # Secrets — never commit these
@@ -26,7 +31,10 @@ config
 .pytest_cache/
 .Jules/
 
-# Test files — kept local, not tracked
-backend/tests/
-*.test.js
 *.spec.js
+# Isolated verification tooling (not application source).
+/report/tools/
+/report/audit-*.txt
+/audit-*.txt
+/report/bootstrap_npm.py
+/report/remediation_tools.py

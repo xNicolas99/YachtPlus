@@ -18,7 +18,7 @@ class SecretKey(Base):
 class TokenBlacklist(Base):
     __tablename__ = "jwt_token_blacklist"
     jti = Column(String, primary_key=True, index=True)
-    expires = Column(DateTime, nullable=True)
+    expires = Column(DateTime(timezone=True), nullable=True)
     revoked = Column(Boolean, nullable=False)
 
 class SMTPSettings(Base):

@@ -1,5 +1,8 @@
 import ipaddress
 import logging
+import os
+import stat
+from pathlib import Path
 from fastapi import Request, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -7,12 +10,17 @@ from datetime import datetime, timezone, timedelta
 import smtplib
 from email.mime.text import MIMEText
 import asyncio
+import time
+from api.utils.smtp_delivery import deliver
 from api.db.models.settings import SMTPSettings
 from api.db.models.users import LoginAttempt, User
-from api.settings import Settings
+from api.settings import get_settings
+from api.utils.access_policy import canonical_ip, is_local_client, is_usable_client, read_access_policy, ProtectionUnavailable
+
+# using module-level _settings
+_settings = get_settings()
 
 logger = logging.getLogger(__name__)
-_settings = Settings()
 
 
 def is_private_ip(ip: str) -> bool:
@@ -50,24 +58,20 @@ def _send_security_alert_sync(settings_row, ip_address: str, reason: str, userna
     msg['To'] = recipient
 
     try:
-        if settings_row.use_tls:
-            server = smtplib.SMTP(settings_row.server, settings_row.port)
-            server.starttls()
-        else:
-            server = smtplib.SMTP(settings_row.server, settings_row.port)
-
-        if settings_row.username and settings_row.password:
-            server.login(settings_row.username, settings_row.password)
-
-        server.sendmail(settings_row.sender_email, recipient, msg.as_string())
-        server.quit()
+        deliver(settings_row, recipient, msg)
     except Exception as e:
         # Log the exception class but not its full text — smtplib errors can
         # embed the AUTH exchange, leaking credentials into container logs.
         logger.error("Failed to send security alert (%s)", type(e).__name__)
 
 
+_alert_tasks = set()
+_last_alert = 0.0
+
 async def send_security_alert(db: AsyncSession, ip_address: str, reason: str, username: str = None):
+    global _last_alert
+    if _alert_tasks or time.monotonic() - _last_alert < 30:
+        return
     result = await db.execute(select(SMTPSettings).limit(1))
     settings = result.scalars().first()
     if not settings:
@@ -75,7 +79,10 @@ async def send_security_alert(db: AsyncSession, ip_address: str, reason: str, us
         return
 
     # Run the blocking SMTP send off the event loop.
-    await asyncio.to_thread(_send_security_alert_sync, settings, ip_address, reason, username)
+    _last_alert = time.monotonic()
+    task = asyncio.create_task(asyncio.to_thread(_send_security_alert_sync, settings, ip_address, reason, username))
+    _alert_tasks.add(task)
+    task.add_done_callback(_alert_tasks.discard)
 
 
 def _is_trusted_proxy(client_ip: str) -> bool:
@@ -88,7 +95,10 @@ def _is_trusted_proxy(client_ip: str) -> bool:
     if not client_ip:
         return False
     try:
-        peer = ipaddress.ip_address(client_ip)
+        canonical = canonical_ip(client_ip)
+        if canonical is None:
+            return False
+        peer = ipaddress.ip_address(canonical)
     except ValueError:
         return False
 
@@ -121,32 +131,34 @@ def rate_limit_key(request: Request) -> str:
 
 
 def _resolve_client_ip(request: Request) -> str:
-    """Return the originating client IP.
+    """Resolve validated addresses through explicitly trusted proxy hops only.
 
-    Only honour proxy headers when the direct peer is on the configured
-    TRUSTED_PROXIES list. Otherwise use the direct peer — anyone can set
-    X-Real-IP, so trusting it without an allowlist defeats the purpose of
-    IP-based limits.
+    Unknown peers remain unknown, never localhost. X-Real-IP is a single
+    normalized value supplied by nginx after its trusted real-IP processing.
+    XFF stops at the first untrusted hop, even when that hop is a LAN address.
     """
-    client_ip = request.client.host
-    if not _is_trusted_proxy(client_ip):
-        return client_ip
-
+    direct_peer = canonical_ip(request.client.host) if request.client else None
+    if direct_peer is None:
+        return "unknown"
+    if not _is_trusted_proxy(direct_peer):
+        return direct_peer
     real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-
+    if real_ip is not None:
+        return canonical_ip(real_ip) or "unknown"
     forwarded_for = request.headers.get("X-Forwarded-For")
     if not forwarded_for:
-        return client_ip
-
-    # Walk X-Forwarded-For right-to-left, picking the first non-private hop.
-    # Falls back to the rightmost entry when every hop is private.
-    ips = [ip.strip() for ip in forwarded_for.split(",")]
-    for ip in reversed(ips):
-        if not is_private_ip(ip):
-            return ip
-    return ips[-1]
+        return direct_peer
+    if len(forwarded_for) > 8192:
+        return "unknown"
+    ips = [canonical_ip(value) for value in forwarded_for.split(",")]
+    if not ips or any(value is None for value in ips):
+        return "unknown"
+    current = direct_peer
+    for candidate in reversed(ips):
+        if not _is_trusted_proxy(current):
+            break
+        current = candidate
+    return current
 
 
 # Shared slowapi instance, created after key_func is defined so the
@@ -154,11 +166,16 @@ def _resolve_client_ip(request: Request) -> str:
 # api.utils.security instead of creating their own Limiter objects so
 # every endpoint uses the same in-memory state and key resolution.
 from slowapi import Limiter
-limiter = Limiter(key_func=rate_limit_key)
+limiter = Limiter(
+    key_func=rate_limit_key,
+    default_limits=["100/minute"],
+    headers_enabled=True,
+    storage_uri=_settings.RATE_LIMIT_STORAGE_URI,
+)
 
 
 async def _count_recent_failed_attempts(db: AsyncSession, client_ip: str, minutes: int = 15) -> int:
-    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     result = await db.execute(
         select(func.count())
         .select_from(LoginAttempt)
@@ -182,7 +199,7 @@ _USERNAME_LOCKOUT_THRESHOLD = 20
 async def _count_recent_failed_attempts_for_username(
     db: AsyncSession, username: str, minutes: int = _USERNAME_LOCKOUT_WINDOW_MIN,
 ) -> int:
-    time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+    time_threshold = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     result = await db.execute(
         select(func.count())
         .select_from(LoginAttempt)
@@ -196,12 +213,17 @@ async def _count_recent_failed_attempts_for_username(
 
 
 async def check_ip_restriction(request: Request, db: AsyncSession, username: str = None):
+    from api.db.crud.users import normalize_username
+    username = normalize_username(username) if username else None
     client_ip = _resolve_client_ip(request)
+    if not is_usable_client(client_ip):
+        raise HTTPException(status_code=403, detail="Invalid client address")
 
-    # Hard-blocking every public IP made hosted/VPS deployments impossible
-    # to log into; the block is now opt-out via YACHT_BLOCK_PUBLIC_IP_LOGIN.
-    # getattr fallback keeps older Settings stubs (tests, embedders) working.
-    if getattr(_settings, "BLOCK_PUBLIC_IP_LOGIN", True) and not is_private_ip(client_ip):
+    try:
+        allow_public = read_access_policy(_settings)["allow_public"]
+    except ProtectionUnavailable:
+        raise HTTPException(status_code=503, detail="Security protection unavailable") from None
+    if not allow_public and not is_local_client(client_ip):
         await send_security_alert(db, client_ip, "Non-Private IP Login Attempt Blocked", username)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -228,12 +250,43 @@ async def check_ip_restriction(request: Request, db: AsyncSession, username: str
         # "my IP got banned" through error inspection.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account temporarily locked due to too many failed login attempts.",
+            detail="IP blocked due to too many failed login attempts.",
         )
 
     return client_ip
 
 async def record_login_attempt(db: AsyncSession, ip_address: str, username: str, success: bool):
+    from api.db.crud.users import normalize_username
+    username = normalize_username(username)
     attempt = LoginAttempt(ip_address=ip_address, username=username, success=success)
     db.add(attempt)
     await db.commit()
+    from api.utils.audit import log_activity
+    await log_activity(db, username, "login.success" if success else "login.failure", ip_address)
+    if not success:
+        try:
+            await asyncio.to_thread(_append_auth_failure, ip_address)
+        except (OSError, ValueError):
+            logger.error("Could not record fail2ban authentication event")
+            if getattr(_settings, "FAIL2BAN_REQUIRED", False):
+                raise HTTPException(status_code=503, detail="Security protection unavailable") from None
+
+
+def _append_auth_failure(client_ip):
+    canonical = canonical_ip(client_ip)
+    if canonical is None:
+        raise ValueError("Cannot log an invalid client IP")
+    destination = Path(getattr(_settings, "SECURITY_LOG", "/config/security/auth.log"))
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
+    line = f"{datetime.now(timezone.utc):%Y-%m-%d %H:%M:%S} yachtplus-auth failure ip={canonical}\n".encode("ascii")
+    flags = os.O_WRONLY | os.O_APPEND | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    fd = os.open(destination, flags, 0o640)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise ValueError("Authentication log must be a regular file")
+        # One append operation prevents interleaved records across workers.
+        if os.write(fd, line) != len(line):
+            raise OSError("Incomplete security log write")
+        os.fsync(fd)
+    finally:
+        os.close(fd)

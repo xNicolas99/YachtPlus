@@ -8,8 +8,8 @@
         <v-tab>Docker Online</v-tab>
       </v-tabs>
 
-      <v-tabs-items v-model="activeTab">
-        <v-tab-item>
+      <v-window v-model="activeTab">
+        <v-window-item>
           <v-card flat color="foreground">
             <v-fade-transition>
               <v-progress-linear
@@ -62,13 +62,11 @@
               :headers="headers"
               :items="templates"
               :items-per-page="25"
-              :footer-props="{
-                'items-per-page-options': [15, 25, 50, -1]
-              }"
+              :items-per-page-options="[15, 25, 50, -1]"
               :search="search"
               @click:row="handleRowClick"
             >
-              <template slot="no-data">
+              <template #no-data>
                 <div>
                   No templates available. <a href="/#/templates/new">Add</a> one
                   to view information and launch apps from here.
@@ -77,17 +75,17 @@
               <template v-slot:item.title="{ item }">
                 <div class="namecell">
                   <span class="nametext">{{ item.title }}</span>
-                  <v-menu close-on-click close-on-content-click offset-y>
-                    <template v-slot:activator="{ on, attrs }">
-                      <v-btn icon size="small" v-bind="attrs" v-on="on" aria-label="Template Actions" title="Template Actions">
+                  <v-menu close-on-click close-on-content-click>
+                    <template v-slot:activator="{ props }">
+                      <v-btn icon size="small" v-bind="props" aria-label="Template Actions" title="Template Actions">
                         <v-icon>mdi-dots-horizontal</v-icon>
                       </v-btn>
                     </template>
-                    <v-list color="foreground" dense>
+                    <v-list color="foreground" density="compact">
                       <v-list-item @click="templateDetails(item.id)">
-                        <v-list-item-icon>
+                        <span>
                           <v-icon>mdi-eye</v-icon>
-                        </v-list-item-icon>
+                        </span>
                         <v-list-item-title>View</v-list-item-title>
                       </v-list-item>
                       <!-- Update = re-fetch from the remote URL. Only
@@ -97,9 +95,9 @@
                         v-if="!isLocalTemplate(item)"
                         @click="updateTemplate(item.id)"
                       >
-                        <v-list-item-icon>
+                        <span>
                           <v-icon>mdi-update</v-icon>
-                        </v-list-item-icon>
+                        </span>
                         <v-list-item-title>Refresh from URL</v-list-item-title>
                       </v-list-item>
                       <!-- Edit = open the manual JSON editor with the
@@ -108,9 +106,9 @@
                            the items list (URL templates effectively
                            snapshot themselves until next Refresh). -->
                       <v-list-item @click="openEditDialog(item)">
-                        <v-list-item-icon>
+                        <span>
                           <v-icon>mdi-pencil</v-icon>
-                        </v-list-item-icon>
+                        </span>
                         <v-list-item-title>Edit JSON</v-list-item-title>
                       </v-list-item>
                       <v-divider />
@@ -120,9 +118,9 @@
                           deleteDialog = true;
                         "
                       >
-                        <v-list-item-icon>
+                        <span>
                           <v-icon>mdi-delete</v-icon>
-                        </v-list-item-icon>
+                        </span>
                         <v-list-item-title>Delete</v-list-item-title>
                       </v-list-item>
                     </v-list>
@@ -160,14 +158,14 @@
               </template>
             </v-data-table>
           </v-card>
-        </v-tab-item>
+        </v-window-item>
 
-        <v-tab-item>
+        <v-window-item>
           <v-card flat color="foreground" class="pa-4">
             <RegistryBrowser />
           </v-card>
-        </v-tab-item>
-      </v-tabs-items>
+        </v-window-item>
+      </v-window>
     </v-card>
 
     <!-- Upload JSON dialog -->
@@ -193,7 +191,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="uploadDialog = false">Cancel</v-btn>
+          <v-btn variant="text" @click="uploadDialog = false">Cancel</v-btn>
           <v-btn
             color="primary"
             :loading="uploading"
@@ -240,7 +238,7 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn text @click="manualDialog = false">Cancel</v-btn>
+          <v-btn variant="text" @click="manualDialog = false">Cancel</v-btn>
           <v-btn
             color="primary"
             :loading="manualSaving"
@@ -264,11 +262,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
             @click="
               deleteTemplate(selectedTemplate.id);
@@ -311,32 +309,32 @@ export default {
       search: "",
       headers: [
         {
-          text: "Title",
-          value: "title",
+          title: "Title",
+          key: "title",
           sortable: true,
           align: "start"
         },
         {
-          text: "Source",
-          value: "source",
+          title: "Source",
+          key: "source",
           sortable: false,
           width: "120px"
         },
         {
-          text: "Origin",
-          value: "url_preview",
+          title: "Origin",
+          key: "url_preview",
           sortable: false,
           width: "30%"
         },
         {
-          text: "Created At",
-          value: "created_at",
+          title: "Created At",
+          key: "created_at",
           sortable: true,
           width: "18%"
         },
         {
-          text: "Updated At",
-          value: "updated_at",
+          title: "Updated At",
+          key: "updated_at",
           sortable: true,
           width: "18%"
         }
@@ -349,8 +347,8 @@ export default {
       readTemplates: "templates/readTemplates",
       updateTemplate: "templates/updateTemplate"
     }),
-    handleRowClick(value) {
-      this.$router.push({ path: `/templates/${value.id}` });
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/templates/${item.id}` });
     },
     templateDetails(templateId) {
       this.$router.push({ path: `/templates/${templateId}` });

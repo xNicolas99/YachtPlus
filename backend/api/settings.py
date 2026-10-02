@@ -9,42 +9,35 @@ from api.utils.deployment_mode import DeploymentMode, ConfigCheck, detect_deploy
 
 
 def get_or_create_secret_key() -> str:
+    """Return the persistent signing key, creating it atomically if needed.
+
+    A fully written, fsynced temporary file is linked atomically into place.
+    Concurrent processes converge on that file; no empty file is published.
+    Existing invalid or short files fail startup instead of replacing secrets.
+    """
     # First check environment variable
     env_secret = os.getenv("SECRET_KEY")
     if env_secret:
+        if len(env_secret.encode()) < 32:
+            raise RuntimeError("SECRET_KEY must contain at least 32 bytes")
         return env_secret
 
-    # Check persistent file or create it
     secret_file = os.getenv("SECRET_KEY_FILE", "/config/.secret_key")
-    env_file = os.getenv("ENV_FILE", "/config/.env")
 
-    # If the directory doesn't exist (e.g. running outside docker), fall back to current directory
-    config_dir = os.path.dirname(env_file)
-    if config_dir and not os.path.exists(config_dir):
-        # Graceful fallback for local development
-        env_file = ".env"
-        secret_file = ".secret_key"
+    # If the default /config path is used and /config does not exist (e.g.
+    # running outside Docker), fall back to the current directory. We only
+    # override the *default* path, never an explicitly set SECRET_KEY_FILE.
+    if secret_file == "/config/.secret_key":
+        config_dir = os.path.dirname(secret_file)
+        if config_dir and not os.path.exists(config_dir):
+            secret_file = ".secret_key"
+
+    secret_path = os.path.dirname(secret_file) or "."
+    os.makedirs(secret_path, exist_ok=True)
 
     try:
-        # Persist only to the dedicated secret file. Writing the signing key
-        # into a generic .env file broadens the attack surface and triggers
-        # code-scanning alerts for clear-text secret storage. The secret file
-        # is treated as a single-purpose credential store.
-        if os.path.exists(secret_file):
-            with open(secret_file, "r") as f:
-                return f.read().strip()
-
-        # 48 urlsafe characters => 36 bytes of raw entropy before
-        # base64url encoding, which decodes to >= 32 bytes. This satisfies
-        # PyJWT's InsecureKeyLengthWarning for HS256 and gives a robust
-        # margin beyond the 32-byte minimum recommended by RFC 7518.
-        new_secret = secrets.token_urlsafe(48)
-
-        os.makedirs(os.path.dirname(secret_file) or ".", exist_ok=True)
-        with open(secret_file, "w") as f:
-            f.write(new_secret + "\n")
-
-        return new_secret
+        from api.utils.secret_files import read_or_create_secret
+        return read_or_create_secret(secret_file, lambda: secrets.token_urlsafe(48).encode(), 32, text=True).decode().strip()
     except Exception as e:
         # Refuse to start with an ephemeral per-process key. A random fallback
         # would invalidate all JWTs on every restart and diverge across workers.
@@ -57,10 +50,13 @@ def get_or_create_secret_key() -> str:
 
 class Settings(BaseSettings):
     # Security
-    SECRET_KEY: str = Field(default_factory=get_or_create_secret_key)
+    SECRET_KEY: str = Field(default_factory=get_or_create_secret_key, min_length=32)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440
-    ACCESS_TOKEN_EXPIRES: int = 1440 * 60 # Legacy support
+    COMPOSE_AUTO_UPDATE: bool = False
+    AUDIT_RETENTION_DAYS: int = Field(default=90, ge=1)
+    LOGIN_RETENTION_DAYS: int = Field(default=30, ge=1)
+    RATE_LIMIT_STORAGE_URI: str = "memory://"
 
     # Auth & Cookies (Fixes for jwt.py/auth.py)
     DISABLE_AUTH: bool = False
@@ -95,10 +91,8 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:////config/yacht.db")
 
-    # Directory where docker-compose project subdirectories live. Trailing
-    # slash matters — every call site does `settings.COMPOSE_DIR + name`
-    # and relies on it. Previously read but never declared, which crashed
-    # with AttributeError under pydantic v2's extra='forbid'.
+    # Directory where Compose project subdirectories live. Paths are joined
+    # canonically; a trailing slash is optional.
     COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
 
     # Directory shipped *inside the image* with bundled catalog JSON
@@ -133,14 +127,19 @@ class Settings(BaseSettings):
     # docker.from_env() — go through the configured endpoint.
     DOCKER_HOST: Optional[str] = os.getenv("DOCKER_HOST")
 
-    # When true (default), login attempts from non-RFC1918 client IPs are
-    # rejected outright. This protects the typical LAN/homelab deployment,
-    # but makes any public-internet deployment (VPS behind TLS) impossible
-    # to log into. Set YACHT_BLOCK_PUBLIC_IP_LOGIN=false for such deploys —
-    # rate limiting, fail2ban counters and username lockout still apply.
+    # Retained for compatibility with historical environment files. Access
+    # is now governed by ACCESS_POLICY_FILE across every HTTP/WS route;
+    # changing this legacy flag never silently enables public access.
     BLOCK_PUBLIC_IP_LOGIN: bool = os.getenv(
         "YACHT_BLOCK_PUBLIC_IP_LOGIN", "true"
     ).lower() in ("1", "true", "yes", "on")
+
+    # The persisted policy is the only public-access opt-in. The legacy login
+    # environment flag no longer bypasses the global network gate.
+    ACCESS_POLICY_FILE: str = os.getenv("YACHT_ACCESS_POLICY_FILE", "/config/access-policy.json")
+    FAIL2BAN_REQUIRED: bool = os.getenv("YACHT_FAIL2BAN_REQUIRED", "false").lower() in ("1", "true", "yes", "on")
+    FAIL2BAN_STATE_DIR: str = os.getenv("YACHT_FAIL2BAN_STATE_DIR", "/run/yachtplus-security")
+    SECURITY_LOG: str = os.getenv("YACHT_SECURITY_LOG", "/config/security/auth.log")
 
     # Comma-separated list of reverse-proxy IPs (or CIDRs) whose
     # X-Real-IP / X-Forwarded-For headers we trust for client-IP attribution.

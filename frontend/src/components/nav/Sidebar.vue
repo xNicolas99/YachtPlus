@@ -2,7 +2,8 @@
   <v-navigation-drawer
     v-model="drawer"
     :rail="rail"
-    permanent
+    :permanent="$vuetify.display.mdAndUp"
+    :temporary="$vuetify.display.smAndDown"
     :width="232"
     class="yp-sidebar"
   >
@@ -11,12 +12,12 @@
       <div class="yp-brand-mark" aria-hidden="true"></div>
       <template v-if="!rail">
         <div class="yp-brand-name">YachtPlus</div>
-        <div class="yp-brand-ver">v2.4</div>
+        <div class="yp-brand-ver">v{{ version }}</div>
       </template>
       <v-btn
-        icon="mdi-chevron-left"
-        aria-label="Toggle sidebar"
-        title="Toggle sidebar"
+        :icon="rail ? 'mdi-chevron-right' : 'mdi-chevron-left'"
+        :aria-label="rail ? 'Expand sidebar' : 'Collapse sidebar'"
+        :title="rail ? 'Expand sidebar' : 'Collapse sidebar'"
         variant="text"
         size="small"
         class="yp-brand-toggle"
@@ -58,19 +59,7 @@
       </div>
     </nav>
 
-    <!-- Footer: docker.sock indicator -->
     <template v-slot:append>
-      <div class="yp-side-foot" v-if="!rail">
-        <span class="yp-side-ind" aria-hidden="true"></span>
-        <div class="yp-col" style="gap:1px;">
-          <span class="yp-side-host">docker.sock</span>
-          <span class="yp-mono yp-side-meta">v25.0.3 · linux</span>
-        </div>
-      </div>
-      <div class="yp-side-foot is-rail" v-else>
-        <span class="yp-side-ind" aria-hidden="true"></span>
-      </div>
-
       <v-list density="compact" nav class="yp-side-actions">
         <v-list-item
           prepend-icon="mdi-logout"
@@ -86,10 +75,14 @@
 import { mapActions } from 'vuex';
 
 export default {
+  props: {
+    modelValue: { type: Boolean, default: null },
+  },
+  emits: ['update:modelValue'],
   data() {
     return {
-      drawer: true,
       rail: false,
+      version: import.meta.env.VITE_VERSION || 'unreleased',
       groups: [
         {
           label: 'Workspace',
@@ -117,6 +110,12 @@ export default {
         },
       ],
     };
+  },
+  computed: {
+    drawer: {
+      get() { return this.modelValue; },
+      set(value) { this.$emit('update:modelValue', value); },
+    },
   },
   methods: {
     ...mapActions('auth', { logout: 'AUTH_LOGOUT' }),
@@ -187,7 +186,6 @@ export default {
 }
 .yp-brand-toggle.is-rail {
   margin-left: 0 !important;
-  display: none;
 }
 
 /* Nav */

@@ -15,7 +15,9 @@ const mutations = {
     state.apps = apps;
   },
   setApp(state, app) {
-    const idx = state.apps.findIndex(x => x.Name === app.Name);
+    const name = app.name || app.Name?.replace(/^\//, "");
+    const idx = state.apps.findIndex(x => (app.Id && x.Id === app.Id) ||
+      (name && (x.name || x.Name?.replace(/^\//, "")) === name));
     if (idx < 0) {
       state.apps.push(app);
     } else {
@@ -49,8 +51,9 @@ const mutations = {
     state.updatable = updatable;
   },
   setUpdated(state, updated) {
-    let index = state.updatable.indexOf(updated);
-    state.updatable.splice(index, 1);
+    const index = state.updatable.indexOf(updated);
+    // F26: guard against index -1 (would remove the last element).
+    if (index !== -1) state.updatable.splice(index, 1);
   }
 };
 
@@ -78,30 +81,29 @@ const actions = {
       });
   },
   async checkAppUpdate({ commit }, apps) {
-    await commit("setLoading", true);
-    await commit("setLoadingItems");
-    await commit("setAction", "Checking for updates...");
-    await Promise.all(
-      apps.map(async _app => {
-        let url = `/apps/${_app.name}/updates`;
-        await axios
-          .get(url)
-          .then(response => {
+    commit("setLoading", true);
+    commit("setLoadingItems");
+    commit("setAction", "Checking for updates...");
+    try {
+      await Promise.all(
+        apps.map(async _app => {
+          let url = `/apps/${_app.name}/updates`;
+          try {
+            const response = await axios.get(url);
             let app = response.data;
             commit("setLoadingItemCompleted", apps.length);
             commit("setApp", app);
-            commit("setLoading", true);
-          })
-          .catch(err => {
+          } catch (err) {
             console.error("Failed to check updates for " + _app.name);
             commit("snackbar/setErr", err, { root: true });
-          });
-      })
-    ).then(() => {
+          }
+        })
+      );
       console.log("Update check completed");
+    } finally {
       commit("setLoading", false);
       commit("setAction", "");
-    });
+    }
   },
   readApp({ commit }, Name) {
     const url = `/apps/${Name}`;
@@ -111,7 +113,6 @@ const actions = {
         .get(url)
         .then(response => {
           const app = response.data;
-          commit("setLoading", false);
           commit("setApp", app);
           resolve(app);
         })
@@ -119,6 +120,9 @@ const actions = {
           console.error("Failed to read app " + Name);
           commit("snackbar/setErr", err, { root: true });
           reject(err);
+        })
+        .finally(() => {
+          commit("setLoading", false);
         });
     });
   },
@@ -158,11 +162,11 @@ const actions = {
     commit("setAction", "Updating " + Name + " ...");
     console.log("Update started for " + Name + ", please wait...");
     const url = `/apps/${Name}/update`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const app = response.data;
-        commit("setApps", app);
+        commit(Array.isArray(app) ? "setApps" : "setApp", app);
         console.log(Name + " updated successfully");
       })
       .catch(err => {
@@ -184,11 +188,11 @@ const actions = {
     );
 
     const url = `/apps/actions/${Name}/${Action}`;
-    axios
+    return axios
       .post(url)
       .then(response => {
         const app = response.data;
-        commit("setApps", app);
+        commit(Array.isArray(app) ? "setApps" : "setApp", app);
         console.log(Name + " " + Action + "ed successfully");
       })
       .catch(err => {

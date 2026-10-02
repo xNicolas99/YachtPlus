@@ -11,7 +11,7 @@ from api.actions.compose import (
     delete_compose,
     generate_support_bundle,
 )
-from api.auth.auth import auth_check, check_permission
+from api.auth.auth import auth_check, check_permission, require_superuser
 from api.utils.auth import get_db
 from api.utils.security import limiter
 from api.db.schemas import compose as schemas
@@ -38,7 +38,9 @@ _ACTION_PERMISSIONS = {
     "create": "perm_start",
     "start": "perm_start",
     "stop": "perm_stop",
-    "down": "perm_stop",
+    "down": "perm_delete",
+    "pull": "perm_restart",
+    "kill": "perm_delete",
     "restart": "perm_restart",
     "delete": "perm_delete",
     "rm": "perm_delete",
@@ -47,8 +49,9 @@ _ACTION_PERMISSIONS = {
 
 async def _require_action_permission(action: str, Authorize, db: AsyncSession):
     perm = _ACTION_PERMISSIONS.get(action)
-    if perm:
-        await check_permission(perm, Authorize, db)
+    if not perm:
+        raise HTTPException(400, "Invalid compose action")
+    await check_permission(perm, Authorize, db)
 
 
 @router.get("/")
@@ -95,7 +98,7 @@ async def compose_project_action(
     db: AsyncSession = Depends(get_db),
 ):
     await auth_check(Authorize)
-    if action not in ["up", "down", "start", "stop", "restart", "create", "delete", "pull"]:
+    if action not in ["up", "down", "start", "stop", "restart", "create", "delete", "pull", "kill", "rm"]:
         raise HTTPException(status_code=400, detail="Invalid action")
     await _require_action_permission(action, Authorize, db)
     if action == "delete":
@@ -114,9 +117,13 @@ async def write_compose_project(
     db: AsyncSession = Depends(get_db),
 ):
     await auth_check(Authorize)
-    # Editing a compose file changes how the stack runs on next deploy,
-    # so gate it behind the same permission used for restarts.
-    await check_permission("perm_restart", Authorize, db)
+    # Raw Compose can explicitly select image compatibility, host mounts and
+    # namespace options. Only an active administrator may authorize that.
+    user = await require_superuser(Authorize, db)
+    if not user.is_active:
+        raise HTTPException(403, "Active superuser required.")
+    if compose.name != project_name:
+        raise HTTPException(422, "Compose project name must match the request path.")
     return await write_compose(compose=compose)
 
 
@@ -131,7 +138,7 @@ async def compose_app_action_route(
     db: AsyncSession = Depends(get_db),
 ):
     await auth_check(Authorize)
-    if action not in ["up", "down", "start", "stop", "restart", "create", "rm", "pull"]:
+    if action not in ["up", "down", "start", "stop", "restart", "create", "rm", "pull", "kill"]:
         raise HTTPException(status_code=400, detail="Invalid action")
     await _require_action_permission(action, Authorize, db)
     return await compose_app_action(project_name, action, app)

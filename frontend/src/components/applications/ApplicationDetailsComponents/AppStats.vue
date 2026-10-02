@@ -16,7 +16,7 @@
           (0-100%) <br />
           Max: {{ Math.max.apply(Math, stats.cpu_percent) }}%
         </v-card-subtitle>
-        <PercentLineChart :chartData="fillCPU(stats.cpu_percent, stats.time)" />
+        <PercentLineChart :chartdata="fillCPU(stats.cpu_percent, stats.time)" />
       </v-card>
       <v-card color="foreground" flat>
         <v-card-title>
@@ -32,7 +32,7 @@
             formatBytes(stats.mem_total[stats.mem_total.length - 1])
           }}
         </v-card-subtitle>
-        <PercentLineChart :chartData="fillMem(stats.mem_percent, stats.time)" />
+        <PercentLineChart :chartdata="fillMem(stats.mem_percent, stats.time)" />
       </v-card>
     </div>
   </v-card>

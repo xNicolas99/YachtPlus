@@ -1,6 +1,7 @@
 from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
-from datetime import datetime
+from datetime import datetime, timezone
+import secrets
 from api.db.database import Base
 
 
@@ -14,6 +15,8 @@ class User(Base):
     hashed_password = Column(String(length=72), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
+    auth_version = Column(String(64), default=lambda: secrets.token_hex(32), nullable=False)
+    otp_last_step = Column(Integer, nullable=True)
 
     # New fields for 2FA and Roles
     # Stores the Fernet-ENCRYPTED TOTP seed ("v2:" prefix + ciphertext),
@@ -46,15 +49,15 @@ class APIKEY(Base):
     hashed_key = Column(String(length=64), unique=True, index=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         unique=False,
         index=False,
-        default=datetime.utcnow,
+        default=lambda: datetime.now(timezone.utc),
     )
     # Expiration of the underlying JWT; needed so that a revoked API key's
     # blacklist entry can be auto-pruned once the token naturally expires.
-    expires = Column(DateTime, nullable=True)
+    expires = Column(DateTime(timezone=True), nullable=True)
     user = Column(Integer, ForeignKey("user.id"))
 
 class LoginAttempt(Base):
@@ -62,5 +65,5 @@ class LoginAttempt(Base):
     id = Column(Integer, primary_key=True, index=True)
     ip_address = Column(String, index=True)
     username = Column(String, index=True)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     success = Column(Boolean)

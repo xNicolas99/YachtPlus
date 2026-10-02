@@ -1,5 +1,34 @@
 # SECURITY-AUDIT.md — Code-Audit YachtPlus
 
+> Historisches Audit vom 2026-08-21 am unten genannten Baseline-Commit.
+> Die Befunde, Zeilennummern, Testergebnisse und damaligen Paket-Audits sind
+> keine Aussage über den aktuellen Checkout oder offene GitHub-Alerts.
+> Abgleich am 2026-10-02: Aktuelle Verträge stehen in `AGENTS.md`, `README.md`
+> und dem [aktuellen Behebungsbericht](docs/AUDIT_REMEDIATION_2026-10-02.md).
+> Docker-Laufzeitprüfung bleibt
+> separat erforderlich; ein lokaler Testlauf belegt sie nicht.
+
+## Korrekturen zum aktuellen Stand (2026-10-02)
+
+- API-Keys speichern JTI/Expiry und einen SHA-256-Hexdigest der zufälligen
+  JTI (64 Zeichen), keinen bcrypt-Hash des vollständigen JWT. Die Signatur,
+  aktive Schlüsselzeile, Blacklist und Konto-Version entscheiden über Gültigkeit.
+  Schlüssel sind zentral auf GET/HEAD-Datenzugriff beschränkt; `/api/auth`,
+  Mutationen und Terminal sind ausgeschlossen.
+- `log_activity` arbeitet asynchron. Erfolgreiche HTTP-Mutationen und
+  Login-Ergebnisse erhalten Audit-Einträge; Terminalinhalte bleiben geheim.
+  Der Audit-Log in derselben Datenbank ist weiterhin keine unveränderliche
+  oder kryptographisch abgesicherte Ablage. Die ältere Behauptung vollständiger
+  Mutationsabdeckung darf nicht als heutiger Nachweis verwendet werden.
+- Vuex 4 ist der einzige Frontend-Store. Die Behauptung in FND-701 über
+  installierte/parallel aktive Pinia-Stores ist für den aktuellen Code falsch;
+  eine Pinia-Migration ist kein erforderlicher Sicherheitsfix.
+- Mutierende GET-Aliase sind entfernt. CSRF-Proof, exakte Browser-Origin-
+  Prüfung und kontoabhängige Token-Versionen ergänzen die früheren Fixes.
+- Der signing key wird erforderlichenfalls als persistente, zugriffsbeschränkte
+  Datei gespeichert. SMTP/TOTP-Geheimnisse werden verschlüsselt; alte
+  SMTP-Zeilen werden durch die Credential-Migration umgestellt.
+
 ## Zusammenfassung
 
 - Audit-Datum: 2026-08-21
@@ -103,9 +132,9 @@
 
 **FND-701 — Frontend-State-Duplikation: Pinia installiert, aber Vuex 4 aktiv**
 - Dateien: `frontend/package.json`, `frontend/src/main.js:150-151`, `frontend/src/store/modules/`, `frontend/src/views/`, `frontend/src/components/`
-- Beschreibung: `pinia` ist installiert und `createPinia()` in `main.js` aktiv, aber alle Komponenten nutzen weiterhin `vuex` (`mapState`, `mapActions`, `useStore`, `this.$store`). 7 Vuex-Module unter `src/store/modules/`.
-- Impact: Zwei parallele Zustandsquellen; Inkonsistenzen möglich, besonders bei Auth-State.
-- Empfehlung: Modulweise Migration zu Pinia, ein Store pro Aufgabe; Frontend-Tests nach jedem Modul grün halten.
+- Beschreibung des damaligen Berichts (nicht aktuell bestätigt): `pinia` sei installiert und `createPinia()` aktiv, während Komponenten Vuex nutzen. Aktuell ist ausschließlich Vuex 4 installiert/aktiv; die behauptete parallele Zustandsquelle besteht nicht.
+- Historisch beschriebener Impact: Zwei parallele Zustandsquellen könnten inkonsistent werden. Dieser behauptete Aufbau besteht im aktuellen Checkout nicht.
+- Korrektur: Vuex 4 beibehalten und dessen Auth-/Logout-Zustand prüfen. Ein Architekturwechsel zu Pinia ist zur Behebung dieses Befunds nicht erforderlich.
 
 **FND-702 — i18n fehlt; Backend-Fehlermeldungen sind fertige Sätze**
 - Dateien: `frontend/src/main.js`, `backend/api/routers/*.py`

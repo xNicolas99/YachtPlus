@@ -6,7 +6,7 @@ Since you've already applied the recent patches (PRs #111, #107, #104, #102) but
 
 Ensure you are running the **actual** built image, not a cached stale one.
 
-*   **Check DockerHub/GHCR SHA:** Go to the package page (e.g. `ghcr.io/yachtplus/yachtplus`) and note the SHA digest of the `latest` tag.
+*   **Check DockerHub/GHCR SHA:** Go to the package page (e.g. `ghcr.io/xnicolas99/yachtplus`) and note the SHA digest of the `latest` tag.
 *   **Check Local SHA:**
     ```bash
     docker inspect --format='{{.RepoDigests}}' yachtplus
@@ -18,11 +18,11 @@ Ensure you are running the **actual** built image, not a cached stale one.
 
 If you suspect the frontend code is broken (e.g. white screen), check the build logs in GitHub Actions.
 
-*   **Action Name:** Look for `docker-image.yml` or `ghcr.yml` in the Actions tab.
-*   **Step to Check:** "Build and Push" -> "Build Frontend" (or similar).
+*   **Action Name:** Open `ci.yml` (CI — Tests, Ruff, Build, Docker-Smoke).
+*   **Steps to Check:** "Build production frontend" and the final `publish` job's "Build release candidate" / "Validate candidate contents, frontend version and health".
 *   **What to look for:**
     *   `npm run build` success message.
-    *   Any warnings about "asset size limit" (usually ignored) vs "compilation failed".
+    *   The bundle gate must pass. Missing chunks/assets, version mismatches or exceeded startup budgets fail the build.
     *   Ensure `VITE_` environment variables were passed correctly if you customized them.
 
 ## 3. Container Logs Diagnostics
@@ -74,7 +74,7 @@ If weird caching or corrupt volumes are suspected, wipe everything and start fre
 docker-compose down
 
 # 2. Remove the image (force pull next time)
-docker rmi ghcr.io/yachtplus/yachtplus:latest
+docker rmi ghcr.io/xnicolas99/yachtplus:latest
 
 # 3. Prune volumes (DANGER: Deletes data)
 # Verify the volume name first with 'docker volume ls'

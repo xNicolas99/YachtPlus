@@ -14,6 +14,11 @@ import pyotp
 import qrcode
 import io
 import base64
+import logging
+import secrets
+from api.utils.totp import consume_totp
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -27,15 +32,6 @@ def _generate_qr_code_sync(provisioning_uri: str) -> str:
     buffered = io.BytesIO()
     img.save(buffered, format="PNG")
     return base64.b64encode(buffered.getvalue()).decode()
-
-
-@router.get("/generate")
-async def generate_2fa_get(
-    db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    """GET version of generate_2fa for consistency with frontend request"""
-    return await generate_2fa_logic(db, Authorize)
 
 
 @router.post("/generate")
@@ -53,11 +49,14 @@ async def generate_2fa_logic(db: AsyncSession, Authorize: get_auth_wrapper):
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if user.is_2fa_enabled:
+        raise HTTPException(409, "Disable 2FA with your password and code before replacing its secret")
 
     # Generate secret
     secret = pyotp.random_base32()
     # Encrypt before storing
-    user.otp_secret = encrypt(secret)
+    user.otp_secret = await asyncio.to_thread(encrypt, secret)
+    user.otp_last_step = None
     await db.commit()
 
     # Generate QR Code
@@ -100,21 +99,23 @@ async def enable_2fa(
 
     if not user or not user.otp_secret:
         raise HTTPException(status_code=400, detail="2FA setup not initiated")
+    if user.is_2fa_enabled:
+        raise HTTPException(409, "2FA is already enabled")
 
     try:
         # Decrypt secret from DB (Ground Truth)
-        secret = decrypt(user.otp_secret)
-
-        # Verify code
-        totp = pyotp.TOTP(secret)
-        if totp.verify(payload.code):
+        if await consume_totp(db, user, payload.code):
             user.is_2fa_enabled = True
+            # Keep the pending setup token usable until finalize. Normal
+            # enrolment invalidates every existing session and API key.
+            if user.is_active:
+                user.auth_version = secrets.token_hex(32)
             await db.commit()
             return {"message": "2FA enabled successfully"}
         else:
             raise HTTPException(status_code=400, detail="Invalid code")
     except Exception as e:
-        print(f"2FA Enable Error: {e}")
+        logger.error("2FA Enable Error: %s", e)
         raise HTTPException(
             status_code=400, detail="Invalid token or secret error"
         )
@@ -154,9 +155,7 @@ async def disable_2fa(
         if not payload.code:
             raise HTTPException(status_code=400, detail="2FA code required")
         try:
-            secret = decrypt(user.otp_secret)
-            totp = pyotp.TOTP(secret)
-            if not totp.verify(payload.code):
+            if not await consume_totp(db, user, payload.code):
                 raise HTTPException(status_code=400, detail="Invalid 2FA code")
         except HTTPException:
             raise
@@ -165,5 +164,7 @@ async def disable_2fa(
 
     user.is_2fa_enabled = False
     user.otp_secret = None
+    user.otp_last_step = None
+    user.auth_version = secrets.token_hex(32)
     await db.commit()
     return {"message": "2FA disabled successfully"}

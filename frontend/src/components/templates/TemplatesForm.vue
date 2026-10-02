@@ -29,7 +29,7 @@
             :rules="urlRules"
             required
           ></v-text-field>
-          <v-btn class="mr-4" type="submit" @click="submit">Submit</v-btn>
+          <v-btn class="mr-4" type="submit">Submit</v-btn>  <!-- F37: @click removed (double POST) -->
         </v-form>
       </v-card-text>
     </v-card>

@@ -1,33 +1,44 @@
 import aiodocker
+from aiodocker.volumes import DockerVolume
 from fastapi import HTTPException
 import asyncio
 import logging
-from api.settings import Settings
+import json
 from api.utils.error_handler import safe_http_status, docker_error_detail
+from api.settings import get_settings
+settings = get_settings()
 
 logger = logging.getLogger(__name__)
-settings = Settings()
+
+
+def _require_docker_result(result):
+    if isinstance(result, aiodocker.exceptions.DockerError):
+        raise HTTPException(status_code=safe_http_status(result), detail=docker_error_detail(result)) from result
+    if isinstance(result, Exception):
+        logger.error("Docker resource request failed", exc_info=(type(result), result, result.__traceback__))
+        raise HTTPException(status_code=503, detail="Docker operation failed. Check server logs for details.") from result
+    return result
+
+
+def _container_metadata(result):
+    # DockerContainers.list() returns DockerContainer objects with the list
+    # metadata already attached; no extra inspect request is necessary.
+    containers = _require_docker_result(result)
+    return [item if isinstance(item, dict) else item._container for item in containers]
+
 
 ### IMAGES ###
 
-async def get_images():
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+async def get_images(offset: int = 0, limit: int = 100):
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         images_task = docker.images.list()
 
         results = await asyncio.gather(containers_task, images_task, return_exceptions=True)
 
-        if isinstance(results[0], Exception):
-            logger.error(f"Error fetching containers: {results[0]}")
-            containers = []
-        else:
-            containers = results[0]
+        containers = _container_metadata(results[0])
 
-        if isinstance(results[1], Exception):
-            logger.error(f"Error fetching images: {results[1]}")
-            images = []
-        else:
-            images = results[1]
+        images = _require_docker_result(results[1])
 
         used_image_ids = set()
         for container in containers:
@@ -51,7 +62,13 @@ async def get_images():
             attrs['inUse'] = is_in_use
             image_list.append(attrs)
 
-        return image_list
+        total = len(image_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": image_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_image(image_tag):
@@ -62,17 +79,15 @@ async def write_image(image_tag):
         raise HTTPException(status_code=422, detail="Image name is required")
     image_tag = image_tag.strip()
 
-    delim = ":"
-    repo, tag = None, image_tag
-    if delim in image_tag:
-        repo, tag = tag.split(delim, 1)
-    else:
-        repo = image_tag
-        tag = "latest"
+    # A colon in the registry host is a port, not an image tag. Digests
+    # already identify an exact image and must not receive a :latest suffix.
+    image_name = image_tag
+    if "@" not in image_tag and ":" not in image_tag.rsplit("/", 1)[-1]:
+        image_name = f"{image_tag}:latest"
 
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
-            await docker.images.pull(f"{repo}:{tag}")
+            await docker.images.pull(image_name)
         except Exception as exc:
              raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
 
@@ -80,18 +95,14 @@ async def write_image(image_tag):
 
 
 async def get_image(image_id):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         image_task = docker.images.inspect(image_id)
 
         try:
             results = await asyncio.gather(containers_task, image_task, return_exceptions=True)
 
-            if isinstance(results[0], Exception):
-                 logger.error(f"Error fetching containers: {results[0]}")
-                 containers = []
-            else:
-                 containers = results[0]
+            containers = _container_metadata(results[0])
 
             if isinstance(results[1], Exception):
                  if isinstance(results[1], aiodocker.exceptions.DockerError):
@@ -117,7 +128,7 @@ async def get_image(image_id):
 
 
 async def update_image(image_id):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             image = await docker.images.inspect(image_id)
             if image.get('RepoTags'):
@@ -131,7 +142,7 @@ async def update_image(image_id):
 
 
 async def delete_image(image_id):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
              image = await docker.images.inspect(image_id)
              await docker.images.delete(image_id, force=True)
@@ -143,24 +154,16 @@ async def delete_image(image_id):
 
 
 ### Volumes ###
-async def get_volumes():
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+async def get_volumes(offset: int = 0, limit: int = 100):
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         volumes_task = docker.volumes.list()
 
         results = await asyncio.gather(containers_task, volumes_task, return_exceptions=True)
 
-        if isinstance(results[0], Exception):
-            logger.error(f"Error fetching containers: {results[0]}")
-            containers = []
-        else:
-            containers = results[0]
+        containers = _container_metadata(results[0])
 
-        if isinstance(results[1], Exception):
-            logger.error(f"Error fetching volumes: {results[1]}")
-            volumes_data = {}
-        else:
-            volumes_data = results[1]
+        volumes_data = _require_docker_result(results[1])
 
         volumes = volumes_data.get('Volumes', []) or []
 
@@ -178,11 +181,17 @@ async def get_volumes():
             attrs['inUse'] = attrs.get('Name') in used_volumes
             volume_list.append(attrs)
 
-        return volume_list
+        total = len(volume_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": volume_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_volume(volume_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
             await docker.volumes.create({"Name": volume_name})
         except aiodocker.exceptions.DockerError as exc:
@@ -193,31 +202,18 @@ async def write_volume(volume_name):
 
 
 async def get_volume(volume_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
-        volume_task = docker.volumes.inspect(volume_name)
+        volume_task = _inspect_volume(docker, volume_name)
 
         try:
             results = await asyncio.gather(containers_task, volume_task, return_exceptions=True)
 
-            if isinstance(results[0], Exception):
-                 logger.error(f"Error fetching containers: {results[0]}")
-                 containers = []
-            else:
-                 containers = results[0]
+            containers = _container_metadata(results[0])
 
             if isinstance(results[1], Exception):
                  exc = results[1]
                  if isinstance(exc, aiodocker.exceptions.DockerError):
-                     if exc.status == 404:
-                          pass # Handled by calling code? Original code passed here but then raised anyway?
-                          # Wait, the original code had:
-                          # if exc.status == 404: pass
-                          # raise HTTPException...
-                          # This means it raised exception anyway unless it was 404 where it passed... to what?
-                          # If it passed, `volume` would be undefined.
-                          # I will keep the behavior but ensure `volume` is handled.
-                          # Actually, if 404, we should probably raise 404.
                      raise HTTPException(status_code=safe_http_status(exc), detail=docker_error_detail(exc))
                  raise HTTPException(status_code=500, detail="Docker operation failed. Check server logs for details.")
             else:
@@ -225,9 +221,6 @@ async def get_volume(volume_name):
 
         except HTTPException:
              raise
-
-        # If volume is not defined (because of exception handling above being weird in original), check it.
-        # But here we either have volume or raised exception.
 
         attrs = volume.copy()
         used_volumes = set()
@@ -243,10 +236,11 @@ async def get_volume(volume_name):
 
 
 async def delete_volume(volume_name):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
-            volume = await docker.volumes.inspect(volume_name)
-            await docker.volumes.delete(volume_name)
+            volume_obj = DockerVolume(docker, volume_name)
+            volume = await volume_obj.show()
+            await volume_obj.delete()
             return volume
         except aiodocker.exceptions.DockerError as exc:
             raise HTTPException(
@@ -255,24 +249,16 @@ async def delete_volume(volume_name):
 
 
 ### Networks ###
-async def get_networks():
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+async def get_networks(offset: int = 0, limit: int = 100):
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         networks_task = docker.networks.list()
 
         results = await asyncio.gather(containers_task, networks_task, return_exceptions=True)
 
-        if isinstance(results[0], Exception):
-            logger.error(f"Error fetching containers: {results[0]}")
-            containers = []
-        else:
-            containers = results[0]
+        containers = _container_metadata(results[0])
 
-        if isinstance(results[1], Exception):
-            logger.error(f"Error fetching networks: {results[1]}")
-            networks = []
-        else:
-            networks = results[1]
+        networks = _require_docker_result(results[1])
 
         used_network_ids = set()
         for container in containers:
@@ -296,11 +282,17 @@ async def get_networks():
 
             network_list.append(attrs)
 
-        return network_list
+        total = len(network_list)
+        capped_limit = max(limit, 0)
+        if capped_limit > 500:
+            capped_limit = 500
+        if offset < 0:
+            offset = 0
+        return {"items": network_list[offset:offset + capped_limit], "total": total}
 
 
 async def write_network(network_form):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         ipam_config = None
         pool_configs = []
 
@@ -348,27 +340,25 @@ async def write_network(network_form):
 
 
 async def _inspect_network(docker, network_id):
-    # aiodocker's `DockerNetworks` does NOT expose `.inspect(id)` — the
-    # idiomatic API is `.get(id)` (returns a `DockerNetwork` stub, no
-    # request issued yet) followed by `.show()` (issues the actual
-    # inspect call). The previous direct `.inspect()` call raised
-    # AttributeError on every network-detail page.
+    # DockerNetworks has no inspect method. get() resolves a network by name
+    # or ID and returns an object whose show() retrieves its metadata.
     network_obj = await docker.networks.get(network_id)
     return await network_obj.show()
 
 
+async def _inspect_volume(docker, volume_name):
+    volume_obj = DockerVolume(docker, volume_name)
+    return await volume_obj.show()
+
+
 async def get_network(network_id):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         containers_task = docker.containers.list(all=True)
         network_task = _inspect_network(docker, network_id)
 
         try:
             results = await asyncio.gather(containers_task, network_task, return_exceptions=True)
-            if isinstance(results[0], Exception):
-                 logger.error(f"Error fetching containers: {results[0]}")
-                 containers = []
-            else:
-                 containers = results[0]
+            containers = _container_metadata(results[0])
 
             if isinstance(results[1], Exception):
                  exc = results[1]
@@ -396,10 +386,11 @@ async def get_network(network_id):
 
 
 async def delete_network(network_id):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
-            network = await docker.networks.inspect(network_id)
-            await docker.networks.delete(network_id)
+            network_obj = await docker.networks.get(network_id)
+            network = await network_obj.show()
+            await network_obj.delete()
             return network
         except aiodocker.exceptions.DockerError as exc:
              raise HTTPException(
@@ -407,16 +398,21 @@ async def delete_network(network_id):
             )
 
 async def prune_resources(resource):
-    async with aiodocker.Docker(url=settings.DOCKER_HOST) as docker:
+    paths = {
+        "images": "images/prune",
+        "containers": "containers/prune",
+        "volumes": "volumes/prune",
+        "networks": "networks/prune",
+        "build_cache": "build/prune",
+    }
+    if resource not in paths:
+        raise HTTPException(status_code=422, detail="Unsupported resource")
+    async with aiodocker.Docker(url=get_settings().DOCKER_HOST) as docker:
         try:
-            if resource == "images":
-                return await docker.images.prune(filters={'dangling': ['false']})
-            elif resource == "containers":
-                return await docker.containers.prune()
-            elif resource == "volumes":
-                return await docker.volumes.prune()
-            elif resource == "networks":
-                return await docker.networks.prune()
-        except Exception as e:
-            print(f"Error pruning {resource}: {e}")
-            return {"count": 0, "space_reclaimed": 0}
+            params = {"filters": json.dumps({"dangling": ["false"]})} if resource == "images" else {}
+            return await docker._query_json(paths[resource], method="POST", params=params)
+        except aiodocker.exceptions.DockerError as exc:
+            raise HTTPException(status_code=safe_http_status(exc), detail=docker_error_detail(exc)) from exc
+        except Exception as exc:
+            logger.exception("Error pruning %s", resource)
+            raise HTTPException(status_code=503, detail="Docker operation failed. Check server logs for details.") from exc

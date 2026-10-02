@@ -1,36 +1,35 @@
 <template lang="html">
   <div class="apps-list component" style="max-width: 90%">
-    <v-card color="foreground">
+    <v-card color="foreground" class="apps-card">
       <v-card-title class="primary font-weight-bold">
         Apps
         <v-btn class="ml-2" color="secondary" to="/apps/deploy" aria-label="Deploy new application" title="Deploy new application">
           <v-icon>mdi-plus</v-icon>
         </v-btn>
         <v-spacer />
-        <!-- Replaced v-text-field with UnifiedSearch -->
-        <div style="width: 400px">
+        <div class="apps-search-wrap">
           <UnifiedSearch @input="val => search = val" />
         </div>
       </v-card-title>
 
       <v-card-title color="secondary">
         <v-btn class="ml-2" @click="checkUpdate(apps)" color="secondary" :loading="isCheckingUpdates" :disabled="isCheckingUpdates">
-          <span v-if="$vuetify.breakpoint.mdAndUp">Updates</span>
+          <span v-if="$vuetify.display.mdAndUp">Updates</span>
           <v-icon>mdi-update</v-icon>
         </v-btn>
         <v-btn class="ml-2" @click="refresh()" color="secondary" :loading="isRefreshing" :disabled="isRefreshing">
-          <span v-if="$vuetify.breakpoint.mdAndUp">Refresh</span>
+          <span v-if="$vuetify.display.mdAndUp">Refresh</span>
           <v-icon>mdi-refresh</v-icon>
         </v-btn>
         <v-menu
           :close-on-content-click="false"
           bottom
-          offset-y
+
           color="secondary"
         >
-          <template v-slot:activator="{ on, attrs }">
-            <v-btn color="secondary" v-bind="attrs" v-on="on" class="ml-2">
-              <span v-if="$vuetify.breakpoint.mdAndUp">Columns</span>
+          <template v-slot:activator="{ props }">
+            <v-btn color="secondary" v-bind="props" class="ml-2">
+              <span v-if="$vuetify.display.mdAndUp">Columns</span>
               <v-icon>mdi-border-all</v-icon>
             </v-btn>
           </template>
@@ -42,7 +41,7 @@
             >
               <v-checkbox
                 v-model="selectedHeaders"
-                :label="item.text"
+                :label="item.title"
                 :value="item"
                 multiple
               >
@@ -56,7 +55,7 @@
 
       <!-- Error State -->
       <div v-if="loadError" class="text-center py-4">
-        <v-alert type="error" outlined text>
+        <v-alert type="error" variant="outlined" text>
           Apps konnten nicht geladen werden. Bitte Seite aktualisieren oder Logs
           prüfen.
         </v-alert>
@@ -70,9 +69,7 @@
         :headers="selectedHeaders"
         :items="apps"
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
         single-select
@@ -93,30 +90,30 @@
             <v-menu
               :close-on-click="true"
               :close-on-content-click="true"
-              offset-y
+             
             >
-              <template v-slot:activator="{ on, attrs }">
-                <v-btn icon size="small" v-bind="attrs" v-on="on" class="" aria-label="Application Actions" title="Application Actions">
+              <template v-slot:activator="{ props }">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Application Actions" title="Application Actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <!-- Inspect Group -->
-                <v-subheader>Inspect</v-subheader>
+                <v-list-subheader>Inspect</v-list-subheader>
                 <v-list-item @click="viewLogs(item)">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-text-box-search-outline</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>View Logs</v-list-item-title>
                 </v-list-item>
 
-                <v-tooltip left v-if="item.State.Status !== 'running'">
-                  <template v-slot:activator="{ on, attrs }">
-                    <div v-bind="attrs" v-on="on">
+                <v-tooltip location="left" v-if="item.State.Status !== 'running'">
+                  <template v-slot:activator="{ props }">
+                    <div v-bind="props">
                       <v-list-item disabled>
-                        <v-list-item-icon>
+                        <span>
                           <v-icon>mdi-console</v-icon>
-                        </v-list-item-icon>
+                        </span>
                         <v-list-item-title>Open Shell</v-list-item-title>
                       </v-list-item>
                     </div>
@@ -124,82 +121,82 @@
                   <span>Container must be running to open shell</span>
                 </v-tooltip>
                 <v-list-item v-else @click="openTerminal(item)">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-console</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Open Shell</v-list-item-title>
                 </v-list-item>
 
                 <v-divider></v-divider>
 
                 <!-- Management Group -->
-                <v-subheader>Management</v-subheader>
+                <v-list-subheader>Management</v-list-subheader>
                 <v-list-item @click="editClick({ Name: item.name })">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-file-document-edit-outline</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Edit</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   v-if="!item.Config.Image.includes('yachtplus')"
                   @click="Update(item.name)"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-update</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Update</v-list-item-title>
                 </v-list-item>
 
                 <v-divider></v-divider>
 
                 <!-- Control Group -->
-                <v-subheader>Control</v-subheader>
+                <v-list-subheader>Control</v-list-subheader>
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'start' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-play</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Start</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'stop' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-stop</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Stop</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'restart' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-refresh</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Restart</v-list-item-title>
                 </v-list-item>
                 <v-list-item
                   @click="AppAction({ Name: item.name, Action: 'kill' })"
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-fire</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Kill</v-list-item-title>
                 </v-list-item>
 
                 <v-divider></v-divider>
 
                 <!-- Danger Zone Group -->
-                <v-subheader class="error--text">Danger Zone</v-subheader>
+                <v-list-subheader class="error--text">Danger Zone</v-list-subheader>
                 <v-list-item
                   @click="
                     selectedApp = item;
                     removeDialog = true;
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon color="error">mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title class="error--text"
                     >Remove</v-list-item-title
                   >
@@ -220,11 +217,11 @@
                 </v-card-text>
                 <v-card-actions>
                   <v-spacer></v-spacer>
-                  <v-btn text @click="removeDialog = false">
+                  <v-btn variant="text" @click="removeDialog = false">
                     Cancel
                   </v-btn>
                   <v-btn
-                    text
+                    variant="text"
                     color="error"
                     @click="
                       AppAction({ Name: selectedApp.name, Action: 'remove' });
@@ -238,17 +235,15 @@
             </v-dialog>
 
             <span class="nametext ml-1">{{ item.name }}</span>
-            <v-tooltip
-              right
+            <v-tooltip location="right"
               v-if="item.isUpdatable"
               color="primary"
               class="mb-2"
             >
-              <template v-slot:activator="{ on, attrs }">
+              <template v-slot:activator="{ props }">
                 <v-avatar
                   class="ml-1"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
                   color="primary"
                   size="6"
                 ></v-avatar>
@@ -275,11 +270,10 @@
             :key="index"
             style="text-decoration: none;"
           >
-            <v-tooltip top transition="scale-transition">
-              <template v-slot:activator="{ on, attrs }">
+            <v-tooltip location="top" transition="scale-transition">
+              <template v-slot:activator="{ props }">
                 <v-chip
-                  v-on="on"
-                  v-bind="attrs"
+                  v-bind="props"
                   class="mx-1"
                   v-show="port.hip != '::'"
                   v-if="port.hip == '0.0.0.0'"
@@ -287,26 +281,25 @@
                   style="text-decoration: none;"
                   label
                   small
-                  :href="'http://' + host_ip + ':' + port.hport"
+                  :href="portHref(port)"
                   target="_blank"
-                  ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                  ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                   >{{
                     item.Config.Labels[`local.yacht.port.${port.hport}`] ||
                       port.hport
                   }}</v-chip
                 >
                 <v-chip
-                  v-on="on"
-                  v-bind="attrs"
+                  v-bind="props"
                   class="ma-1"
                   v-else
                   color="primary"
                   style="text-decoration: none;"
                   label
                   small
-                  :href="'http://' + port.hip + ':' + port.hport"
+                  :href="portHref(port)"
                   target="_blank"
-                  ><v-icon small class="mr-1">mdi-link-variant</v-icon
+                  ><v-icon size="small" class="mr-1">mdi-link-variant</v-icon
                   >{{
                     item.Config.Labels[`local.yacht.port.${port.hport}`] ||
                       port.hport
@@ -340,7 +333,10 @@
       :containerName="selectedContainerName"
       @close="logsDialog = false"
     />
-    <ContainerTerminal
+    <AsyncFeature
+      v-if="terminalDialog"
+      :loader="loadTerminal"
+      name="Terminal"
       :visible="terminalDialog"
       :containerId="selectedContainerId"
       :containerName="selectedContainerName"
@@ -350,15 +346,16 @@
 </template>
 
 <script>
+import { containerPortLink } from "@/utils/containerLinks";
 import { mapActions, mapState } from "vuex";
 import ContainerLogs from "@/components/ContainerLogs.vue";
-import ContainerTerminal from "@/components/ContainerTerminal.vue";
+import AsyncFeature from "@/components/AsyncFeature.vue";
 import UnifiedSearch from "@/components/UnifiedSearch.vue";
 
 export default {
   components: {
     ContainerLogs,
-    ContainerTerminal,
+    AsyncFeature,
     UnifiedSearch
   },
   data() {
@@ -382,34 +379,34 @@ export default {
       headers: [],
       headersMap: {
         name: {
-          text: "Name",
-          value: "name",
+          title: "Name",
+          key: "name",
           sortable: true,
           align: "start"
         },
         project: {
-          text: "Project",
-          value: "project",
+          title: "Project",
+          key: "project",
           sortable: true
         },
         status: {
-          text: "Status",
-          value: "status",
+          title: "Status",
+          key: "status",
           sortable: true
         },
         image: {
-          text: "Image",
-          value: "image",
+          title: "Image",
+          key: "image",
           sortable: true
         },
         ports: {
-          text: "Ports",
-          value: "ports",
+          title: "Ports",
+          key: "ports",
           sortable: true
         },
         created: {
-          text: "Created At",
-          value: "created",
+          title: "Created At",
+          key: "created",
           sortable: true
         }
       },
@@ -417,14 +414,18 @@ export default {
     };
   },
   methods: {
+    portHref(port) { return containerPortLink(port, window.location); },
+    loadTerminal() {
+      return import("@/components/ContainerTerminal.vue");
+    },
     ...mapActions({
       readApps: "apps/readApps",
       AppAction: "apps/AppAction",
       Update: "apps/AppUpdate",
       checkUpdateStore: "apps/checkAppUpdate"
     }),
-    handleRowClick(appName) {
-      this.$router.push({ path: `/apps${appName.Name}` });
+    handleRowClick(event, { item }) {
+      this.$router.push({ path: `/apps/${encodeURIComponent(item.name.replace(/^\//, ''))}` });
     },
     editClick(appName) {
       this.$router.push({ path: `/apps/edit/${appName.Name}` });
@@ -520,6 +521,29 @@ export default {
 </script>
 
 <style>
+.apps-list > .apps-card {
+  overflow: visible;
+}
+.apps-list > .apps-card > .v-card-title:first-child {
+  display: flex;
+  align-items: center;
+  overflow: visible;
+  white-space: normal;
+}
+.apps-search-wrap {
+  width: 400px;
+  max-width: 100%;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .apps-list > .v-card > .v-card-title:first-child {
+    flex-wrap: wrap;
+  }
+  .apps-search-wrap {
+    flex-basis: 100%;
+    margin-top: 8px;
+  }
+}
 tr:hover {
   cursor: pointer;
 }

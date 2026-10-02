@@ -212,7 +212,7 @@ export default {
       polling: true,
       pollingInterval: 5000,
       loading: false,
-      hostLabel: 'prod-01',
+      hostLabel: window.location.hostname || 'localhost',
       pollingOptions: [
         { text: "2s (Fast)", value: 2000 },
         { text: "5s (Normal)", value: 5000 },
@@ -344,11 +344,13 @@ export default {
       this.$router.push({ path: `/apps/${appName}/logs` });
     },
     async handleContainerAction(action, appName) {
+      if (action === "remove" && !window.confirm(`Remove container ${appName}?`)) return;
       try {
         this.loading = true;
-        await axios.get(`/containers/${appName}/${action}`);
+        if (action === "remove") await axios.delete(`/containers/${encodeURIComponent(appName)}`);
+        else await axios.post(`/containers/${encodeURIComponent(appName)}/${action}`);
         setTimeout(() => { this.refresh(); }, 1000);
-        this.$store.commit('snackbar/setSnack', { message: `Container ${action}ed successfully.`, color: 'success' }, { root: true });
+        this.$store.commit('snackbar/setMessage', `Container ${action}ed successfully.`, { root: true });
       } catch (err) {
         this.$store.commit('snackbar/setErr', err, { root: true });
       } finally {

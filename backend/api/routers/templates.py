@@ -65,6 +65,17 @@ async def match(
 
 
 @router.get(
+    "/app/{id}",
+    response_model=schemas.TemplateItem,
+)
+async def read_app_template(
+    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+):
+    await auth_check(Authorize)
+    return await crud.read_app_template(db=db, app_id=id)
+
+
+@router.get(
     "/{id}",
     response_model=schemas.TemplateItems,
 )
@@ -127,6 +138,8 @@ def _parse_uploaded_json(raw: bytes):
         raise HTTPException(
             status_code=400, detail=f"Catalog is not valid JSON: {err.msg} (line {err.lineno})"
         )
+    except RecursionError:
+        raise HTTPException(422, "Catalog is too deeply nested") from None
 
 
 @router.post("/upload", response_model=schemas.TemplateRead)
@@ -174,7 +187,7 @@ async def edit_template_content(
     )
 
 
-@router.get(
+@router.post(
     "/{id}/refresh",
     response_model=schemas.TemplateRead,
 )
@@ -183,14 +196,3 @@ async def refresh_template(
 ):
     await _require_superuser(Authorize, db)
     return await crud.refresh_template(db=db, template_id=id)
-
-
-@router.get(
-    "/app/{id}",
-    response_model=schemas.TemplateItem,
-)
-async def read_app_template(
-    id: int, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
-):
-    await auth_check(Authorize)
-    return await crud.read_app_template(db=db, app_id=id)

@@ -2,7 +2,6 @@
   <v-dialog
     v-model="dialog"
     fullscreen
-    hide-overlay
     transition="dialog-bottom-transition"
     @keydown.esc="close"
   >
@@ -165,7 +164,8 @@ export default {
 
       if (!this.containerId) return;
 
-      const url = `/api/containers/${this.containerId}/logs?tail=${this.tailLines}&follow=true&timestamps=${this.timestamps}`;
+      const origin = window.location.origin;
+      const url = `${origin}/api/containers/${this.containerId}/logs?tail=${this.tailLines}&follow=true&timestamps=${this.timestamps}`;
 
       this.eventSource = new EventSource(url);
 
@@ -199,7 +199,9 @@ export default {
 
       this.eventSource.onerror = err => {
         console.error("EventSource failed:", err);
+        this.closeLogs();
       };
+      this.eventSource.addEventListener("end", () => this.closeLogs());
     },
     closeLogs() {
       if (this.eventSource) {
@@ -234,11 +236,15 @@ export default {
     downloadLogs() {
       const element = document.createElement("a");
       const file = new Blob([this.logs.join("\n")], { type: "text/plain" });
-      element.href = URL.createObjectURL(file);
+      const objectUrl = URL.createObjectURL(file);
+      element.href = objectUrl;
       element.download = `${this.containerName}_logs.txt`;
+      // F30: revoke the blob URL after triggering the download.
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 2000);
       document.body.appendChild(element);
       element.click();
       document.body.removeChild(element);
+      setTimeout(() => URL.revokeObjectURL(element.href), 0);
 
       if (this.$toast) {
         this.$toast.success("Logs downloaded");

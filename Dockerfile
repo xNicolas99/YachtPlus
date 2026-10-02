@@ -1,5 +1,5 @@
 # Build Vue.js frontend
-FROM node:20-alpine AS build-stage
+FROM node:22-alpine AS build-stage
 
 ARG VITE_VERSION
 ENV VITE_VERSION=${VITE_VERSION}
@@ -7,16 +7,26 @@ ENV VITE_VERSION=${VITE_VERSION}
 WORKDIR /app
 COPY ./frontend/package*.json ./
 
-# DEBUG STEPS
-RUN node -v && npm -v
-RUN npm ci --include=dev || npm install --include=dev
+# A release build must use the committed lockfile. Falling back to
+# npm install silently changes dependency versions when the lockfile drifts.
+RUN npm ci --include=dev
 
 COPY ./frontend/ ./
 
-# Verify structure before build
-RUN ls -la
+RUN npm run build
 
-RUN npm run build --verbose
+# Build Python wheels in a dedicated stage so C extensions and the
+# compiler toolchain don't bloat the final runtime image.
+FROM python:3.11-slim AS python-deps
+
+WORKDIR /deps
+
+# Install build dependencies and system libraries needed to compile packages.
+RUN apt-get update && apt-get install -y --no-install-recommends     build-essential     python3-dev     default-libmysqlclient-dev     pkg-config     ca-certificates     && rm -rf /var/lib/apt/lists/*
+
+COPY ./backend/requirements.txt ./
+COPY ./backend/requirements.lock ./
+RUN pip install --upgrade pip setuptools wheel &&     pip wheel --no-cache-dir --wheel-dir /deps/wheels --require-hashes -r requirements.lock
 
 # Setup Container and install FastAPI backend
 FROM python:3.11-slim AS deploy-stage
@@ -37,37 +47,49 @@ RUN groupadd -r appuser -g 1000 && \
 
 WORKDIR /api
 
-# Install build dependencies and system libraries
-# Switching to apt-get for Debian Slim
+# Runtime packages only; native extensions are built in python-deps.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    python3-dev \
-    default-libmysqlclient-dev \
-    pkg-config \
     nginx \
     curl \
     procps \
-    gosu \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Docker Compose 2.x as a standalone binary and as Docker CLI plugin.
-# The backend intentionally calls `docker compose` (plugin form). We also
-# keep the `docker-compose` symlink for any external scripts/tools.
-RUN mkdir -p /usr/local/lib/docker/cli-plugins && \
-    curl --retry 5 --retry-all-errors --retry-delay 5 -L "https://github.com/docker/compose/releases/download/v2.29.1/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/lib/docker/cli-plugins/docker-compose && \
-    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose && \
-    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose && \
-    ln -s /usr/local/lib/docker/cli-plugins/docker-compose /usr/local/bin/docker
-
-# Upgrade pip, setuptools, and wheel
-RUN pip3 install --upgrade pip setuptools wheel
-
-# Copy requirements.txt first
-COPY ./backend/requirements.txt ./
-
-# Install Python packages from requirements.txt
-RUN pip3 install -r requirements.txt --no-cache-dir --verbose
+# Install the Docker CLI and the Compose v2 plugin. The backend calls
+# `docker compose` (plugin form), which requires the real Docker CLI plus the
+# plugin in /usr/local/lib/docker/cli-plugins. The previous build symlinked
+# `/usr/local/bin/docker` directly to the Compose binary, causing
+# `unknown docker command: "compose compose"`.
+# Architecture: download.docker.com only publishes static docker tgz for
+# x86_64 and aarch64 under the generic path used below. For other architectures
+# the build would need an alternative Docker CLI source.
+ARG TARGETARCH
+ARG DOCKER_VERSION=27.1.2
+ARG COMPOSE_VERSION=2.29.1
+RUN set -eux; \
+    mkdir -p /usr/local/lib/docker/cli-plugins; \
+    case "${TARGETARCH:-$(uname -m)}" in \
+        amd64|x86_64)  docker_arch=x86_64 ;; \
+        arm64|aarch64) docker_arch=aarch64 ;; \
+        *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+        "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz" \
+        -o /tmp/docker.tgz && \
+    tar -xzf /tmp/docker.tgz -C /tmp && \
+    mv /tmp/docker/docker /usr/local/bin/docker && \
+    chmod +x /usr/local/bin/docker && \
+    rm -rf /tmp/docker /tmp/docker.tgz && \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+        "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${docker_arch}" \
+        -o /usr/local/lib/docker/cli-plugins/docker-compose && \
+    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+        "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${docker_arch}.sha256" \
+        -o /tmp/compose.sha256 && \
+    compose_sha="$(awk '{print $1}' /tmp/compose.sha256)" && \
+    printf '%s  %s\n' "$compose_sha" /usr/local/lib/docker/cli-plugins/docker-compose | sha256sum -c - && \
+    rm /tmp/compose.sha256 && \
+    chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # Create directories and set permissions for appuser. Pre-create the
 # scratch dirs nginx.conf points at — Dockerfile bake-time chown is more
@@ -75,13 +97,31 @@ RUN pip3 install -r requirements.txt --no-cache-dir --verbose
 # on inodes / quota (`mkdir() ... failed: ENOSPC` was the production
 # crashloop). We also create /var/lib/nginx/body for nginx versions that
 # fall back to it before reading the new http-block temp_path directives.
-RUN mkdir -p /config \
+RUN mkdir -p /config/security /compose /run/yachtplus-security \
         /var/www/client_body_temp /var/www/proxy_temp \
         /var/www/fastcgi_temp /var/www/uwsgi_temp /var/www/scgi_temp \
         /var/run/nginx /var/cache/nginx /var/log/nginx \
         /var/lib/nginx /var/lib/nginx/body /var/lib/nginx/tmp \
         /etc/nginx/conf.d && \
-    chown -R appuser:appuser /config /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx /var/cache/nginx /api
+    touch /config/security/auth.log /var/run/nginx/trusted-proxies.conf /var/run/nginx/trusted-proxy-geo.conf && \
+    chown -R appuser:appuser /config /compose /var/www /var/log/nginx /var/lib/nginx /etc/nginx /var/run/nginx /var/cache/nginx /api && \
+    chown 1001:1001 /run/yachtplus-security && \
+    chmod 750 /config/security && chmod 755 /run/yachtplus-security && chmod 640 /config/security/auth.log
+
+# Copy pre-built wheels and the requirements manifest from the
+# python-deps stage BEFORE installing them. The previous Dockerfile had
+# the pip install RUN before these COPY lines, so /deps/requirements.txt
+# did not exist yet and the build failed with ENOENT.
+COPY --from=python-deps /deps/requirements.txt /deps/requirements.txt
+COPY --from=python-deps /deps/requirements.lock /deps/requirements.lock
+COPY --from=python-deps /deps/wheels /deps/wheels
+
+# Install pre-built wheels from the python-deps stage. This keeps the
+# deploy image free of compilers and build headers.
+# Source distributions were verified against the lock hashes in python-deps.
+# Locally built wheel hashes differ from source hashes, so install the exact
+# verified-stage wheel set offline rather than rechecking source hashes here.
+RUN pip3 install --no-cache --no-index /deps/wheels/*.whl
 
 # Copy the backend code with correct ownership
 COPY --chown=appuser:appuser ./backend/ ./
@@ -99,13 +139,21 @@ COPY --chown=appuser:appuser nginx.conf /etc/nginx/nginx.conf
 # even when the box is offline (no GitHub fetch needed).
 COPY --chown=appuser:appuser configs/ /api/configs/
 
+# Image-level release checks used by CI and operators.
+COPY --chown=appuser:appuser scripts/image-smoke-test.sh /scripts/image-smoke-test.sh
+
 # Expose ports
 EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl --fail --silent http://127.0.0.1:8080/api/setup/status > /dev/null || exit 1
 
 # Start script
 COPY --chown=appuser:appuser backend/start.sh /start.sh
 RUN chmod +x /start.sh
 
-# Run as root (start.sh handles dropping privileges)
-USER root
+# The entrypoint and every application process run without host capabilities.
+ENV FORWARDED_ALLOW_IPS=""
+ENV YACHT_FAIL2BAN_REQUIRED="true"
+USER 1000:1000
 CMD ["/start.sh"]

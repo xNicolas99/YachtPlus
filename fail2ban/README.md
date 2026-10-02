@@ -1,33 +1,41 @@
-# Fail2Ban Setup for YachtPlus
+# Active fail2ban protection
 
-YachtPlus includes built-in rate limiting (5 attempts/minute), but for infrastructure-level blocking (iptables), you can use Fail2Ban.
+Both Compose files automatically start this real fail2ban sidecar and require
+its health check before launching YachtPlus. UID 1001; no network, Docker
+socket or firewall capabilities.
 
-## 1. Quick Setup (Host)
+- Jail `yachtplus`: five failures within 900 seconds; 3600-second ban.
+- Input `/config/security/auth.log`, shared read-only into the guard. The log
+  contains only UTC timestamp and canonical IP, never credentials/usernames.
+- `action.d/yachtplus-state.conf` writes atomic persisted ban/expiry files.
+- Output `/run/yachtplus-security`: guard writable, app read-only. IPv6 filenames
+  replace colons with underscores; IPv4-mapped addresses normalize to IPv4.
+- State root and `bans` directories are owned by UID 1001 and traversable
+  with mode `0755`; published JSON files use `0644`. Only the guard writes
+  through its mount. Its action explicitly restores `bans` to `0755` at each
+  start, including existing volumes: fail2ban's `umask 077` otherwise turns
+  `mkdir(mode=0755)` into `0700`, unreadable by the separate app UID 1000.
+- Supervisor validates real jail, action and active ban state before refreshing
+  readiness. Missing/invalid/stale mandatory state fails closed in the app.
+- nginx/backend enforce bans across UI, setup, authenticated API and terminal
+  traffic. This action does not install host firewall rules or protect unrelated
+  services. Existing HTTP streams are not cancelled retroactively.
 
-If you are running Fail2Ban on the host machine:
-
-1. Copy `filter.d/yachtplus.conf` to `/etc/fail2ban/filter.d/yachtplus.conf`.
-2. Append the content of `jail.local` to `/etc/fail2ban/jail.local`.
-3. Adjust `logpath` in `jail.local` to point to your container logs or mounted log volume.
-   - *Tip:* If using Docker, you might need to map the logs or use `journald` backend if logging driver is json-file.
-
-## 2. Docker Sidecar
-
-To run Fail2Ban as a container alongside YachtPlus, add this to your `docker-compose.yml`:
-
-```yaml
-services:
-  fail2ban:
-    image: crazymax/fail2ban:latest
-    network_mode: "host"
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-    volumes:
-      - ./fail2ban/filter.d:/etc/fail2ban/filter.d:ro
-      - ./fail2ban/jail.local:/etc/fail2ban/jail.d/yachtplus.local:ro
-      - /var/log:/var/log:ro # Map where your logs are
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+```bash
+docker compose exec -T fail2ban fail2ban-client -s /tmp/fail2ban.sock status yachtplus
+docker compose exec -T fail2ban fail2ban-client -s /tmp/fail2ban.sock get yachtplus banip
+docker compose exec -T fail2ban stat -c '%a %u:%g %n' /run/yachtplus-security /run/yachtplus-security/bans
+docker compose exec -T yachtplus python -c "from pathlib import Path; p = Path('/run/yachtplus-security'); print((p / 'ready.json').read_text()); print([item.name for item in (p / 'bans').iterdir()])"
+docker compose logs fail2ban yachtplus
+python3 scripts/security-stack-smoke.py --timeout 600
 ```
 
-**Note:** The backend logs must be accessible to Fail2Ban. YachtPlus logs to stdout/stderr by default, which Docker captures. You may need to configure the `yachtplus` service to log to a file or use a logging driver that Fail2Ban can read.
+The image build executes the real filter with `fail2ban-regex`. The Linux stack
+check performs real failed logins, ban/unban, persistence and protection outage
+recovery. See [deployment and migration](../docs/SECURITY_DEPLOYMENT.md) for HTTP
+proxy trust, recovery and the independent database login locks.
+
+A healthy guard can still leave the app unavailable if the app cannot traverse
+the state directory. Rebuild/recreate the corrected guard to repair its ban
+directory mode while preserving bans, and verify readability as the app UID.
+Keep the app's state mount read-only and mandatory protection enabled.

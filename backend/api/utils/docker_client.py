@@ -13,9 +13,9 @@ Always use :func:`get_sync_docker_client` for the sync SDK.
 from contextlib import contextmanager
 import docker
 
-from api.settings import Settings
+from api.settings import get_settings
+_settings = get_settings()
 
-_settings = Settings()
 
 
 def get_sync_docker_client() -> docker.DockerClient:

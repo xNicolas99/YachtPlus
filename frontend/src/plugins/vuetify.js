@@ -4,8 +4,8 @@ import 'vuetify/styles'
 
 // Vuetify
 import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
+// vite-plugin-vuetify imports only the components/directives used in templates.
+// Registering the entire library here defeats route splitting and tree shaking.
 
 // Helper to update theme dynamically
 export function updateTheme(vuetifyInstance, primaryColor, secondaryColor) {
@@ -29,10 +29,8 @@ const savedSecondary = localStorage.getItem('theme_secondary');
 // raw markup that needs the exact same colours can use the --yp-* CSS
 // variables defined in yp-design.css.
 export default createVuetify({
-  components,
-  directives,
   theme: {
-    defaultTheme: 'dark',
+    defaultTheme: localStorage.getItem('dark_theme') === 'false' ? 'light' : 'dark',
     themes: {
       dark: {
         dark: true,

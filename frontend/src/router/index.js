@@ -64,7 +64,7 @@ const routes = [
       },
       {
         name: "View Applications",
-        path: "/",
+        path: "",
         component: () => import("../components/applications/ApplicationsList.vue")
       },
       {
@@ -106,7 +106,7 @@ const routes = [
     children: [
       {
         name: "View Projects",
-        path: "/",
+        path: "",
         component: () => import("../components/compose/ProjectList.vue")
       },
       {
@@ -165,6 +165,16 @@ const routes = [
         name: "Audit Logs",
         path: "audit",
         component: () => import("../components/serverSettings/AuditLogs.vue")
+      },
+      {
+        name: "SMTP Settings",
+        path: "smtp",
+        component: () => import("../components/settings/SMTPSettings.vue")
+      },
+      {
+        name: "Security Settings",
+        path: "security",
+        component: () => import("../components/settings/NetworkAccessSecurity.vue")
       },
       {
         name: "Prune",

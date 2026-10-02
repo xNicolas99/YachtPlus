@@ -143,11 +143,11 @@ export default {
     dialog: false,
     loading: false,
     headers: [
-      { text: "Username", value: "username" },
-      { text: "Admin", value: "is_superuser" },
-      { text: "Active", value: "is_active" },
-      { text: "2FA", value: "is_2fa_enabled" },
-      { text: "Actions", value: "actions", sortable: false }
+      { title: "Username", key: "username" },
+      { title: "Admin", key: "is_superuser" },
+      { title: "Active", key: "is_active" },
+      { title: "2FA", key: "is_2fa_enabled" },
+      { title: "Actions", key: "actions", sortable: false }
     ],
     users: [],
     editedIndex: -1,
@@ -224,9 +224,12 @@ export default {
 
     deleteUser(item) {
       if (confirm("Are you sure you want to delete this user?")) {
-        axios.delete(`/api/auth/users/${item.id}`).then(() => {
+        axios.delete(`/auth/users/${item.id}`).then(() => {
           this.loadUsers();
           this.notify("User deleted", "success");
+        }).catch(err => {
+          // F23: unhandled rejection fix.
+          this.notify("Error deleting user: " + (err.response?.data?.detail || err.message), "error");
         });
       }
     },
@@ -243,7 +246,7 @@ export default {
       if (this.editedIndex > -1) {
         // Edit
         axios
-          .put(`/api/auth/users/${this.editedItem.id}`, this.editedItem)
+          .put(`/auth/users/${this.editedItem.id}`, this.editedItem)
           .then(() => {
             this.loadUsers();
             this.notify("User updated", "success");
@@ -251,7 +254,7 @@ export default {
           })
           .catch(err => {
             this.notify(
-              "Error updating user: " + err.response.data.detail,
+              "Error updating user: " + err.response?.data?.detail,
               "error"
             );
           });
@@ -266,7 +269,7 @@ export default {
           })
           .catch(err => {
             this.notify(
-              "Error creating user: " + err.response.data.detail,
+              "Error creating user: " + err.response?.data?.detail,
               "error"
             );
           });

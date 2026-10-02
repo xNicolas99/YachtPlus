@@ -1,31 +1,35 @@
 <template lang="html">
-  <div class="networks-list component" style="max-width: 90%">
+  <div class="networks-list component" style="width: 100%">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
           indeterminate
           v-if="isLoading"
           color="primary"
-          bottom
+          location="bottom"
         />
       </v-fade-transition>
-      <v-card-title class="primary font-weight-bold">
+      <v-card-title class="primary font-weight-bold d-flex flex-wrap ga-2">
         Networks
         <v-btn
           class="ml-2"
           color="secondary"
           :to="{ path: `/resources/networks/new` }"
+          aria-label="Create network"
+          title="Create network"
         >
           <v-icon>mdi-plus</v-icon>
         </v-btn>
-        <v-tooltip bottom>
-          <template v-slot:activator="{ on, attrs }">
+        <v-tooltip location="bottom">
+          <template v-slot:activator="{ props }">
             <v-btn
               class="ml-2"
               color="warning"
-              v-bind="attrs"
-              v-on="on"
-              @click="pruneNetworks"
+              v-bind="props"
+              :loading="pruning"
+              :disabled="pruning"
+              aria-label="Prune unused networks"
+              @click="pruneDialog = true"
             >
               <v-icon>mdi-broom</v-icon>
             </v-btn>
@@ -47,14 +51,14 @@
         class="mx-auto network-datatable foreground"
         :headers="headers"
         :items="networks"
+        :loading="isLoading"
+        loading-text="Loading networks..."
         :items-per-page="25"
-        :footer-props="{
-          'items-per-page-options': [15, 25, 50, -1]
-        }"
+        :items-per-page-options="[15, 25, 50, -1]"
         :search="search"
         @click:row="handleRowClick"
       >
-        <template slot="no-data">
+        <template #no-data>
           <div>
             No Networks available.
           </div>
@@ -67,31 +71,32 @@
             <v-spacer />
 
             <v-chip
-              outlined
-              small
+              variant="outlined"
+              size="small"
               color="orange lighten-1"
               class="align-center mt-1"
               label
               v-if="item.inUse == false"
               >Unused</v-chip
             >
-            <v-menu close-on-click close-on-content-click offset-y>
-              <template v-slot:activator="{ on, attrs }">
+            <v-menu close-on-click close-on-content-click>
+              <template v-slot:activator="{ props }">
                 <v-btn
                   icon
                   class="align-streatch"
                   size="small"
-                  v-bind="attrs"
-                  v-on="on"
+                  v-bind="props"
+                  @click.stop
+                  :aria-label="`Actions for ${item.Name}`"
                 >
                   <v-icon>mdi-dots-horizontal</v-icon>
                 </v-btn>
               </template>
-              <v-list color="foreground" dense>
+              <v-list color="foreground" density="compact">
                 <v-list-item @click="networkDetails(item.Id)">
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-eye</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>View</v-list-item-title>
                 </v-list-item>
                 <v-divider />
@@ -101,9 +106,9 @@
                     deleteDialog = true;
                   "
                 >
-                  <v-list-item-icon>
+                  <span>
                     <v-icon>mdi-delete</v-icon>
-                  </v-list-item-icon>
+                  </span>
                   <v-list-item-title>Delete</v-list-item-title>
                 </v-list-item>
               </v-list>
@@ -143,6 +148,17 @@
       </v-data-table>
     </v-card>
 
+    <v-dialog v-model="pruneDialog" max-width="420" :persistent="pruning">
+      <v-card>
+        <v-card-title>Prune unused networks?</v-card-title>
+        <v-card-text>Remove every network that is not attached to a container on this Docker host. Other projects may need to recreate their networks.</v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="pruning" @click="pruneDialog = false">Cancel</v-btn>
+          <v-btn color="warning" :loading="pruning" :disabled="pruning" @click="pruneNetworks">Prune</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
     <v-dialog v-if="selectedNetwork" v-model="deleteDialog" max-width="290">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
@@ -154,16 +170,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn text @click="deleteDialog = false">
+          <v-btn variant="text" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
-            text
+            variant="text"
             color="error"
-            @click="
-              deleteNetwork(selectedNetwork.Id);
-              deleteDialog = false;
-            "
+            :loading="deleting"
+            :disabled="deleting"
+            @click="confirmDelete"
           >
             Delete
           </v-btn>
@@ -181,73 +196,73 @@ export default {
     return {
       selectedNetwork: null,
       deleteDialog: false,
+      deleting: false,
+      pruning: false,
+      pruneDialog: false,
       search: "",
       headers: [
         {
-          text: "Name",
-          value: "Name",
+          title: "Name",
+          key: "Name",
           sortable: true
         },
         {
-          text: "Project",
-          value: "Project",
+          title: "Project",
+          key: "Project",
           sortable: true
         },
         {
-          text: "ID",
-          value: "Id",
+          title: "ID",
+          key: "Id",
           sortable: true
         },
         {
-          text: "Driver",
-          value: "Driver",
+          title: "Driver",
+          key: "Driver",
           sortable: true
         },
         {
-          text: "Created",
-          value: "Created",
+          title: "Created",
+          key: "Created",
           sortable: true
         }
       ]
     };
   },
   methods: {
+    async confirmDelete() {
+      if (this.deleting) return;
+      this.deleting = true;
+      try {
+        if (await this.deleteNetwork(this.selectedNetwork.Id)) this.deleteDialog = false;
+      } finally {
+        this.deleting = false;
+      }
+    },
     ...mapActions({
       readNetworks: "networks/readNetworks",
       deleteNetwork: "networks/deleteNetwork",
       writeNetwork: "networks/writeNetwork"
     }),
-    handleRowClick(item) {
+    handleRowClick(event, { item }) {
       this.$router.push({ path: `/resources/networks/${item.Id}` });
     },
     networkDetails(networkid) {
       this.$router.push({ path: `/resources/networks/${networkid}` });
     },
-    pruneNetworks() {
-      this.$store.commit("snackbar/setLoading", true);
-      axios({
-        url: "/settings/prune/networks",
-        method: "GET",
-        responseType: "text/json"
-      })
-        .then(response => {
-          let action = Object.keys(response.data)[0];
-          let deletedNumber = 0;
-          if (response.data[action] != null) {
-            deletedNumber = response.data[action].length;
-          }
-          this.$store.commit(
-            "snackbar/setMessage",
-            deletedNumber + " " + action
-          );
-          this.readNetworks();
-        })
-        .catch(err => {
-          this.$store.commit("snackbar/setErr", err);
-        })
-        .finally(() => {
-          this.$store.commit("snackbar/setLoading", false);
-        });
+    async pruneNetworks() {
+      if (this.pruning) return;
+      this.pruning = true;
+      try {
+        const { data } = await axios.post('/settings/prune/networks');
+        this.$store.commit('snackbar/setMessage', `${data?.NetworksDeleted?.length || 0} networks pruned.`);
+        this.pruneDialog = false;
+        await this.readNetworks();
+      } catch (error) {
+        this.$store.commit('snackbar/setErr', error);
+      } finally {
+        this.pruning = false;
+      }
     }
   },
   computed: {
@@ -267,6 +282,6 @@ export default {
   max-width: 30vw;
 }
 .network-datatable {
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 </style>
