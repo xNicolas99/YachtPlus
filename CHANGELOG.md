@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [3.0.2] - 2026-10-02 14:44 — Run R-023: Schutzstack-Startfehler — unreleased verification candidate
+## [3.0.2] - 2026-10-02 14:44 — Run R-023: Schutzstack-Startfehler — verified candidate
 
 - Commit: dieser Commit
 - Version: `3.0.2`; kanonische Paket- und Lockfile-Version stimmen überein.
@@ -41,9 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PR-Image `yachtplus:ci-smoke`, Docker-Image-ID
   `sha256:aa5fee1f0e53600f37cb48f2ac3a43d783326a0e97a543fe561495441a24efae`;
   diese lokale Image-ID ist kein veröffentlichtes Registry-Manifest-Digest.
-- Offen: CodeQL-Ergebnisse und alle erforderlichen Checks auf dem zuletzt
-  korrigierten Kandidaten-HEAD müssen erfolgreich sein. Die CI-Nachkorrektur
-  unten gehört zu derselben Lieferung `3.0.2`; Merge nach `master` steht aus.
+- Freigaberegel: Die Nachkorrekturen unten gehören zu derselben Lieferung
+  `3.0.2`. Merge/Publikation erfordern erfolgreiche Pflichtchecks auf dem
+  tatsächlichen letzten HEAD über PR/Actions; die Nachweise sind unten belegt.
 
 ### Run R-024 — CodeQL-Nachkorrektur derselben Lieferung 3.0.2
 
@@ -62,11 +62,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   24 zusätzlicher Regressionen, protokolliert in
   `report/audit-ci-backend-r024-final.txt`. Die unveränderten 217 Frontend-
   Tests, Produktionsbuild/Bundle-Grenzen und Migration wurden für `3.0.2`
-  bereits erfolgreich geprüft. Der Linux-Skript-/Image-/Schutzstack-Nachweis
-  oben gilt für `ac869d7`, noch nicht für diesen Folgecommit.
+  bereits erfolgreich geprüft. Der damalige Linux-Skript-/Image-/Schutzstack-
+  Nachweis oben galt für `ac869d7`; den Folgecommit belegt Run R-025.
 - Freigabe: Erst nach erfolgreichen Pflichtchecks inklusive CodeQL-Results
   auf dem tatsächlichen letzten Commit nach `master` mergen. Der Nachweis
   auf `ac869d7` allein bestätigt den Folgecommit nicht.
+
+### 2026-10-02 15:05 — Run R-025: Abschließende Doku derselben Lieferung 3.0.2
+
+- Commit: dieser Doku-Folgecommit; Quellenstand
+  `93fa8da2332cbd22c59f27d6871ea67828bcb17b`. Kein zusätzlicher Versionsschritt.
+- Ergebnis: [PR-CI 37010339253](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339253)
+  und [Push-CI 37010332100](https://github.com/xNicolas99/YachtPlus/actions/runs/37010332100)
+  bestanden Backend (884), Frontend (217), alle 44 Linux-Skriptprüfungen,
+  Produktionsbuild/Bundle-Grenzen, Migrationen, Image-Build/Inhalts-/Startprüfung,
+  Ruff und den echten Linux-Schutzstack mit Ban/Unban, Persistenz und
+  Ausfall/Wiederherstellung der Pflichtprotection.
+- Ergebnis: [CodeQL 37010339245](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339245)
+  bestand Python-/JavaScript-Analyse und Results-Check `110848620953`:
+  "No new alerts", 0 Annotations. Die früheren drei High-Befunde blockieren
+  diesen Quellenstand nicht mehr.
+- Geändert: AGENTS und Behebungsbericht auf diese belegten Ergebnisse
+  abgeglichen; historische Fehler-/Run-Nachweise erhalten.
+- Aufgeräumt: temporäre Datenbank der frischen Migrationsprüfung entfernt;
+  Nachweislogs und wiederverwendete Entwicklungsumgebung erhalten.
+- Grenzen: Live-PostgreSQL/MySQL, Multiarch und echte Browser-/Docker-Terminal-
+  Abläufe bleiben ungeprüft. Merge und Registry-Publikation werden durch die
+  erfolgreichen Pflichtchecks des tatsächlichen letzten HEAD freigegeben;
+  dieser Dokumentationseintrag behauptet weder einen Merge noch einen Push
+  eines Registry-Manifests.
 
 ## [3.0.1] - 2026-10-02 — unreleased verification candidate
 

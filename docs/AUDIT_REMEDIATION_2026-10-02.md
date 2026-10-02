@@ -1,10 +1,16 @@
 # Prüfung des eingereichten 117-Punkte-Berichts
 
-Stand: 2026-10-02, lokaler YachtPlus-Arbeitsstand, Version 3.0.1 als unveröffentlichter Prüfkandidat.
+Ursprünglicher Prüfstand: 2026-10-02, lokaler YachtPlus-Arbeitsstand,
+Version 3.0.1. Die historischen Zwischenstände sind unten erhalten.
 
-Nachprüfung: Der Linux-CI-Lauf des Kandidaten schlug mit den unten ergänzten
-Schutzstack-Startfehlern fehl. Die Korrektur wird als Kandidat 3.0.2 geprüft;
-die Nachweise für 3.0.1 belegen diesen neuen Stand nicht.
+Aktueller belegter Stand: **Version 3.0.2 als verifizierter Kandidat**,
+Quellencommit `93fa8da2332cbd22c59f27d6871ea67828bcb17b`:
+884 Backend-, 217 Frontend- und alle 44 Linux-Skriptprüfungen bestanden;
+Image-/Start-, Migrations-, echter Schutzstack- und CodeQL-Nachweis in R-025.
+Die früheren Schutzstack-Startfehler und drei High-CodeQL-Befunde sind in
+diesem Stand korrigiert. Merge/Publikation richten sich nach den Pflichtchecks
+des tatsächlichen letzten HEAD über PR/Actions. Dieser Bericht behauptet
+keinen ausgeführten Merge oder eine Registry-Publikation.
 
 Die Prüfung bezog vorhandene lokale Änderungen ein. Bereits korrigierte
 Punkte wurden erneut am aktuellen Code geprüft; zusätzliche Fehler erhielten
@@ -44,7 +50,7 @@ Der zusammengeführte Stand ist unten mit seinen abschließenden Prüfungen doku
 | 27–32 | Host-Pfade, Edit/Rollback, Geheimnisse in App-/Compose-Antworten, Compose-Inhalte/Umgebung | Normalisierte Mount-/Device-Regeln und Admin-Grenzen; Container-Edit mit erforderlichen Rechten und Rollback; App-/Update-Details erfordern die Operatorberechtigung, normale Compose-Projektlisten enthalten keine Umgebungswerte. Compose-Inhalte validiert und sichere Standardprofile eingesetzt; Subprozesse erhalten nur erlaubte Verbindungs-/Betriebsvariablen. |
 | 33–37 | Terminal-Auth, Compose-Rechte/Threadpool, Fehlertexte, Aktionen, Self-Update | Terminal nur mit Cookie und aktiver Session; pull/restart und down/delete korrekt geschützt; Compose-Pool auf zwei Threads begrenzt; Daemon-Details und ungültige HTTP-Statuswerte abgeschirmt; Aktionen explizit zugelassen. Update-Worker verwenden den konfigurierten Proxy und keinen Host-Socket-Mount. |
 | 38–40 | SSRF, unbeschränkte Fetches/YAML, SMTP-Verbindung | DNS-Adressen einmal sicher aufgelöst und beim Socket-Aufbau verwendet; CGNAT/NAT64/interne Ziele gesperrt; Größen-, Zeit- und YAML-Komplexitätsgrenzen. SMTP-Zertifikats-/Hostname-Prüfung, Timeout und SMTPS 465; Alerts außerhalb des Login-Pfads und begrenzt. |
-| 41–43 | SPA-Header, Proxy-Aussagen, Compose-Beispiel | nginx liefert CSP, X-Frame-Options und weitere Header auch für die SPA. Proxy-Dokumentation beschreibt tatsächliche Grenzen; Versions-/Ping-Freigaben und Image-/Start-Konfiguration korrigiert. Linux-Deploymentprüfung erfolgt erst in CI. |
+| 41–43 | SPA-Header, Proxy-Aussagen, Compose-Beispiel | nginx liefert CSP, X-Frame-Options und weitere Header auch für die SPA. Proxy-Dokumentation beschreibt tatsächliche Grenzen; Versions-/Ping-Freigaben und Image-/Start-Konfiguration korrigiert. Linux-Deploymentprüfung in CI bestanden, Nachweis R-025. |
 | 44–49 | aiodocker Exec/Logs, Deploy-Netzwerk, Ressourcen, Prune, Unused | API-Verträge von aiodocker 0.25 verwendet; Terminal-Resize separat, Disconnect beendet Streamaufgaben; Logs begrenzt; konfliktfreie Netzwerkparameter; Objekt-APIs für Volumes/Netzwerke und echte Prune-API; Containerobjekte korrekt ausgewertet. Backend-Regressionstests mit Docker-Mocks. |
 | 50–53 | Templates: Async-Loading, Portainer v2, Refresh, Import | Beziehungen auch beim Edit eager geladen; Portainer-v2-Wrapper und String-Commands unterstützt; Ports/Typ/Fehlerbehandlung korrigiert; Import vollständig vor Änderungen validiert, unbekannte Felder gefiltert und Fremd-IDs verworfen. Leere Pflichtfelder werden mit 422 abgewiesen. |
 | 54–58 | Scheduler, Watchtower-Ergebnis, Update-Fehler, Self-Erkennung | Compose-Auto-Update standardmäßig aus, explizites Opt-in; Leader-Lock; Projektname validiert und Aktionsergebnis abgewartet; Worker-Exit/Timeout/Rollback überprüft. cgroup-v2 unterstützt über immutable Docker-HOSTNAME; Self-Restart nutzt einen eigenen Client nach dem Request. Reales Self-Update noch nicht ausgeführt. |
@@ -56,9 +62,9 @@ Der zusammengeführte Stand ist unten mit seinen abschließenden Prüfungen doku
 | 84–88 | Refresh, F5-Session, Terminal-UI, Zeilenklick, Container-Duplikate | Gemeinsamer Refresh auch für parallele Store-/Interceptor-Aufrufe mit Fehlerweitergabe und Timeout; Cookie-Session bei Reload überprüft; Terminal-Auswahl/Resize/Benachrichtigungen korrigiert; Vuetify-Zeilenereignisse korrekt verarbeitet; Container über echte ID oder vorhandenen Namen zugeordnet. |
 | 89–98 | Theme, Snackbar, Suche, Self-Update-UI, Passwort, Logout, Labels, Datum, Compose-Status, Charts | Theme-Refs im Options-API korrekt und Farben sofort aktualisiert; Snackbar beschreibbar; Suche migriert; Update-Fehler melden nicht ab; normales Username-Format und aktuelles Passwort; komplette Store-Bereinigung; historische Portlabels; Unix-Sekunden; Compose-v1/v2/Labels; Chart-Prop passend. |
 | 99–101 | AuthDisabled, weitere Vuetify-Reste, kleinere UI-/Logfehler | Getter vorhanden; Komponenten/Slots/Props und Tabellenüberschriften migriert; Manifest-404 entfernt; Logs begrenzt und Download-URLs freigegeben. Veraltete, nachweislich unreferenzierte Komponenten entfernt. |
-| 102–106 | Socket-Gruppen, nginx, Prozessführung, Logging, fail2ban | Unterstütztes geschütztes Deployment verwendet TCP-Proxy statt direkter Host-Socket-Anbindung. Upload-Limit 8 MiB, stdout-Logs, Terminal-Timeout 1 h; loopback Gunicorn, supervision beider Prozesse, kein Start-chown; INFO-Logging. fail2ban mit persistenten Anwendungssperren und fail-closed Zustandsüberwachung. Linux-Laufzeitnachweis offen. |
-| 107 | CI | Tests, Build-, Migrations- und Sicherheits-Gates; Actions auf verifizierte SHAs gepinnt; Publisher auf vertrauenswürdige erfolgreiche Runs beschränkt. **Offen: Multiarch-Publikation**, aktuell amd64. Ruff bleibt ausdrücklich informativ; kein erfolgreicher CI-Run wird hier vorweggenommen. |
-| 108–110 | Image, Ignore-Regeln, Requirements | Multi-Stage-Image, echter Docker-CLI, Compose-Prüfsumme, Node 22, Healthcheck und verbindliches npm ci. Venv/DB/Tests/Geheimnisse ausgeschlossen. Runtime-/Dev-Python-Locks mit Hashes, Testpakete getrennt, lokale Requirements und DB-URL-Konvertierung korrigiert. Reales Image noch nicht gebaut. |
+| 102–106 | Socket-Gruppen, nginx, Prozessführung, Logging, fail2ban | Unterstütztes geschütztes Deployment verwendet TCP-Proxy statt direkter Host-Socket-Anbindung. Upload-Limit 8 MiB, stdout-Logs, Terminal-Timeout 1 h; loopback Gunicorn, supervision beider Prozesse, kein Start-chown; INFO-Logging. fail2ban mit persistenten Anwendungssperren und fail-closed Zustandsüberwachung; echter Linux-Laufzeitnachweis einschließlich Ausfall/Wiederherstellung in R-025 bestanden. |
+| 107 | CI | Tests, Build-, Migrations- und Sicherheits-Gates; Actions auf verifizierte SHAs gepinnt; Publisher auf vertrauenswürdige erfolgreiche Runs beschränkt. **Offen: Multiarch-Publikation**, aktuell amd64. Ruff und die erforderlichen CI-/CodeQL-Ergebnisse auf 93fa8da bestanden; konkrete Links in R-025. |
+| 108–110 | Image, Ignore-Regeln, Requirements | Multi-Stage-Image, echter Docker-CLI, Compose-Prüfsumme, Node 22, Healthcheck und verbindliches npm ci. Venv/DB/Tests/Geheimnisse ausgeschlossen. Runtime-/Dev-Python-Locks mit Hashes, Testpakete getrennt, lokale Requirements und DB-URL-Konvertierung korrigiert. Reales Linux-Image gebaut, Inhalt und Start geprüft; Nachweis R-025. |
 | 111 | Frontend-Abhängigkeiten / tote Dateien | Ungenutzte brace/core-js/service-worker/virtual-scroller/webfontloader-Pakete entfernt; lokale Fonts und @xterm-Nachfolger; Vuetify-Tree-Shaking. `date-fns` und Day.js haben unterschiedliche tatsächlich genutzte Aufgaben. Veraltete unreferenzierte Komponenten/Plugins entfernt. |
 | 112–116 | Architektur-, Auth-, Sicherheits- und Env-Dokumentation | AGENTS/README beschreiben Vuex, korrekte Middleware-Reihenfolge, Cookie-/CSRF-/Key-Regeln, tatsächliche Defaults und unterstützte Konfiguration. ENV_FILE ist als nicht unterstütztes Legacy-Konzept gekennzeichnet. |
 | 117 | Alte Audits / Testzahlen | Historische Berichte als historisch gekennzeichnet; falsche Pinia-/Bcrypt-Key-/Persistenzaussagen berichtigt. Aktuelle Testzahlen und Migrationen hier sowie im Changelog dokumentiert. |
@@ -76,12 +82,15 @@ behält die bisherige Konfiguration. TOTP-Codes können nach dem einmaligen Verb
 für eine andere Aktion im selben Zeitfenster nicht wiederverwendet werden.
 Compose-Auto-Updates laufen nur mit `COMPOSE_AUTO_UPDATE=true`.
 
-Kein Live-Nachweis für Linux Docker, reale Container-Rollbacks, PostgreSQL,
-MySQL oder externe Mail-/Registrydienste auf diesem Windows-Rechner. Die
+Die anfängliche lokale Prüfung auf Windows lieferte keinen Live-Linux-Nachweis;
+Image-/Start- und echter Schutzstack-Nachweis wurden anschließend durch CI
+erbracht (R-025). Reale Container-Rollbacks/Self-Update, PostgreSQL/MySQL,
+Multiarch und externe Mail-/Registrydienste bleiben ungeprüft. Die
 Backendtests verwenden isolierte Datenbanken und Docker-/SMTP-Mocks. Der
 Browsercheck verwendet isoliertes Chrome und kontrollierte API-Antworten.
-Diese Prüfungen ersetzen keinen produktiven Deploymenttest; die konfigurierte
-CI enthält die Linux-Image- und Schutzstack-Gates.
+Diese lokalen Prüfungen ersetzen keinen produktiven Deploymenttest. Echte
+Browser-/Docker-Terminal-Integration wurde nicht geprüft; der kontrollierte
+Browsercheck ist vom bestätigten Linux-Schutzstack getrennt.
 
 ## Abschließender zusammengeführter Stand
 
@@ -103,8 +112,9 @@ erhalten. Der Merge schützt weiterhin alle neu eingeführten Sicherheitsverträ
   Settings-Deep-Link, Theme nach Reload und mobile Navigation geprüft.
   Tatsächliche Vue-Seiten und Steuerelemente, kein Live-Docker-Nachweis.
 
-Publikationsziel ist der bestehende Branch `audit-fix-2026-08-21`. Dieser
-Prüfkandidat beansprucht weiterhin keine verifizierte Linux-/Multiarch-Version.
+Der damalige Zwischenstand wurde auf `audit-fix-2026-08-21` gepusht.
+Die spätere Linux-Verifikation von 3.0.2 ist in R-025 belegt; Multiarch wurde
+weiterhin nicht geprüft. Branch-Push ist keine Registry-Publikation.
 
 ## CI-Nachprüfung und Kandidat 3.0.2 (Run R-023)
 
@@ -147,7 +157,7 @@ Registry-Manifest-Digest; eine nicht belegte Imagegröße wird hier nicht genann
 Die [CodeQL-Analyse 37009114025](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114025)
 hat erfolgreiche Python-/JavaScript-Analyze-Jobs; der separate Results-Check
 `110844629671` scheiterte dagegen mit drei High-Befunden. Dieser Unterschied
-blockiert den Merge trotz des erfolgreich gelaufenen Schutzstacks.
+blockierte damals den Merge trotz des erfolgreich gelaufenen Schutzstacks.
 
 Die Nachkorrektur ersetzt die GHCR-Repositoryprüfung mit ReDoS-anfälliger
 Regex durch einen linearen Parser und die zwei gemeldeten URL-Testfixtures
@@ -159,10 +169,34 @@ Ungültiger Input löst keine HTTP-Anfrage aus. Es bleibt dieselbe Lieferung
 24 zusätzliche Regressionen; Log `report/audit-ci-backend-r024-final.txt`.
 Die unveränderten **217 Frontend-Tests**, Produktionsbuild/Bundle-Grenzen und
 frische SQLite-Migration sind für Version `3.0.2` ebenfalls bestanden.
-Ein frischer erfolgreicher CodeQL-Results-Check und die erforderlichen CI-Jobs
-für den zuletzt korrigierten tatsächlichen HEAD stehen noch aus.
+Die damals noch ausstehenden CI-/CodeQL-Ergebnisse auf dem korrigierten
+Quellenstand sind in R-025 erfolgreich belegt.
 
-Ein Merge nach `master` oder eine Veröffentlichung wird weiterhin nicht
-behauptet. Alle erforderlichen Checks müssen auf dem tatsächlichen letzten
-Kandidaten-Commit erfolgreich sein; der grüne Lauf auf `ac869d7` bestätigt
-keine nachfolgenden Änderungen.
+## Abschließender CI-/CodeQL-Nachweis für 3.0.2 (Run R-025)
+
+Quellenstand: `93fa8da2332cbd22c59f27d6871ea67828bcb17b`.
+[PR-CI 37010339253](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339253)
+und [Push-CI 37010332100](https://github.com/xNicolas99/YachtPlus/actions/runs/37010332100)
+bestanden Backend, Frontend, Ruff und den Linux-Schutzstack:
+
+- **884 Backend-Tests, 217 Frontend-Tests und alle 44 Linux-Skriptprüfungen
+  bestanden**, einschließlich der auf Windows übersprungenen POSIX-Prüfung.
+- Produktionsfrontend/Bundle-Grenzen, SQLite-Migrationen, Image-Build,
+  Inhaltsprüfung und tatsächlicher Containerstart bestanden.
+- Echte fail2ban Ban/Unban-, Persistenz- und Pflichtprotection-Ausfall-/
+  Wiederherstellungsprüfungen bestanden.
+- [CodeQL 37010339245](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339245)
+  bestand Python-/JavaScript-Analyse und Results-Check `110848620953` mit
+  "No new alerts" und **0 Annotations**. Die früheren drei High-Befunde
+  blockieren diesen korrigierten Quellenstand nicht mehr.
+
+Diese abschließende Dokumentationskorrektur bleibt Teil derselben Lieferung
+`3.0.2`; es gibt keinen zusätzlichen Versionsschritt. Die temporäre Datenbank
+der frischen Migrationsprüfung wurde entfernt; Nachweislogs und die
+wiederverwendete Entwicklungsumgebung bleiben erhalten.
+
+Merge und Registry-Publikation erfordern erfolgreiche Pflichtchecks des
+tatsächlichen letzten HEAD über PR/Actions; Nachweise eines älteren Commits
+werden nicht übertragen. Live-PostgreSQL/MySQL, Multiarch und echte Browser-/
+Docker-Terminal-Abläufe bleiben ungeprüft. Ein ausgeführter Merge oder eine
+Registry-Publikation wird mit diesem Bericht nicht behauptet.

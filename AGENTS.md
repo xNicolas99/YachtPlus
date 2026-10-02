@@ -1,18 +1,19 @@
 # AGENTS.md — orientation for coding agents
 
-Candidate 3.0.2, runs R-023/R-024 (2026-10-02): **884 backend + 217 frontend
-tests passed locally**, plus production frontend/bundle gates, a fresh SQLite
-migration and 43 of 44
-release/security-script tests (one POSIX permissions test is explicitly
-skipped on Windows). `dist/version.json` is exactly 3.0.2. On `ac869d7`,
-[PR CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37009114081)
-and [push CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37009077607)
-passed Linux image build/content/startup, migrations, all 44 script tests
-and real fail2ban ban/unban/persistence/protection-recovery checks.
-CodeQL analysis jobs succeeded, but its results check failed with three High
-findings. The GHCR/fixture corrections and 24 additional regressions passed
-locally as part of the same candidate 3.0.2. Fresh required CI/CodeQL results
-on the corrected actual HEAD and merge to master remain pending.
+Verified candidate 3.0.2, runs R-023–R-025 (2026-10-02), source commit
+`93fa8da2332cbd22c59f27d6871ea67828bcb17b`: **884 backend + 217 frontend +
+44 Linux release/security-script tests passed**, plus production frontend/
+bundle gates, SQLite migrations and Linux image build/content/startup.
+[PR CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339253)
+and [push CI](https://github.com/xNicolas99/YachtPlus/actions/runs/37010332100)
+passed backend, frontend, Ruff and the real fail2ban ban/unban/persistence/
+protection-recovery stack. [CodeQL](https://github.com/xNicolas99/YachtPlus/actions/runs/37010339245)
+passed Python/JavaScript analysis and results check `110848620953`
+("No new alerts", zero annotations). `dist/version.json` is exactly 3.0.2.
+Live PostgreSQL/MySQL, multiarch and live browser/Docker terminal workflows
+remain unverified. Merge/publication requires successful checks for the actual
+final HEAD through the PR/Actions; this recorded source verification does not
+assert a completed merge or registry publication.
 See [the remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md).
 `frontend/src/utils/containerLinks.js` centralizes browser-origin-aware,
 IPv6-safe port URLs; settings tabs synchronize with child-route deep links.
@@ -765,7 +766,8 @@ Useful subsets:
 Local verification before remote integration on 2026-10-02 passed **852 backend, 197 frontend and 42
 publication-policy tests**. The latest [changelog](CHANGELOG.md) entry and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record build/migration
-evidence and remaining Docker/runtime checks. Historical audit test counts
+evidence, subsequent Linux/CodeQL verification and remaining platform/
+integration checks. Historical audit test counts
 are not the current baseline.
 Run the independent publication policy suite from the repository root with
 `python -m unittest discover -s scripts -p 'test_*.py' -v` (using the
@@ -1182,7 +1184,8 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
-| R-024 | 2026-10-02 | dieser Commit; Fortsetzung von 3.0.2 | Drei High-CodeQL-Befunde mit linearem GHCR-Parser/exakten Fixture-Vergleichen korrigiert; erster grüner Linux-Schutzstack auf ac869d7 belegt | lokal 884/217, Build/Bundle und Migration grün; ac869d7 alle 44 Linux-Skripte/Image/Schutzstack grün; neue HEAD-CI/CodeQL-Results ausstehend |
+| R-025 | 2026-10-02 | dieser Doku-Folgecommit; gleiche Lieferung 3.0.2 | Abschließende CI-/CodeQL-Nachweise auf 93fa8da dokumentiert; keine zusätzliche Version; letzte HEAD-Checks bestimmen Merge/Publikation | CI 884/217 und alle 44 Linux-Skripte; Build/Migration/Image/Schutzstack/Ruff/CodeQL inklusive Results erfolgreich |
+| R-024 | 2026-10-02 | 93fa8da; Fortsetzung von 3.0.2 | Drei High-CodeQL-Befunde mit linearem GHCR-Parser/exakten Fixture-Vergleichen korrigiert; erster grüner Linux-Schutzstack auf ac869d7 belegt | lokal 884/217, Build/Bundle und Migration grün; ac869d7 alle 44 Linux-Skripte/Image/Schutzstack grün; damalige ausstehende HEAD-CI/CodeQL-Prüfung abgeschlossen in R-025 |
 | R-023 | 2026-10-02 | ac869d7 | Kandidat 3.0.2: Fail2ban-Ban-Verzeichnis trotz umask 077 für App UID 1000 lesbar; Proxy-/run-tmpfs, Regressionen und sichere Startdiagnosen | 860/217; Build/Bundle und SQLite-Upgrade grün; lokal Skripte 43 bestanden, 1 POSIX-Prüfung auf Windows übersprungen; Linux-Nachweis in R-024 |
 | R-022 | 2026-10-02 | 0ea2d63; Remote-Integration derselben Lieferung | Credential-Versionen, CSRF/TOTP/SMTP, Docker/Compose/Template- und Vue-Korrekturen; Kandidat 3.0.1, Docker-Prüfung offen | vor Integration 852/197; zusätzlich 42 Policy-Tests; finale Merge-Belege im Behebungsbericht |
 | R-021 | 2026-09-10 | Doku-Sync-Commit | Doku-Sync: Run-Protokoll und CHANGELOG-Pflichtregel, Status Abschnitt 18, Baseline von 513 auf 543 | 543/21 |
