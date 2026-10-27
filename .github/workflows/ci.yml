@@ -143,7 +143,9 @@ jobs:
       group: yachtplus-ghcr-publication
       cancel-in-progress: false
     permissions:
-      contents: read
+      # Ref creation and Releases are confined to this trusted-push job;
+      # validation jobs and all pull requests retain read-only contents.
+      contents: write
       packages: write
     steps:
       - name: Checkout the validated commit
@@ -204,6 +206,14 @@ jobs:
           CI_CANCELLED: ${{ job.status == 'cancelled' }}
         run: python scripts/release_gate.py --verify-remote
 
+      - name: Reserve canonical release tag without moving an existing version
+        id: release_binding
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_CANCELLED: ${{ job.status == 'cancelled' }}
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release_gate.py --prepare-release
+
       - name: Log in to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
@@ -213,11 +223,28 @@ jobs:
 
       - name: Push the checked candidate without rebuilding
         env:
-          RELEASE_TAGS: ${{ steps.release.outputs.tags }}
+          RELEASE_TAGS: ${{ steps.release_binding.outputs.tags }}
           RELEASE_IMAGE: ${{ steps.release.outputs.image }}
+        shell: bash
         run: |
+          set -euo pipefail
           candidate="$(cat /tmp/yachtplus-release-image-id)"
           while IFS= read -r tag; do
             docker tag "$candidate" "$RELEASE_IMAGE:$tag"
-            docker push "$RELEASE_IMAGE:$tag"
+            docker push "$RELEASE_IMAGE:$tag" | tee /tmp/yachtplus-push-output
+            digest="$(sed -nE 's/.*digest: (sha256:[a-f0-9]{64}).*/\1/p' /tmp/yachtplus-push-output | tail -n 1)"
+            test -n "$digest"
+            if [ -s /tmp/yachtplus-published-digest ]; then
+              test "$(cat /tmp/yachtplus-published-digest)" = "$digest"
+            fi
+            printf '%s\n' "$digest" > /tmp/yachtplus-published-digest
           done <<< "$RELEASE_TAGS"
+
+      - name: Create the canonical GitHub Release after successful image publication
+        env:
+          CI_NEEDS_JSON: ${{ toJSON(needs) }}
+          CI_CANCELLED: ${{ job.status == 'cancelled' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          export RELEASE_DIGEST="$(cat /tmp/yachtplus-published-digest)"
+          python scripts/release_gate.py --complete-release

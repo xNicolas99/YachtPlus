@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-10-27 10:43 CET — Run R-029: Automatische versionierte Releases
+
+- Commit: dieser Commit; Ausgangsstand `952803c` (3.1.0).
+- Version: `3.1.1`; Paket, Lockfile und Produktionsmetadaten stimmen exakt
+  überein. Keine Paket-/Abhängigkeitsänderungen.
+- Geändert: Der bestehende geschützte CI-Publishjob reserviert nach allen
+  Kandidatenprüfungen `v<Version>` am geprüften Commit und erstellt nach
+  erfolgreicher GHCR-Veröffentlichung das zugehörige GitHub Release mit
+  Commit, Registrydigest und Buildlink. Alle gepushten Imagetags müssen
+  denselben Digest melden. Schreibrechte bleiben auf diesen Job beschränkt.
+- Geändert: Versionstags werden nie verschoben. Vorhandene Releases und deren
+  Versionsimages bleiben erhalten; spätere Mastercommits gleicher Version
+  aktualisieren nur SHA/latest. Wiederholung, konkurrierende Tagreservierung,
+  verlorene API-Antworten und fehlgeschlagene Veröffentlichung sind abgesichert.
+  Fertigstellung folgt dem reservierten Tag auch bei inzwischen fortgeschrittenem Master.
+- Ergebnis: **1068 Backend-, 344 Frontend- und 62 Skripttests bestanden**,
+  darunter 17 neue Release-Regressionstests. Produktionsbuild und Bundlegrenzen
+  grün; frisches SQLite-Upgrade auf `20261027_0003` und Wiederholung erfolgreich.
+  Voraussetzungen für den Patch-Versionsschritt vor der Erhöhung geprüft.
+- GitHub: [PR #262](https://github.com/xNicolas99/YachtPlus/pull/262) bündelt
+  diese Lieferung und die Prüfungen des jeweiligen HEAD. Am Ausgangsstand
+  `952803c` sind [CI](https://github.com/xNicolas99/YachtPlus/actions/runs/40482075996),
+  [CodeQL-Analysen](https://github.com/xNicolas99/YachtPlus/actions/runs/40482075973)
+  und der separate CodeQL-Ergebnischeck erfolgreich. Die automatische
+  Veröffentlichung prüft anschließend den tatsächlichen Master-Commit erneut.
+- Dokumentation: README mit Releaseablauf, Versionierung und Wiederaufnahme;
+  AGENTS.md mit Publikationsvertrag, Testbaseline und Run-Protokoll aktualisiert.
+  Lokale Nachweise: `report/audit-r029-*.txt`.
+- Aufgeräumt: eigene Frontend-Buildausgabe und temporäre Migrationsdatenbank
+  entfernt; Prüflogs und wiederverwendbare Entwicklungsumgebungen erhalten.
+- Grenzen: Eine ältere unvollständige Tagreservierung blockiert weitere
+  Publikation derselben Version ausdrücklich; ursprüngliche Veröffentlichung
+  wiederherstellen oder kanonische Version erhöhen. Mehrere Registrytags sind
+  nicht atomar; kein automatisches Verschieben veröffentlichter Versionen.
+  Live-PostgreSQL/MySQL und Multiarch werden dadurch nicht zusätzlich verifiziert.
+
 ## [3.1.0] - 2026-10-27 10:06 CET — Run R-028: Bedienung und Betriebsfunktionen
 
 - Commit: dieser Commit; Ausgangsstand `6c97521` (3.0.4).

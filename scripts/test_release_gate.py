@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import json
+import io
 import os
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 from pathlib import Path
 
 import yaml
 
-from release_gate import REQUIRED_JOBS, ReleaseRejected, release_plan
+from release_gate import (GitHubAPI, REQUIRED_JOBS, ReleaseRejected, complete_version_release,
+                          prepare_version_release, release_plan, tag_commit, version_binding)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -293,6 +297,225 @@ class WorkflowIntegrationTests(unittest.TestCase):
                         self.assertNotIn("continue-on-error", step)
                         self.assertNotIn("if", step)
         self.assertEqual(publishers, [("ci.yml", "publish")])
+
+    def test_release_write_permissions_and_credentials_are_only_in_gated_publisher(self):
+        workflow = yaml.load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"), Loader=yaml.BaseLoader)
+        self.assertEqual(workflow["permissions"], {"contents": "read"})
+        for name, job in workflow["jobs"].items():
+            if name == "publish":
+                self.assertEqual(job["permissions"]["contents"], "write")
+                self.assertIn("github.event_name == 'push'", job["if"])
+                self.assertIn("github.repository == 'xNicolas99/YachtPlus'", job["if"])
+                continue
+            self.assertNotEqual(job.get("permissions", {}).get("contents"), "write")
+            self.assertNotEqual(job.get("permissions", {}).get("packages"), "write")
+            self.assertNotIn("GH_TOKEN", str(job))
+        steps = workflow["jobs"]["publish"]["steps"]
+        prepare = next(i for i, step in enumerate(steps) if "--prepare-release" in step.get("run", ""))
+        publish = next(i for i, step in enumerate(steps) if "docker push" in step.get("run", ""))
+        complete = next(i for i, step in enumerate(steps) if "--complete-release" in step.get("run", ""))
+        protected = next(i for i, step in enumerate(steps) if "--image \"$candidate\"" in step.get("run", ""))
+        self.assertLess(protected, prepare)
+        self.assertLess(prepare, publish)
+        self.assertLess(publish, complete)
+        self.assertEqual(steps[publish]["env"]["RELEASE_TAGS"], "${{ steps.release_binding.outputs.tags }}")
+        self.assertIn("set -euo pipefail", steps[publish]["run"])
+
+
+class FakeReleaseAPI:
+    """A stateful GitHub ref/release boundary, including lost responses and races."""
+
+    def __init__(self, sha=None, release=None):
+        self.sha, self.release = sha, release
+        self.calls = []
+        self.lose_ref_response = False
+        self.lose_release_response = False
+        self.fail_release = False
+        self.ref_race = None
+
+    def request(self, method, path, payload=None, *, missing_ok=False):
+        self.calls.append((method, path, payload))
+        if method == "GET" and path == "git/ref/tags/v2.1.0":
+            return {"object": {"type": "commit", "sha": self.sha}} if self.sha else None
+        if method == "GET" and path == "releases/tags/v2.1.0":
+            return self.release
+        if method == "POST" and path == "git/refs":
+            if self.sha or self.ref_race:
+                self.sha = self.ref_race or self.sha
+                raise ReleaseRejected("GitHub release request failed (HTTP 422)")
+            self.sha = payload["sha"]
+            if self.lose_ref_response:
+                raise ReleaseRejected("Lost ref response")
+            return {"ref": payload["ref"], "object": {"sha": self.sha, "type": "commit"}}
+        if method == "POST" and path == "releases":
+            if self.fail_release:
+                raise ReleaseRejected("GitHub release request failed (HTTP 503)")
+            self.release = {**payload, "id": 42}
+            if self.lose_release_response:
+                raise ReleaseRejected("Lost release response")
+            return self.release
+        raise AssertionError(f"Unexpected release API call: {method} {path}")
+
+
+class AutomaticReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = release_plan(**evidence())
+        self.digest = "sha256:" + "c" * 64
+
+    def test_new_version_reserves_tag_at_exact_validated_sha_before_release(self):
+        api = FakeReleaseAPI()
+        binding = prepare_version_release(api, self.plan, SHA)
+        self.assertEqual(api.sha, SHA)
+        self.assertTrue(binding["create_release"])
+        self.assertEqual(binding["tags"].splitlines(), ["2.1.0", f"sha-{SHA}", "latest"])
+        self.assertIsNone(api.release)
+        self.assertIn(("POST", "git/refs", {"ref": "refs/tags/v2.1.0", "sha": SHA}), api.calls)
+
+    def test_existing_current_commit_tag_resumes_without_moving_ref(self):
+        api = FakeReleaseAPI(sha=SHA)
+        self.assertTrue(prepare_version_release(api, self.plan, SHA)["create_release"])
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_complete_release_records_verified_commit_version_and_published_digest(self):
+        api = FakeReleaseAPI(sha=SHA)
+        complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertEqual(api.release["target_commitish"], SHA)
+        self.assertEqual(api.release["tag_name"], "v2.1.0")
+        self.assertIn(f"ghcr.io/xnicolas99/yachtplus@{self.digest}", api.release["body"])
+        self.assertIn("actions/runs/1234", api.release["body"])
+        self.assertFalse(api.release["draft"])
+        self.assertFalse(api.release["prerelease"])
+
+    def test_successful_release_is_idempotent_and_version_image_is_not_republished(self):
+        api = FakeReleaseAPI(sha=SHA)
+        complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        original = dict(api.release)
+        binding = prepare_version_release(api, self.plan, SHA)
+        self.assertFalse(binding["create_release"])
+        self.assertEqual(binding["tags"].splitlines(), [f"sha-{SHA}", "latest"])
+        # Rebuilding the same SHA may produce a different digest. It must
+        # neither replace the SemVer image nor edit the completed release.
+        complete_version_release(api, self.plan, SHA, "sha256:" + "d" * 64, run_id="5678")
+        self.assertEqual(api.release, original)
+        self.assertEqual(sum(method == "POST" and path == "releases" for method, path, _ in api.calls), 1)
+
+    def test_unchanged_version_on_later_master_commit_only_updates_sha_and_latest(self):
+        api = FakeReleaseAPI(sha="b" * 40, release={"tag_name": "v2.1.0", "body": "Existing release"})
+        with patch("release_gate.version_at_commit", return_value="2.1.0"), patch("release_gate.subprocess.run") as run:
+            run.return_value.returncode = 0
+            binding = prepare_version_release(api, self.plan, SHA)
+            complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertFalse(binding["create_release"])
+        self.assertEqual(binding["tags"].splitlines(), [f"sha-{SHA}", "latest"])
+        self.assertEqual(api.sha, "b" * 40)
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_unrelated_or_wrong_version_tag_fails_closed(self):
+        for version, ancestor in [("2.0.0", True), ("2.1.0", False)]:
+            with self.subTest(version=version, ancestor=ancestor):
+                with self.assertRaises(ReleaseRejected):
+                    version_binding(self.plan, SHA, "b" * 40, None,
+                                    historical_version=version, ancestor=ancestor)
+
+    def test_unfinished_older_version_reservation_requires_explicit_recovery(self):
+        api = FakeReleaseAPI(sha="b" * 40)
+        with patch("release_gate.version_at_commit", return_value="2.1.0"), patch("release_gate.subprocess.run") as run:
+            run.return_value.returncode = 0
+            with self.assertRaisesRegex(ReleaseRejected, "release is incomplete.*original commit"):
+                prepare_version_release(api, self.plan, SHA)
+        self.assertEqual(api.sha, "b" * 40)
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_user_authored_existing_release_is_untouched_and_does_not_fail_a_build(self):
+        for draft in (False, True):
+            api = FakeReleaseAPI(sha=SHA, release={"tag_name": "v2.1.0", "draft": draft, "body": "User notes"})
+            binding = prepare_version_release(api, self.plan, SHA)
+            complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+            self.assertFalse(binding["create_release"])
+            self.assertNotIn("2.1.0", binding["tags"].splitlines())
+            self.assertEqual(api.release["body"], "User notes")
+            self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_atomic_ref_creation_accepts_only_an_exact_same_sha_race(self):
+        api = FakeReleaseAPI()
+        api.ref_race = SHA
+        self.assertTrue(prepare_version_release(api, self.plan, SHA)["create_release"])
+        api = FakeReleaseAPI()
+        api.ref_race = "b" * 40
+        with self.assertRaises(ReleaseRejected):
+            prepare_version_release(api, self.plan, SHA)
+        self.assertIsNone(api.release)
+
+    def test_interrupted_ref_or_release_response_can_be_retried_without_duplicates(self):
+        api = FakeReleaseAPI()
+        api.lose_ref_response = api.lose_release_response = True
+        prepare_version_release(api, self.plan, SHA)
+        complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertEqual(api.sha, SHA)
+        self.assertEqual(api.release["tag_name"], "v2.1.0")
+
+    def test_failed_image_push_never_creates_release_and_failed_release_can_resume(self):
+        api = FakeReleaseAPI()
+        prepare_version_release(api, self.plan, SHA)
+        self.assertIsNone(api.release)
+        api.fail_release = True
+        with self.assertRaises(ReleaseRejected):
+            complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertEqual(api.sha, SHA)
+        self.assertIsNone(api.release)
+        api.fail_release = False
+        complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertEqual(api.release["tag_name"], "v2.1.0")
+
+    def test_invalid_digest_missing_tag_or_conflicting_release_never_creates_release(self):
+        for digest in ["", "sha256:short", "sha256:" + "A" * 64, "sha256:" + "a" * 64 + "\n"]:
+            with self.subTest(digest=digest):
+                api = FakeReleaseAPI(sha=SHA)
+                with self.assertRaises(ReleaseRejected):
+                    complete_version_release(api, self.plan, SHA, digest, run_id="1234")
+                self.assertIsNone(api.release)
+        with self.assertRaises(ReleaseRejected):
+            complete_version_release(FakeReleaseAPI(), self.plan, SHA, self.digest, run_id="1234")
+        for release in [{"tag_name": "v9.9.9"}]:
+            with self.assertRaises(ReleaseRejected):
+                complete_version_release(FakeReleaseAPI(sha=SHA, release=release), self.plan, SHA, self.digest, run_id="1234")
+
+    def test_real_urlerror_after_tag_reservation_is_recovered_by_reading_the_exact_ref(self):
+        def reply(data):
+            return io.BytesIO(json.dumps(data).encode())
+        absent = HTTPError("https://api.github.com/", 404, "Not found", None, None)
+        reference = {"object": {"type": "commit", "sha": SHA}}
+        with patch("release_gate.urlopen", side_effect=[absent, absent, URLError("connection lost"), reply(reference), reply(reference)]):
+            binding = prepare_version_release(GitHubAPI("secret-test-token"), self.plan, SHA)
+        self.assertTrue(binding["create_release"])
+
+    def test_real_urlerror_after_release_creation_recovers_only_matching_provenance(self):
+        def reply(data):
+            return io.BytesIO(json.dumps(data).encode())
+        absent = HTTPError("https://api.github.com/", 404, "Not found", None, None)
+        reference = {"object": {"type": "commit", "sha": SHA}}
+        release = {"tag_name": "v2.1.0", "draft": False, "prerelease": False,
+                   "body": f"<!-- yachtplus-release sha={SHA} digest={self.digest} -->"}
+        with patch("release_gate.urlopen", side_effect=[reply(reference), absent, reply(reference), URLError("connection lost"), reply(release), reply(reference)]):
+            complete_version_release(GitHubAPI("secret-test-token"), self.plan, SHA, self.digest, run_id="1234")
+
+    def test_completion_uses_reserved_tag_even_if_master_advanced_after_image_push(self):
+        api = FakeReleaseAPI(sha=SHA)
+        with patch("release_gate.verify_remote", side_effect=AssertionError("Must not rebind to master")):
+            complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertEqual(api.release["target_commitish"], SHA)
+
+    def test_annotated_tag_resolves_to_exact_commit_and_bad_objects_are_rejected(self):
+        class AnnotatedAPI:
+            def request(self, method, path, payload=None, **kwargs):
+                return {"object": {"sha": "b" * 40, "type": "tag"}} if path.startswith("git/ref/") else {"object": {"sha": SHA, "type": "commit"}}
+        self.assertEqual(tag_commit(AnnotatedAPI(), "v2.1.0"), SHA)
+        for obj in [{}, {"sha": SHA, "type": "tree"}, {"sha": "invalid", "type": "commit"}]:
+            class BadAPI:
+                def request(self, *args, **kwargs):
+                    return {"object": obj}
+            with self.assertRaises(ReleaseRejected):
+                tag_commit(BadAPI(), "v2.1.0")
 
 
 if __name__ == "__main__":

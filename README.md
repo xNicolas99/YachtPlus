@@ -73,8 +73,22 @@ before registry login and publication. A separate required `security-stack` job
 starts the real nginx/backend/fail2ban stack and verifies bans and protection
 outages; publication rejects a missing, failed or skipped security job. Ruff
 remains an informational check.
-Version-tag runs do not move `latest`. Tags are pushed sequentially, so an
-interruption can leave a partial set of tags; the tested image is not rebuilt.
+For a new release, update the canonical version in `frontend/package.json` and
+`frontend/package-lock.json` together, document the change in `CHANGELOG.md`,
+and merge the reviewed change into `master`. After all validation and candidate
+checks pass, CI reserves `vMAJOR.MINOR.PATCH` at the exact validated commit,
+publishes the same image under its version, commit SHA and `latest`, and creates
+the matching GitHub Release. Release notes include the build link, commit and
+registry digest, so deployments can pin `ghcr.io/xnicolas99/yachtplus@sha256:…`.
+
+Version tags never move. Completed releases and their versioned images are preserved.
+Later `master` commits with an unchanged version update only the SHA image and
+`latest`; bump the canonical version to create another release. A completed
+release is not duplicated on rerun. Version-tag runs do not move `latest`.
+Tags are pushed sequentially, so an interruption can leave a partial set of
+tags; release creation waits for successful publication and matching digests.
+Investigate an incomplete reserved version before proceeding; never retarget a
+released version to another commit. The tested image is not rebuilt for pushing.
 Workflow actions are pinned to commit SHAs. Python runtime and development
 dependencies use separate committed locks with distribution hashes; test
 tooling and backend tests are excluded from the release image. The downloaded
@@ -358,7 +372,7 @@ npx vitest run
 
 Run publication-policy checks from the repository root with the backend
 environment: `python -m unittest discover -s scripts -p 'test_*.py' -v`.
-Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 45
+Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 62
 publication-policy/security-script tests**. The latest [changelog](CHANGELOG.md) and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record the completed
 checks and remaining work. Older audit documents contain historical counts.

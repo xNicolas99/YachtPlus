@@ -1,6 +1,15 @@
 # AGENTS.md — orientation for coding agents
 
-Current local candidate: **3.1.0, run R-028 (2026-10-27)**, based on `6c97521`.
+Current delivery: **3.1.1, run R-029 (2026-10-27)**, based on `952803c`.
+The validated publication job also reserves the canonical version tag and
+creates its GitHub Release after successful image pushes with matching registry
+digests. Version refs and completed releases/images stay unchanged; subsequent
+`master` commits at the same version publish only SHA/latest images. See
+[PR #262](https://github.com/xNicolas99/YachtPlus/pull/262) and its current checks
+for remote validation and publication evidence. Local test/build/migration
+results and interruption boundaries are recorded in the latest changelog entry.
+
+Previous local candidate: **3.1.0, run R-028 (2026-10-27)**, based on `6c97521`.
 Saved container views, verified dashboard snapshots, persistent tasks, Compose
 previews, volume backups/restores, per-project update plans and filtered audit
 search are implemented. New policies start disabled. Local verification passed
@@ -167,7 +176,7 @@ frontend/
   package.json
 scripts/
   security-stack-smoke.py  # Mandatory Linux Docker/Compose protection runtime gate
-  release_gate.py          # Fail-closed GHCR publication policy (+ test_release_gate.py)
+  release_gate.py          # Fail-closed GHCR policy + immutable version tag/GitHub Release (+ tests)
   push-to-github.sh        # Push local work to GitHub with a PAT (see scripts/README.md)
   README.md
 Dockerfile
@@ -862,7 +871,7 @@ Useful subsets:
 - `python -m pytest tests/test_compose_perms.py tests/test_compose_delete_path.py` — compose permission and path-safety gates.
 - `python -m pytest tests/test_image_inspect.py` — Docker Hub manifest/tag handling.
 
-Local verification for R-028 on 2026-10-27 passed **1068 backend, 344 frontend and 45
+Local verification for R-029 on 2026-10-27 passed **1068 backend, 344 frontend and 62
 publication-policy/security-script tests**, production build/bundle gates and a
 fresh SQLite migration. The latest [changelog](CHANGELOG.md) entry records the
 current evidence and remaining checks. The older
@@ -1094,6 +1103,17 @@ rejects packaged signing keys, salts, `.env` files and runtime databases in
 The remote ref is checked again before login; the tested image ID is pushed
 without rebuilding. Version tags do not move `latest`; master publication does.
 Tag pushes are sequential, so an interruption can leave some tags published.
+The gated publisher alone has `contents: write` for canonical tag reservation
+and GitHub Release creation; validation jobs and PR runs retain read-only
+contents. Reserve `v<package version>` at the validated commit using create-ref,
+never force-update it. Finish the GitHub Release only after every requested
+image tag reports the same registry digest, and include that digest and commit
+in its provenance marker. Completed releases are idempotent: neither their
+versioned image nor release is overwritten by a rerun. A later master commit
+with the same canonical version updates only SHA/latest, after verifying that
+the version tag belongs to an ancestor with the same historical package version.
+An incomplete older reservation requires investigation, not silent success or
+retargeting. No separate privileged `workflow_run` publisher is permitted.
 Before merging a protection-stack correction, require the backend, frontend
 and Linux security-stack checks to succeed on the exact reviewed candidate
 commit. A healthy sidecar alone or historical local test counts do not satisfy
@@ -1301,6 +1321,7 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
+| R-029 | 2026-10-27 | dieser Commit; Releasewartung 3.1.1 | Automatische unveränderliche Versionstags/GitHub Releases nach validierter GHCR-Publikation; gleiche Version aktualisiert nur SHA/latest; Unterbrechungs-/Retry-Gates | lokal 1068/344 sowie 62 Skripttests; Build/Bundle und frische/wiederholte SQLite-Migration grün; Remote-Nachweise am jeweiligen HEAD in PR #262 |
 | R-028 | 2026-10-27 | dieser Commit; lokale Minor-Lieferung 3.1.0 | Einheitliches UI/A11y, gespeicherte Ansichten, Dashboardzustand, dauerhafte Aufgaben, Compose-Preview, Volume-Backups/Restore, Updatepläne und Audit-Suche; reale Limiter-/Guard-Buildfehler korrigiert | lokal 1068/344 sowie 45 Skripttests; Build/Bundle, frische/bestehende SQLite-Upgrades, Image/Health, Schutzstack, echte Archiv-Wiederherstellung und Desktop/Mobil-Browserflüsse bestanden; Remote-/weitere DB-/Multiarch-Nachweise offen |
 | R-027 | 2026-10-27 | dieser Commit; lokale Patch-Lieferung 3.0.4 | Validierungsantworten und Kontoeingaben, Compose-Symlink-/Env-Fehler, Refresh-/Setup-Zustand, Compose-Details/Löschdialoge und Katalog-Editor-Races korrigiert | lokal 922/244 sowie 44 Skripttests; Build/Bundle und frische SQLite-Migration bestanden; Image-/Browser-/Remote-Prüfungen offen |
 | R-026 | 2026-10-02 | dieser Commit; neue Lieferung 3.0.3 | Dev-Lock für Dependency Graph nach requirements-dev-lock.txt umbenannt; lokale/CI-/Doku-Verweise synchronisiert; 3.0.2-Master-Merge und Publikation belegt | lokal 884/217; 84 Requirements unverändert; Hash-pip-Dry-run, Build/Bundle und frische SQLite-Migration bestanden; finale HEAD-/Graph-Nachweise erforderlich |
