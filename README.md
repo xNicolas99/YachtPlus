@@ -89,6 +89,8 @@ Tags are pushed sequentially, so an interruption can leave a partial set of
 tags; release creation waits for successful publication and matching digests.
 Investigate an incomplete reserved version before proceeding; never retarget a
 released version to another commit. The tested image is not rebuilt for pushing.
+Operator-created release drafts are preserved and are not published implicitly.
+An existing draft without a matching Git tag requires explicit investigation.
 Workflow actions are pinned to commit SHAs. Python runtime and development
 dependencies use separate committed locks with distribution hashes; test
 tooling and backend tests are excluded from the release image. The downloaded
@@ -372,7 +374,7 @@ npx vitest run
 
 Run publication-policy checks from the repository root with the backend
 environment: `python -m unittest discover -s scripts -p 'test_*.py' -v`.
-Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 62
+Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 67
 publication-policy/security-script tests**. The latest [changelog](CHANGELOG.md) and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record the completed
 checks and remaining work. Older audit documents contain historical counts.

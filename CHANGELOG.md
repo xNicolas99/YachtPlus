@@ -22,8 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   aktualisieren nur SHA/latest. Wiederholung, konkurrierende Tagreservierung,
   verlorene API-Antworten und fehlgeschlagene Veröffentlichung sind abgesichert.
   Fertigstellung folgt dem reservierten Tag auch bei inzwischen fortgeschrittenem Master.
-- Ergebnis: **1068 Backend-, 344 Frontend- und 62 Skripttests bestanden**,
-  darunter 17 neue Release-Regressionstests. Produktionsbuild und Bundlegrenzen
+  Bestehende Release-Entwürfe werden über die authentifizierte paginierte Liste
+  erkannt, da GitHubs Tagabfrage nur veröffentlichte Releases findet.
+- Ergebnis: **1068 Backend-, 344 Frontend- und 67 Skripttests bestanden**,
+  darunter 22 neue Release-Regressionstests. Produktionsbuild und Bundlegrenzen
   grün; frisches SQLite-Upgrade auf `20261027_0003` und Wiederholung erfolgreich.
   Voraussetzungen für den Patch-Versionsschritt vor der Erhöhung geprüft.
 - GitHub: [PR #262](https://github.com/xNicolas99/YachtPlus/pull/262) bündelt

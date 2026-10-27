@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from release_gate import (GitHubAPI, REQUIRED_JOBS, ReleaseRejected, complete_version_release,
+from release_gate import (GitHubAPI, MAX_RELEASE_PAGES, REQUIRED_JOBS, ReleaseRejected, complete_version_release,
                           prepare_version_release, release_plan, tag_commit, version_binding)
 
 
@@ -332,13 +332,19 @@ class FakeReleaseAPI:
         self.lose_release_response = False
         self.fail_release = False
         self.ref_race = None
+        self.release_pages = None
 
     def request(self, method, path, payload=None, *, missing_ok=False):
         self.calls.append((method, path, payload))
         if method == "GET" and path == "git/ref/tags/v2.1.0":
             return {"object": {"type": "commit", "sha": self.sha}} if self.sha else None
         if method == "GET" and path == "releases/tags/v2.1.0":
-            return self.release
+            return self.release if self.release and not self.release.get("draft", False) else None
+        if method == "GET" and path.startswith("releases?per_page=100&page="):
+            page = int(path.rsplit("=", 1)[-1])
+            if self.release_pages is not None:
+                return self.release_pages.get(page, [])
+            return [self.release] if self.release else []
         if method == "POST" and path == "git/refs":
             if self.sha or self.ref_race:
                 self.sha = self.ref_race or self.sha
@@ -485,7 +491,7 @@ class AutomaticReleaseTests(unittest.TestCase):
             return io.BytesIO(json.dumps(data).encode())
         absent = HTTPError("https://api.github.com/", 404, "Not found", None, None)
         reference = {"object": {"type": "commit", "sha": SHA}}
-        with patch("release_gate.urlopen", side_effect=[absent, absent, URLError("connection lost"), reply(reference), reply(reference)]):
+        with patch("release_gate.urlopen", side_effect=[absent, absent, reply([]), URLError("connection lost"), reply(reference), reply(reference)]):
             binding = prepare_version_release(GitHubAPI("secret-test-token"), self.plan, SHA)
         self.assertTrue(binding["create_release"])
 
@@ -496,8 +502,70 @@ class AutomaticReleaseTests(unittest.TestCase):
         reference = {"object": {"type": "commit", "sha": SHA}}
         release = {"tag_name": "v2.1.0", "draft": False, "prerelease": False,
                    "body": f"<!-- yachtplus-release sha={SHA} digest={self.digest} -->"}
-        with patch("release_gate.urlopen", side_effect=[reply(reference), absent, reply(reference), URLError("connection lost"), reply(release), reply(reference)]):
+        with patch("release_gate.urlopen", side_effect=[reply(reference), absent, reply([]), reply(reference), URLError("connection lost"), reply(release), reply(reference)]):
             complete_version_release(GitHubAPI("secret-test-token"), self.plan, SHA, self.digest, run_id="1234")
+
+    def test_existing_draft_is_found_on_paginated_list_and_never_republished(self):
+        draft = {"tag_name": "v2.1.0", "draft": True, "body": "Operator draft notes"}
+        api = FakeReleaseAPI(sha=SHA, release=draft)
+        api.release_pages = {1: [{"tag_name": "v2.1.00", "draft": False}] * 100, 2: [draft]}
+        # GitHub's published-by-tag endpoint cannot see this draft.
+        self.assertIsNone(api.request("GET", "releases/tags/v2.1.0", missing_ok=True))
+        binding = prepare_version_release(api, self.plan, SHA)
+        complete_version_release(api, self.plan, SHA, self.digest, run_id="1234")
+        self.assertFalse(binding["create_release"])
+        self.assertEqual(binding["tags"].splitlines(), [f"sha-{SHA}", "latest"])
+        self.assertTrue(any(path == "releases?per_page=100&page=2" for _, path, _ in api.calls))
+        self.assertEqual(api.release, draft)
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_draft_lookup_limit_fails_closed_before_reserving_or_publishing_version(self):
+        api = FakeReleaseAPI()
+        api.release_pages = {page: [{"tag_name": "v0.0.1"}] * 100 for page in range(1, MAX_RELEASE_PAGES + 1)}
+        with self.assertRaisesRegex(ReleaseRejected, "safe lookup limit"):
+            prepare_version_release(api, self.plan, SHA)
+        self.assertIsNone(api.sha)
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+        self.assertEqual(sum(path.startswith("releases?per_page=") for _, path, _ in api.calls), MAX_RELEASE_PAGES)
+
+    def test_draft_without_git_tag_is_not_ignored_or_given_an_inferred_commit(self):
+        api = FakeReleaseAPI(release={"tag_name": "v2.1.0", "draft": True, "body": "Operator draft"})
+        with self.assertRaisesRegex(ReleaseRejected, "Release exists without its version tag"):
+            prepare_version_release(api, self.plan, SHA)
+        self.assertIsNone(api.sha)
+        self.assertTrue(api.release["draft"])
+        self.assertFalse(any(method == "POST" for method, _, _ in api.calls))
+
+    def test_real_published_endpoint_404_falls_back_to_authenticated_draft_list(self):
+        reference = {"object": {"type": "commit", "sha": SHA}}
+        draft = {"tag_name": "v2.1.0", "draft": True, "body": "Operator draft"}
+        absent = HTTPError("https://api.github.com/", 404, "Not found", None, None)
+        responses = [io.BytesIO(json.dumps(reference).encode()), absent, io.BytesIO(json.dumps([draft]).encode())]
+        with patch("release_gate.urlopen", side_effect=responses) as request:
+            binding = prepare_version_release(GitHubAPI("secret-test-token"), self.plan, SHA)
+        self.assertFalse(binding["create_release"])
+        self.assertNotIn("2.1.0", binding["tags"].splitlines())
+        self.assertEqual(request.call_args.args[0].full_url,
+                         "https://api.github.com/repos/xNicolas99/YachtPlus/releases?per_page=100&page=1")
+
+    def test_authenticated_api_accepts_arrays_only_for_known_release_list_gets(self):
+        for method, path, value, accepted in [
+            ("GET", "releases?per_page=100&page=1", [], True),
+            ("GET", "releases?per_page=100&page=10", [], True),
+            ("GET", "releases?per_page=100&page=11", [], False),
+            ("GET", "releases/tags/v2.1.0", [], False),
+            ("GET", "git/ref/tags/v2.1.0", [], False),
+            ("POST", "releases?per_page=100&page=1", [], False),
+            ("GET", "releases?per_page=100&page=1", {}, False),
+        ]:
+            with self.subTest(method=method, path=path, value=value):
+                response = io.BytesIO(json.dumps(value).encode())
+                with patch("release_gate.urlopen", return_value=response):
+                    if accepted:
+                        self.assertEqual(GitHubAPI("secret-test-token").request(method, path), [])
+                    else:
+                        with self.assertRaises(ReleaseRejected):
+                            GitHubAPI("secret-test-token").request(method, path)
 
     def test_completion_uses_reserved_tag_even_if_master_advanced_after_image_push(self):
         api = FakeReleaseAPI(sha=SHA)

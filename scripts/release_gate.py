@@ -23,6 +23,8 @@ REQUIRED_JOBS = frozenset({"backend-tests", "frontend-tests", "security-stack", 
 SEMVER = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)", re.ASCII)
 SHA = re.compile(r"[0-9a-f]{40}", re.ASCII)
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}", re.ASCII)
+RELEASE_PAGE_SIZE = 100
+MAX_RELEASE_PAGES = 10
 
 
 class ReleaseRejected(ValueError):
@@ -115,7 +117,12 @@ class GitHubAPI:
         try:
             with urlopen(request, timeout=30) as response:
                 result = json.load(response)
-                require(isinstance(result, dict), "Unexpected GitHub release response")
+                is_release_list = method == "GET" and path in {
+                    f"releases?per_page={RELEASE_PAGE_SIZE}&page={page}"
+                    for page in range(1, MAX_RELEASE_PAGES + 1)
+                }
+                require(isinstance(result, list if is_release_list else dict),
+                        "Unexpected GitHub release response")
                 return result
         except HTTPError as error:
             if missing_ok and error.code == 404:
@@ -124,6 +131,25 @@ class GitHubAPI:
             raise ReleaseRejected(f"GitHub release request failed (HTTP {error.code})") from None
         except (URLError, TimeoutError):
             raise ReleaseRejected("GitHub release request was interrupted; recheck the version ref and release before retrying") from None
+
+
+def find_release(api, tag: str):
+    release = api.request("GET", f"releases/tags/{tag}", missing_ok=True)
+    if release is not None:
+        return release
+    # The by-tag endpoint only finds published releases. Authenticated lists
+    # also expose drafts, which must not be treated as an unused version.
+    for page in range(1, MAX_RELEASE_PAGES + 1):
+        releases = api.request("GET", f"releases?per_page={RELEASE_PAGE_SIZE}&page={page}")
+        require(isinstance(releases, list) and len(releases) <= RELEASE_PAGE_SIZE,
+                "Unexpected GitHub release-list response")
+        for candidate in releases:
+            require(isinstance(candidate, dict), "Malformed GitHub release-list entry")
+            if candidate.get("tag_name") == tag:
+                return candidate
+        if len(releases) < RELEASE_PAGE_SIZE:
+            return None
+    raise ReleaseRejected("Release history exceeds the safe lookup limit; cannot rule out an existing draft for this version")
 
 
 def tag_commit(api, tag: str):
@@ -170,7 +196,7 @@ def version_binding(plan, sha, tag_sha, release, *, historical_version=None, anc
 def prepare_version_release(api, plan, sha, *, create_tag=True):
     tag = f"v{plan['version']}"
     tag_sha = tag_commit(api, tag)
-    release = api.request("GET", f"releases/tags/{tag}", missing_ok=True)
+    release = find_release(api, tag)
     if tag_sha is None:
         require(release is None, "Release exists without its version tag")
         require(create_tag, "Version tag vanished before release completion")
@@ -213,7 +239,7 @@ def complete_version_release(api, plan, sha, digest, *, run_id):
     except ReleaseRejected:
         # An interrupted response or concurrent rerun may already have
         # published this exact release. Accept only our exact commit/digest.
-        release = api.request("GET", f"releases/tags/{tag}", missing_ok=True)
+        release = find_release(api, tag)
         if release is None:
             raise
     require(release.get("tag_name") == tag and release.get("draft") is False
