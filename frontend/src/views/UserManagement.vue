@@ -1,19 +1,17 @@
 <template>
-  <v-card class="d-flex mx-auto page">
-    <v-container fluid class="component">
-      <Nav class="mb-3" />
-      <v-card tile>
-        <v-toolbar color="primary" density="compact">
-          <v-toolbar-title>User Management</v-toolbar-title>
-          <v-spacer></v-spacer>
-          <v-btn icon @click="loadUsers" aria-label="Refresh users" title="Refresh users">
+  <div class="user-management page">
+    <PageHeader title="Users" subtitle="Manage accounts and container permissions.">
+      <template #actions>
+          <v-btn icon variant="text" :loading="loading" :disabled="loading" @click="loadUsers" aria-label="Refresh users" title="Refresh users">
             <v-icon>mdi-refresh</v-icon>
           </v-btn>
-          <v-btn color="secondary" @click="openCreateDialog">
-            <v-icon start>mdi-plus</v-icon> Add User
+          <v-btn color="primary" @click="openCreateDialog">
+            <v-icon start>mdi-plus</v-icon> Add user
           </v-btn>
-        </v-toolbar>
-
+      </template>
+    </PageHeader>
+    <v-container fluid class="component pa-0">
+      <v-card tile>
         <v-data-table
           :headers="headers"
           :items="users"
@@ -128,16 +126,16 @@
         {{ snackbar.message }}
       </v-snackbar>
     </v-container>
-  </v-card>
+  </div>
 </template>
 
 <script>
 import axios from "axios";
-import Nav from "../components/userSettings/UserSettingsNav.vue";
+import PageHeader from "@/components/PageHeader.vue";
 
 export default {
   components: {
-    Nav
+    PageHeader
   },
   data: () => ({
     dialog: false,
@@ -197,13 +195,6 @@ export default {
   methods: {
     loadUsers() {
       this.loading = true;
-      // Need to implement backend endpoint for getting all users.
-      // Currently backend/api/routers/users.py has get_user (me) but not list all for admin.
-      // Wait, crud.get_users exists but is not exposed in router explicitly?
-      // Let's check backend/api/routers/users.py again.
-      // It doesn't seem to have a GET /users endpoint. I need to add it.
-      // For now I will mock or fail, but I must add the endpoint in backend.
-
       axios
         .get("/auth/users")
         .then(response => {

@@ -18,6 +18,16 @@ const routes = [
     component: () => import("../views/auth/Login.vue")
   },
   {
+    path: "/tasks",
+    name: "Tasks",
+    component: () => import("../components/operations/TaskList.vue")
+  },
+  {
+    path: "/backups",
+    name: "Backups",
+    component: () => import("../components/backups/Backups.vue")
+  },
+  {
     path: "/setup",
     name: "Setup",
     component: () => import("../views/auth/Setup.vue")
@@ -185,6 +195,11 @@ const routes = [
         name: "Update YachtPlus",
         path: "update",
         component: () => import("../components/serverSettings/ServerUpdate.vue")
+      },
+      {
+        name: "Update plans",
+        path: "update-plans",
+        component: () => import("../components/serverSettings/UpdatePlans.vue")
       }
     ]
   },

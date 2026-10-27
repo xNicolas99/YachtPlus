@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     # canonically; a trailing slash is optional.
     COMPOSE_DIR: str = os.getenv("COMPOSE_DIR", "/compose/")
 
+    # Local archives remain on the application's persistent config volume.
+    BACKUP_DIR: str = "/config/backups"
+    BACKUP_HELPER_IMAGE: Optional[str] = None
+    BACKUP_MAX_BYTES: int = Field(default=1073741824, ge=10240)
+
     # Directory shipped *inside the image* with bundled catalog JSON
     # files (configs/*.json in the repo -> /api/configs/ in the container).
     # Loaded by init_templates() on first setup-finalize, so a fresh

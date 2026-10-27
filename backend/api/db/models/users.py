@@ -2,6 +2,7 @@ from sqlalchemy import Boolean, Column, Integer, String, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import secrets
+import uuid
 from api.db.database import Base
 
 
@@ -16,6 +17,9 @@ class User(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     is_superuser = Column(Boolean, default=False, nullable=False)
     auth_version = Column(String(64), default=lambda: secrets.token_hex(32), nullable=False)
+    # Stable across password changes; a recreated username/SQLite id gets a
+    # different identity and cannot inherit the previous account's task history.
+    account_instance = Column(String(36), default=lambda: str(uuid.uuid4()), nullable=False)
     otp_last_step = Column(Integer, nullable=True)
 
     # New fields for 2FA and Roles

@@ -11,9 +11,12 @@ database_url = make_url(get_settings().DATABASE_URL)
 async_drivers = {"sqlite": "sqlite+aiosqlite", "postgresql": "postgresql+asyncpg", "postgres": "postgresql+asyncpg", "mysql": "mysql+aiomysql"}
 db_url = database_url.set(drivername=async_drivers.get(database_url.get_backend_name(), database_url.drivername)).render_as_string(hide_password=False)
 
-# SQLite needs StaticPool and specific connect_args for async testing
-connect_args = {"check_same_thread": False} if "sqlite" in db_url else {}
-poolclass = StaticPool if "sqlite" in db_url else None
+# Only in-memory SQLite needs one shared connection. File-backed sessions must
+# use separate connections so a background job cannot commit or roll back a
+# request's transaction while both are in flight.
+is_sqlite = database_url.get_backend_name() == "sqlite"
+connect_args = {"check_same_thread": False} if is_sqlite else {}
+poolclass = StaticPool if is_sqlite and database_url.database in (None, "", ":memory:") else None
 
 engine = create_async_engine(
     db_url,

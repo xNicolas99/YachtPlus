@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from typing import Dict, List, Any
 from api.auth.jwt import get_auth_wrapper
 from api.auth.auth import auth_check
@@ -35,7 +35,8 @@ async def search(
     request: Request,
     q: str = Query(..., min_length=1, max_length=SEARCH_QUERY_MAX_LEN),
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     """
     Unified search endpoint.

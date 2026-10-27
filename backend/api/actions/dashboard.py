@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import psutil
+from fastapi import HTTPException
 from api.utils.compose import find_yml_files
 from api.settings import get_settings
 settings = get_settings()
@@ -96,6 +97,7 @@ async def get_dashboard_stats():
     images = []
     volumes = []
     networks = []
+    availability = {source: True for source in ("containers", "images", "volumes", "networks", "projects", "resources")}
 
     # System Resources
     try:
@@ -107,6 +109,7 @@ async def get_dashboard_stats():
         }
     except Exception as e:
         logger.error(f"Error fetching system resources: {e}")
+        availability["resources"] = False
         resources = {
             "cpu": 0,
             "ram": 0,
@@ -128,29 +131,22 @@ async def get_dashboard_stats():
              )
         except Exception as e:
             logger.error(f"Error fetching containers: {e}")
-            # If containers fail, we probably can't do much, but we return empty to avoid 500
-            return {
-                "containers": {"total": 0, "running": 0, "stopped": 0, "unhealthy": 0},
-                "projects": {"total": 0, "active": 0, "inactive": 0},
-                "images": {"total": 0, "used": 0, "dangling": 0, "total_size": 0},
-                "volumes": {"total": 0, "in_use": 0, "unused": 0},
-                "networks": {"total": 0, "custom": 0, "default": 0},
-                "resources": resources
-            }
+            raise HTTPException(503, "Container inventory is unavailable") from None
 
         # Part 2: Secondary - Images, Volumes, Networks
         # We run them in parallel but catch individual errors
-        async def fetch_safe(coro, default):
+        async def fetch_safe(source, coro, default):
             try:
                 return await asyncio.wait_for(coro, timeout=5.0)
             except Exception as e:
-                logger.warning(f"Stats fetch failed for {default}: {e}")
+                logger.warning("Dashboard source %s is unavailable: %s", source, e)
+                availability[source] = False
                 return default
 
         results = await asyncio.gather(
-            fetch_safe(docker.images.list(), []),
-            fetch_safe(docker.volumes.list(), {}),
-            fetch_safe(docker.networks.list(), []),
+            fetch_safe("images", docker.images.list(), []),
+            fetch_safe("volumes", docker.volumes.list(), {}),
+            fetch_safe("networks", docker.networks.list(), []),
             return_exceptions=True
         )
 
@@ -167,6 +163,7 @@ async def get_dashboard_stats():
         project_names = set(project_files.keys()) if project_files else set()
     except Exception as e:
         logger.error(f"Error finding compose files: {e}")
+        availability["projects"] = False
         project_names = set()
 
     running_count = 0
@@ -257,6 +254,8 @@ async def get_dashboard_stats():
             custom_networks += 1
 
     return {
+        "availability": availability,
+        "info": {"status": "active" if all(availability.values()) else "degraded"},
         "containers": {
             "total": len(containers),
             "running": running_count,

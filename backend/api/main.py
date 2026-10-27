@@ -17,7 +17,7 @@ from api.utils.security import limiter
 from api.routers import (
     apps, dashboard, templates, resources, compose,
     app_settings, users, auth_2fa, audit, registries,
-    containers, smtp, watchtower, search, setup
+    containers, smtp, watchtower, search, setup, operations, backups, update_plans
 )
 from api.db.database import engine, Base
 from api.settings import get_settings
@@ -40,6 +40,11 @@ async def lifespan(app: FastAPI):
     # import.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    from api.services.operations import start_operation_service, stop_operation_service
+    from api.services.backups import recover_backups
+    await start_operation_service()
+    await recover_backups()
 
     # Deployment-mode health check: log the derived mode and any config
     # warnings/errors once at startup. We intentionally do not refuse to
@@ -76,14 +81,15 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("Failed to start watchtower scheduler: %s", exc, exc_info=True)
 
-    yield
-
-    # Shutdown the scheduler cleanly on application exit.
-    from api.services.watchtower import stop_scheduler
     try:
-        stop_scheduler()
-    except Exception as exc:
-        logger.error("Failed to stop watchtower scheduler: %s", exc, exc_info=True)
+        yield
+    finally:
+        from api.services.watchtower import stop_scheduler
+        try:
+            stop_scheduler()
+        except Exception as exc:
+            logger.error("Failed to stop watchtower scheduler: %s", exc, exc_info=True)
+        await stop_operation_service()
 
 
 app = FastAPI(title="YachtPlus API", lifespan=lifespan)
@@ -267,6 +273,9 @@ app.include_router(registries.router, prefix="/api/registries", tags=["registrie
 app.include_router(containers.router, prefix="/api/containers", tags=["containers"])
 app.include_router(search.router, prefix="/api/search", tags=["search"])
 app.include_router(watchtower.router, prefix="/api/watchtower", tags=["watchtower"])
+app.include_router(operations.router, prefix="/api/operations", tags=["operations"])
+app.include_router(backups.router, prefix="/api/backups", tags=["backups"])
+app.include_router(update_plans.router, prefix="/api/update-plans", tags=["update plans"])
 # Settings group
 app.include_router(users.router, prefix="/api/auth", tags=["auth"])
 app.include_router(auth_2fa.router, prefix="/api/auth/2fa", tags=["2fa"])

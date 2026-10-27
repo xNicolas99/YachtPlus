@@ -66,8 +66,9 @@ export default {
   props: {
     label: { type: String, default: 'Search Apps, Templates and DockerHub' },
     autofocus: { type: Boolean, default: false },
+    modelValue: { type: String, default: undefined },
   },
-  emits: ['input', 'selected'],
+  emits: ['input', 'selected', 'update:modelValue'],
   data: () => ({
     query: '', items: [], isOpen: false, isLoading: false, error: '', activeIndex: -1,
     requestId: 0, selectionRequestId: null, debounceTimer: null, requestTimer: null, requestController: null,
@@ -78,6 +79,21 @@ export default {
       return ['Apps', 'Templates', 'DockerHub'].map(name => ({
         name, items: this.items.map((item, index) => ({ item, index })).filter(entry => entry.item.source === name),
       })).filter(group => group.items.length);
+    },
+  },
+  watch: {
+    modelValue: {
+      immediate: true,
+      handler(value) {
+        if (typeof value !== 'string' || value === this.query) return;
+        this.cancelSearch();
+        this.query = value.slice(0, 128);
+        this.items = [];
+        this.error = '';
+        this.isLoading = false;
+        this.isOpen = false;
+        this.activeIndex = -1;
+      },
     },
   },
   mounted() {
@@ -100,6 +116,7 @@ export default {
     updateQuery(value) {
       this.query = value;
       this.$emit('input', value);
+      this.$emit('update:modelValue', value);
       this.scheduleSearch();
     },
     scheduleSearch(immediate = false) {

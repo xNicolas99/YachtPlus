@@ -217,6 +217,7 @@ async def login(
     user_data: schemas.UserLogin = Body(..., embed=False),
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     payload, access_token = await _perform_login(db, request, user_data)
     if access_token is not None:
@@ -291,6 +292,7 @@ async def create_api_key(
     key: schemas.GenerateAPIKEY,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     # Rate-limited so a compromised session can't spam-mint API keys
     # (each one is a long-lived credential — 10 year exp via create_key).
@@ -324,6 +326,7 @@ async def get_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     if get_settings().DISABLE_AUTH:
@@ -356,6 +359,7 @@ async def update_user(
     user: schemas.UserSelfUpdate,  # self-service schema: no perm_*/is_* fields
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     current_user = await Authorize.get_jwt_subject()

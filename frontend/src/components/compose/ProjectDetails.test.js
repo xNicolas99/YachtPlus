@@ -87,7 +87,7 @@ describe("Compose project details", () => {
     mounted.store.state.projects.projects = [{ name: "demo", services: {} }];
     mounted.store.state.projects.isLoading = false;
     await Vue.nextTick();
-    expect(mounted.text()).toContain("Project Details");
+    expect(mounted.text()).toContain("Stack details");
     expect(mounted.nodes("VAlert")).toHaveLength(0);
   });
 
@@ -95,7 +95,7 @@ describe("Compose project details", () => {
     const mounted = mount({ loading: true });
     mounted.store.state.projects.isLoading = false;
     await Vue.nextTick();
-    expect(mounted.text()).toContain("Project details are unavailable");
+    expect(mounted.text()).toContain("Stack details are unavailable");
     expect(mounted.nodes("VCard")).toHaveLength(0);
   });
 
@@ -141,6 +141,7 @@ describe("Compose project details", () => {
     expect(mounted.text()).toContain("db");
     expect(mounted.text()).toContain("private");
     expect(mounted.text()).not.toContain("0, private");
+    expect(mounted.text().match(/private/g)).toHaveLength(1);
   });
 });
 

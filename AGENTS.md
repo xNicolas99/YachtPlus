@@ -1,6 +1,16 @@
 # AGENTS.md — orientation for coding agents
 
-Current local candidate: **3.0.4, run R-027 (2026-10-27)**, based on
+Current local candidate: **3.1.0, run R-028 (2026-10-27)**, based on `6c97521`.
+Saved container views, verified dashboard snapshots, persistent tasks, Compose
+previews, volume backups/restores, per-project update plans and filtered audit
+search are implemented. New policies start disabled. Local verification passed
+**1068 backend + 344 frontend + 45 script tests**, fresh/existing SQLite upgrades,
+production build/bundle gates, image content/start/health, real fail2ban protection,
+volume roundtrip and desktop/mobile browser flows. See the latest changelog and
+[operations guide](docs/OPERATIONS_GUIDE.md) for evidence and boundaries. Remote
+CI/CodeQL, PostgreSQL/MySQL and multiarch are not established by those local checks.
+
+Previous local delivery: **3.0.4, run R-027 (2026-10-27)**, based on
 `94209fe` (the merge of 3.0.3). The audit fixes validation error serialization,
 account input validation, Compose symlink writes and environment conversion,
 frontend refresh/setup handling, Compose rendering/deletion and catalog-editor
@@ -117,13 +127,18 @@ backend/
       apps.py compose.py containers.py dashboard.py templates.py
       users.py auth_2fa.py registries.py resources.py smtp.py search.py
       watchtower.py audit.py app_settings.py
+      operations.py backups.py update_plans.py
       setup/setup.py
     actions/               # Business logic, mostly async wrappers around aiodocker / subprocess
     db/
       models/              # SQLAlchemy ORM models
       schemas/             # Pydantic request/response shapes
       crud/                # Pure DB ops (no FastAPI in here)
-    services/              # Leader-elected retention cleanup; opt-in Compose updates
+    services/              # Durable operations, archives and opt-in update/backup policies
+      operations.py        # Bounded queue, worker leases, ownership and code-owned runners
+      backups.py           # Validated Docker archives; restores only into new volumes
+      update_plans.py      # UTC maintenance windows and policy rechecks
+      watchtower.py        # Elected scheduler; submits scans to the API event loop
     utils/                 # CSRF/audit ASGI middleware, secret files, SMTP, bounded YAML, Docker helpers
   alembic/                 # Migrations
   tests/                   # pytest, with conftest.py for env setup (tracked; run in CI)
@@ -143,7 +158,8 @@ frontend/
     views/                 # Page-level components, one per route
       auth/Login.vue       # Cookie-based login + 2FA flow
       auth/Setup.vue       # First-run wizard
-    components/            # Reusable UI: applications/, compose/, charts/, auth/, nav/, …
+    components/            # Reusable UI: applications/, compose/, operations/, backups/, charts/, auth/, nav/, …
+      PageHeader.vue       # Shared title/subtitle/actions; headingLevel defaults to 1
     utils/                 # JS helpers + specs; authInterceptor.js installs bounded auth retries;
                            # resourcePages.js loads paginated resource API results
   vite.config.js
@@ -256,6 +272,9 @@ hook via `await engine.run_sync(Base.metadata.create_all)` — never sync
 - **Sensitive account changes:** self-service username/password changes
   require `current_password` and use a schema that cannot set permissions.
   User create/edit persists every action permission, including restart.
+  `User.account_instance` is a stable per-account UUID, separate from rotating
+  `auth_version`; operation ownership checks both numeric ID and this instance.
+  Existing credentials keep their version during its migration.
   Admin edits/deletions lock the active-admin set and preserve at least one
   active superuser; an administrator cannot deactivate/demote their own account.
   Input schemas reject blank usernames and normalized names exceeding the
@@ -328,6 +347,12 @@ Superusers bypass `check_permission`.
 | `/api/containers/{id}/exec` (WS) | shell-name whitelist → JWT decode → reject `setup_pending` → DB lookup (`is_active`) → `perm_start`. See section 5 below for the WS-specific contract. |
 | `/api/auth/users/{user_id}` DELETE / account edits | active superuser only; serialized guard preserves at least one active admin and refuses self-delete/deactivation/demotion |
 | `/api/settings/email` GET / POST / `/test` | active superuser only; response omits the password and reports `password_configured` |
+| `/api/operations` list/detail | authenticated current account; own account-instance history, or all entries for an active superuser |
+| `/api/operations` POST / `/deploy` / `/{id}/retry` | API keys rejected; allowlisted action permission, deployment preflight and fresh account/credential checks before execution; custom runners cannot use generic Retry |
+| `/api/backups` and `/schedules` | active superuser, no API keys; inventory errors fail closed; restore only into a verified new volume |
+| `/api/update-plans` | active superuser; mutations reject API keys; enabled plans require a persisted administrator and current credential version |
+| `/api/compose/preview` | active superuser, no API keys; validates/normalizes YAML without writing files |
+| `/api/audit/entries` and `/export` | active superuser; bounded filters/pagination/export and spreadsheet-formula neutralization |
 | `/api/auth/api/keys/{id}` DELETE | owner OR superuser; non-owner gets the same "Key not found" payload as a missing id (no IDOR id-existence leak) |
 
 ### `/api/containers/{id}/exec` WebSocket contract
@@ -462,6 +487,16 @@ typed at sudo prompts, tokens echoed by tools, file contents dumped by
   job validates actual bans/unbans, LAN/public/proxy/UI/API/WS, persisted bans,
   protection outage recovery, loopback backend and runtime permissions. GHCR
   publication requires its success in addition to backend/frontend/ruff jobs.
+- The fail2ban image copies configuration/Python files with explicit mode 0644
+  so UID 1001 can read them even from a mode-0600 checkout. Its build filter
+  probe uses the current UTC date rather than an aging fixture date.
+- Volume archives use never-started UID 1000 helpers, no capabilities/network,
+  read-only source mounts and the Docker proxy. Only ordinary local volumes and
+  regular files/directories are supported; links/special files, custom drivers
+  and YachtPlus/infrastructure volumes are excluded. Ordinary application mounts
+  at `/config` remain eligible. Archive validation, SHA-256 and transaction
+  labels precede restore into a new volume. Staging stays in private `BACKUP_DIR`,
+  not the 128 MiB `/tmp` tmpfs.
 
 
 | Defense | Where | Notes |
@@ -590,6 +625,8 @@ called from an `async def`, it must be isolated (async library or
    (yields `AsyncSession`). Write queries with `select(...)` +
    `await db.execute(...)` + `.scalars()/.first()/.all()`. Commit/refresh/
    rollback must be awaited. Never `db.query(...)`.
+  File-backed SQLite uses separate pooled connections for independent request
+  and job transactions; reserve `StaticPool` for in-memory SQLite.
 3. **New CRUD functions:** make them `async def` taking `db: AsyncSession`.
    Keep pure helpers (formatting, validation) sync.
 4. **New external I/O** (SMTP, HTTP, subprocess, files, sync Docker SDK,
@@ -673,6 +710,11 @@ called from an `async def`, it must be isolated (async library or
 - **Authentication state.** The auth store coalesces refresh requests. Logout
   clears account/setup secrets and user resource state; username/password
   changes require the existing password and return to login after revocation.
+- **Container views.** `utils/containerViews.js` owns status/health parsing,
+  including Docker summary health text, and browser preference format
+  `yachtplus.container-views.v1:<account>` (max 20 views). Persist only display
+  preferences, never inspect/config/environment payloads. Dashboard links use
+  `status=running|stopped` and `health=unhealthy`.
 - **Logs and charts.** Log requests and in-browser history are bounded to
   10,000 lines; SSE `end`/`error` stops reconnect loops, and stopped containers
   can show historical logs. Docker memory charts subtract inactive cache.
@@ -691,9 +733,37 @@ called from an `async def`, it must be isolated (async library or
   configured variable in a value; populated values require an environment name.
   Catalog editors ignore responses for replaced/closed forms and block saving
   during loading or an existing save.
+- **Compose preview.** POST `/api/compose/preview` uses the same normalizer as
+  saving and returns affected services, security changes, normalized YAML and a
+  diff. The optional input-only `preview_token` HMAC binds input/result/source;
+  a process-shared save lock and repeated token check reject stale saves (409).
+  Legacy clients may still write without a token. The editor requires current
+  preview acknowledgement, warns on unsaved navigation/unload and keeps YAML
+  only in memory. Diff lines use block layout and preserve empty lines.
+- **Tasks.** `/tasks` and `utils/operations.js` follow accepted work across page
+  changes. Queue limits are 32 pending/active and two concurrent jobs per worker;
+  phases reflect real steps. Heartbeats run every five seconds with a 30-second
+  stale lease. No payload/terminal bytes or raw daemon errors enter records.
+  Account identity/version/permissions are rechecked before queued work.
+  `submit_operation(..., before_commit=...)` links domain state and task ID
+  atomically before spawning. Custom runners are code-owned closures and never
+  reconstructed by generic Retry. Completion must not navigate away from a newer
+  page. Self-restarts remain unconfirmed until independently verified.
+- **Policies.** The elected scheduler bridges scans to `get_operation_loop()`
+  every minute; never create another loop for shared async DB work. Backups
+  enqueue quickly and run retention in their successful runner. Update plans use
+  UTC starting weekdays/windows and minimum cadence; saved policies override
+  legacy global updates, including exclusions/disabled plans. Check plan revision,
+  account and window immediately before pull/up, including after executor waits.
+  Changed credentials/permissions require renewed administrator approval.
+- **Activity search.** `/audit/entries` supplies bounded server-side filters,
+  stable paging and counts; `/audit/export` exports at most 5,000 matching rows.
+  Escape literal resource filters, normalize times to UTC, neutralize CSV formula
+  prefixes and preserve the administrator gate/legacy list API.
 - **Schedulers.** Hourly retention runs under one filesystem-elected leader.
-  Daily Compose pulls/recreates require `COMPOSE_AUTO_UPDATE=true`; manual
-  update endpoints await completion and propagate errors.
+  Legacy daily Compose pulls/recreates require `COMPOSE_AUTO_UPDATE=true`;
+  enabled project plans run independently of that global switch. Manual update
+  endpoints await completion and propagate errors.
 - **Dashboard polling.** `views/Home.vue` polls only while the tab is visible
   (`document.hidden` guard) and refreshes immediately on `visibilitychange`.
   Keep this pattern for any new auto-refresh view.
@@ -792,7 +862,7 @@ Useful subsets:
 - `python -m pytest tests/test_compose_perms.py tests/test_compose_delete_path.py` — compose permission and path-safety gates.
 - `python -m pytest tests/test_image_inspect.py` — Docker Hub manifest/tag handling.
 
-Local verification for R-027 on 2026-10-27 passed **922 backend, 244 frontend and 44
+Local verification for R-028 on 2026-10-27 passed **1068 backend, 344 frontend and 45
 publication-policy/security-script tests**, production build/bundle gates and a
 fresh SQLite migration. The latest [changelog](CHANGELOG.md) entry records the
 current evidence and remaining checks. The older
@@ -854,6 +924,10 @@ migration, every test that touches the DB uses an `AsyncSession`;
 | `YACHT_SECURITY_LOG` | `/config/security/auth.log` | Persistent deterministic login-failure log consumed by fail2ban. |
 | `COMPOSE_DIR` | `/compose/` | Canonically joined project paths; trailing slash optional. |
 | `COMPOSE_AUTO_UPDATE` | `false` | Opt in to the leader's daily Compose pull/recreate job; manual updates remain available. |
+| `BACKUP_DIR` | `/config/backups` | Private persistent archives and staging; symlink path components refused. |
+| `BACKUP_HELPER_IMAGE` | auto | Existing local helper image, normally current YachtPlus; never started or automatically pulled; extra declared image volumes refused. |
+| `BACKUP_MAX_BYTES` | `1073741824` | Per-archive/staging byte limit including tar overhead, minimum 10 KiB. |
+| `NO_PROXY` / `no_proxy` | internal hosts plus inherited list in Compose | Keep local Docker API calls on `dockerproxy` instead of an HTTP egress proxy. |
 | `AUDIT_RETENTION_DAYS` | `90` | Hourly cleanup retention for activity records; minimum 1. |
 | `LOGIN_RETENTION_DAYS` | `30` | Hourly cleanup retention for login-attempt records; minimum 1. |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | slowapi storage backend. Image uses one worker; custom multiworker deployments require shared storage and its client dependency. |
@@ -883,6 +957,10 @@ migration, every test that touches the DB uses an `AsyncSession`;
 | Removing `unsafe-eval` from CSP is a non-goal — it's already removed. Adding it back is a no. | XSS surface | If a dep needs `unsafe-eval`, the dep is the problem. |
 | Adding `settings.X` reference for a new env var | Pydantic `Settings` uses `class Config: env_file=".env"` (no `extra` set) | Declare `X` as a field on the `Settings` class in `api/settings.py`. Otherwise the read crashes with `AttributeError` at request time. `tests/test_settings_fields.py` pins the must-exist contract for the currently-declared fields. |
 | Calling `docker.from_env()` | Bypasses `settings.DOCKER_HOST` | Always go through `api.utils.docker_client.get_sync_docker_client()` for the sync SDK. |
+| Limited endpoints returning dict/ORM data | slowapi otherwise raises 500 after successful work | Include FastAPI-injected `response: Response = None`; keep limits/headers enabled. `test_rate_limit_headers_runtime.py` verifies real decorators in a separate process. |
+| Durable jobs and policy runners | Lost payloads, account reuse and unsafe automatic replay | Persist safe descriptors, stable ownership and leases; recheck permissions. Custom closures cannot be generically retried; link domain state before commit/task start. |
+| Volume archive/restore | Traversal, ownership races and data overwrite | Bound/validate stream, types, paths and checksum; never extract in API filesystem or overwrite existing volumes; preserve transaction ownership and source RO mounts. |
+| Maintenance windows | Queue/executor waits can restart services outside approval | Recheck policy/account/window in the executing worker before pull/up; legacy paths reread exclusions too. |
 | Generating a JWT signing key | `HS256` needs >= 32 bytes of raw entropy | `secrets.token_urlsafe(48)` in `api/settings.py`; never use `token_urlsafe(32)` or shorter. |
 | Hashing a user password | bcrypt cost factor | Use `bcrypt.gensalt(rounds=13)` via `api.db.crud.users.get_password_hash()`. Verify via `asyncio.to_thread(bcrypt.checkpw, ...)`. |
 | Trusting `X-Real-IP` / `X-Forwarded-For` outside `_resolve_client_ip` | IP-spoofing for rate-limit evasion | Don't. There's one entry point and it requires the peer to be in `settings.TRUSTED_PROXIES`. |
@@ -952,6 +1030,11 @@ migration, every test that touches the DB uses an `AsyncSession`;
   when the harness blocks the direct push (typically: destructive ops,
   unfamiliar branches). Don't open PRs by default — see the memory file
   `feedback_push_direct_to_master.md`.
+- **Managed Docker builds.** Copy the CLI from the digest-pinned official
+  `docker:27.1.2-cli` stage. Networked npm/pip/curl steps accept optional BuildKit
+  secret `proxy_ca`; preserve TLS verification and never copy session CA files
+  into layers. Keep Compose checksum verification and the internal Docker host
+  in both Compose stacks' `NO_PROXY`/`no_proxy` settings.
 
 ---
 
@@ -1218,6 +1301,7 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
+| R-028 | 2026-10-27 | dieser Commit; lokale Minor-Lieferung 3.1.0 | Einheitliches UI/A11y, gespeicherte Ansichten, Dashboardzustand, dauerhafte Aufgaben, Compose-Preview, Volume-Backups/Restore, Updatepläne und Audit-Suche; reale Limiter-/Guard-Buildfehler korrigiert | lokal 1068/344 sowie 45 Skripttests; Build/Bundle, frische/bestehende SQLite-Upgrades, Image/Health, Schutzstack, echte Archiv-Wiederherstellung und Desktop/Mobil-Browserflüsse bestanden; Remote-/weitere DB-/Multiarch-Nachweise offen |
 | R-027 | 2026-10-27 | dieser Commit; lokale Patch-Lieferung 3.0.4 | Validierungsantworten und Kontoeingaben, Compose-Symlink-/Env-Fehler, Refresh-/Setup-Zustand, Compose-Details/Löschdialoge und Katalog-Editor-Races korrigiert | lokal 922/244 sowie 44 Skripttests; Build/Bundle und frische SQLite-Migration bestanden; Image-/Browser-/Remote-Prüfungen offen |
 | R-026 | 2026-10-02 | dieser Commit; neue Lieferung 3.0.3 | Dev-Lock für Dependency Graph nach requirements-dev-lock.txt umbenannt; lokale/CI-/Doku-Verweise synchronisiert; 3.0.2-Master-Merge und Publikation belegt | lokal 884/217; 84 Requirements unverändert; Hash-pip-Dry-run, Build/Bundle und frische SQLite-Migration bestanden; finale HEAD-/Graph-Nachweise erforderlich |
 | R-025 | 2026-10-02 | dieser Doku-Folgecommit; gleiche Lieferung 3.0.2 | Abschließende CI-/CodeQL-Nachweise auf 93fa8da dokumentiert; keine zusätzliche Version; letzte HEAD-Checks bestimmen Merge/Publikation | CI 884/217 und alle 44 Linux-Skripte; Build/Migration/Image/Schutzstack/Ruff/CodeQL inklusive Results erfolgreich |

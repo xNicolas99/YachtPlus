@@ -1,5 +1,5 @@
 <template lang="html">
-  <div class="projects-list component" style="max-width: 90%">
+  <div class="projects-list component">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
@@ -9,20 +9,21 @@
           bottom
         />
       </v-fade-transition>
-      <v-card-title class="primary font-weight-bold">
-        Compose Stacks
+      <v-card-title class="font-weight-bold d-flex flex-wrap ga-2">
+        Stacks
         <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
               class="ml-2"
               color="secondary"
               to="/projects/_/edit"
+              aria-label="Create a stack"
               v-bind="props"
             >
               <v-icon>mdi-plus</v-icon>
             </v-btn>
           </template>
-          <span>Add Compose Stack</span>
+          <span>Create a stack</span>
         </v-tooltip>
         <v-spacer />
         <v-text-field
@@ -49,7 +50,7 @@
       >
         <template #no-data>
           <div>
-            No Compose available.
+            No stacks yet. Create a stack to manage services with Docker Compose.
           </div>
         </template>
         <template v-slot:item.name="{ item }">
@@ -60,7 +61,7 @@
              
             >
               <template v-slot:activator="{ props }">
-                <v-btn icon size="small" v-bind="props" class="" aria-label="Project Actions" title="Project Actions">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Stack actions" title="Stack actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>

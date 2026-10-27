@@ -94,7 +94,7 @@ const buttonText = node => [node.text || '', ...(node.children || []).map(button
 beforeEach(() => {
   vi.clearAllMocks();
   axios.get.mockResolvedValue({ data: {} });
-  axios.post.mockResolvedValue({ data: {} });
+  axios.post.mockResolvedValue({ data: { id: "deployment", status: "succeeded" } });
 });
 afterEach(() => apps.splice(0).forEach(app => app.unmount()));
 
@@ -102,6 +102,22 @@ describe('container deployment form', () => {
   const validTemplate = overrides => ({
     name: 'web', image: 'nginx:alpine', restart_policy: 'unless-stopped',
     ...overrides,
+  });
+
+  it('keeps deployment work running without navigating after the form unmounts', async () => {
+    const mounted = mount({ template: validTemplate({}) });
+    await settle();
+    let finish;
+    axios.post.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const pending = mounted.vm.submitFormData();
+    await vi.waitFor(() => expect(axios.post).toHaveBeenCalledOnce());
+    apps.pop().unmount();
+
+    finish({ data: { id: 'deployment-task', status: 'succeeded' } });
+    await pending;
+
+    expect(axios.post).toHaveBeenCalledOnce();
+    expect(mounted.router.push).not.toHaveBeenCalled();
   });
 
   it('defaults templates to restricted without trusting embedded approval or root user', async () => {
@@ -115,9 +131,9 @@ describe('container deployment form', () => {
     expect(mounted.nodes('VSelect').find(node => node.props.label === 'Network Mode').props.items).not.toContain('host');
     expect(mounted.nodes('VBtn').find(node => node.props['aria-label'] === 'Add device').props.disabled).toBe(true);
     await mounted.vm.submitFormData();
-    expect(axios.post).toHaveBeenCalledWith('/apps/deploy', expect.objectContaining({
+    expect(axios.post).toHaveBeenCalledWith('/operations/deploy', expect.objectContaining({
       security_profile: 'restricted', container_user: '1000:1000', confirm_image_default: false,
-    }));
+    }), { timeout: 15000 });
   });
 
   it.each(['0', '0:1000', '1000:0', 'root', '1000:root', '-1:1000', '2147483648', '1000:2147483648'])(
@@ -147,9 +163,9 @@ describe('container deployment form', () => {
     expect(axios.post).not.toHaveBeenCalled();
     await change(mounted.nodes('VCheckbox')[0], true);
     await mounted.vm.submitFormData();
-    expect(axios.post).toHaveBeenCalledWith('/apps/deploy', expect.objectContaining({
+    expect(axios.post).toHaveBeenCalledWith('/operations/deploy', expect.objectContaining({
       security_profile: 'image-default', confirm_image_default: true,
-    }));
+    }), { timeout: 15000 });
   });
 
   it.each([
@@ -176,9 +192,9 @@ describe('container deployment form', () => {
     expect(mounted.vm.form.security_profile).toBe('restricted');
     expect(mounted.vm.form.container_user).toBe('2000:2001');
     await mounted.vm.submitFormData();
-    expect(axios.post).toHaveBeenCalledWith('/apps/deploy', expect.objectContaining({
+    expect(axios.post).toHaveBeenCalledWith('/operations/deploy', expect.objectContaining({
       edit: true, security_profile: 'restricted', container_user: '2000:2001', confirm_image_default: false,
-    }));
+    }), { timeout: 15000 });
   });
 
   it('renders four Vuetify 3 steps, validates General and allows switching network selection', async () => {
@@ -251,7 +267,7 @@ describe('container deployment form', () => {
     deploy.props.onClick();
     await settle();
 
-    expect(axios.post).toHaveBeenCalledWith('/apps/deploy', expect.objectContaining({
+    expect(axios.post).toHaveBeenCalledWith('/operations/deploy', expect.objectContaining({
       template_id: 7, name: 'web', image: 'nginx:alpine', restart_policy: 'unless-stopped',
       network: 'bridge', network_mode: '',
       ports: [{ label: 'webui', hport: '18080', cport: '8080', proto: 'udp' }, { label: 'dns', hport: '18053', cport: '53', proto: 'udp' }],
@@ -262,7 +278,7 @@ describe('container deployment form', () => {
       sysctls: [{ name: 'net.ipv4.ip_forward', value: '1' }],
       cap_add: ['NET_BIND_SERVICE'], cpus: '2', mem_limit: '512m',
       security_profile: 'image-default', confirm_image_default: true,
-    }));
+    }), { timeout: 15000 });
     expect(mounted.router.push).toHaveBeenCalledWith({ name: 'View Applications' });
     expect(template.ports[0].hport).toBe('8080');
     expect(template.env[0].name).toBe('TZ');
@@ -315,11 +331,11 @@ describe('container deployment form', () => {
     await change(mounted.nodes('VCheckbox')[0], true);
     await change(mounted.field('command[0]'), 'worker');
     await mounted.vm.submitFormData();
-    expect(axios.post).toHaveBeenCalledWith('/apps/deploy', expect.objectContaining({
+    expect(axios.post).toHaveBeenCalledWith('/operations/deploy', expect.objectContaining({
       edit: true, id: 'abc', command: ['worker'],
       env: [{ label: 'TOKEN', name: 'TOKEN', default: 'a=b' }],
       devices: [{ host: '/dev/input', container: '/dev/device' }],
       sysctls: [{ name: 'net.ipv4.ip_forward', value: '1' }],
-    }));
+    }), { timeout: 15000 });
   });
 });

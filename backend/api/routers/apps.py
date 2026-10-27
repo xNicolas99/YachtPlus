@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, status, Request, BackgroundTasks, HTTPException, Response
 from fastapi.responses import JSONResponse
 from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -159,6 +159,7 @@ async def all_sse_stats(
     request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
@@ -323,6 +324,7 @@ async def sse_stats(
     request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)

@@ -155,6 +155,36 @@ describe.each([
 });
 
 describe('shared search cancellation and accessibility', () => {
+  it('restores externally controlled search text without issuing remote requests or opening the dropdown', async () => {
+    const model = Vue.ref('postgres');
+    const root = { children: [] };
+    const controlledSearch = { ...UnifiedSearch, components: { SearchBox: searchComponent }, render: compile(unifiedSource) };
+    const app = renderer.createApp({ render: () => Vue.h(controlledSearch, {
+      modelValue: model.value, 'onUpdate:modelValue': value => { model.value = value; },
+    }) });
+    app.provide(Vue.ssrContextKey, { modules: new Set() });
+    app.config.globalProperties.$store = { state: { apps: { apps: [] } } };
+    app.config.globalProperties.$router = { push: vi.fn().mockResolvedValue() };
+    app.mount(root);
+    mountedApps.push(app);
+    const input = () => nodes(root).find(node => node.type === 'input');
+    expect(input().props.value).toBe('postgres');
+    expect(input().props['aria-expanded']).toBe(false);
+    await vi.advanceTimersByTimeAsync(SEARCH_DELAY_MS);
+    expect(axios.get).not.toHaveBeenCalled();
+    model.value = 'redis';
+    await Vue.nextTick();
+    expect(input().props.value).toBe('redis');
+    input().props.onInput({ target: { value: 'nginx' } });
+    await Vue.nextTick();
+    expect(model.value).toBe('nginx');
+    model.value = '';
+    await Vue.nextTick();
+    expect(input().props.value).toBe('');
+    expect(input().props['aria-expanded']).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it('emits list filters immediately, including short queries, and clears from the button', async () => {
     const mounted = mountSearch(UnifiedSearch, unifiedSource);
     await type(mounted, 'n');

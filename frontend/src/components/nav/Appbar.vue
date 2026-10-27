@@ -4,12 +4,12 @@
     <v-app-bar-nav-icon
       aria-label="Toggle navigation menu"
       title="Toggle navigation menu"
-      class="hidden-md-and-up mr-2"
+      class="yp-mobile-nav mr-2"
       @click="$emit('toggle-drawer')"
     ></v-app-bar-nav-icon>
 
     <!-- Mobile brand -->
-    <div class="d-flex align-center ml-2 hidden-md-and-up">
+    <div class="yp-mobile-brand align-center ml-2">
       <img :src="themeLogo()" class="main-logo mr-3" alt="YachtPlus Logo" />
       <v-toolbar-title class="font-weight-bold" style="letter-spacing: 0.5px;">
         YachtPlus
@@ -21,13 +21,13 @@
 
     <v-btn
       ref="mobileSearchButton"
-      class="hidden-md-and-up"
+      class="yp-mobile-search-trigger"
       icon="mdi-magnify"
       aria-label="Open search"
-      title="Search Apps, Templates and DockerHub"
+      title="Search containers, templates and Docker Hub"
       @click="searchOpen = true"
     />
-    <v-dialog v-model="searchOpen" max-width="600" class="yp-mobile-search" aria-label="Search Apps, Templates and DockerHub" @after-leave="restoreSearchFocus">
+    <v-dialog v-model="searchOpen" max-width="600" class="yp-mobile-search" aria-label="Search containers, templates and Docker Hub" @after-leave="restoreSearchFocus">
       <v-card style="overflow: visible">
         <v-card-title class="d-flex align-center">
           Search
@@ -39,13 +39,13 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-    <div class="hidden-sm-and-down yp-search-wrap">
+    <div class="yp-search-wrap">
       <GlobalSearch />
     </div>
     <v-spacer></v-spacer>
 
     <!-- Host indicator -->
-    <div class="yp-host hidden-sm-and-down mr-3" title="Active host">
+    <div class="yp-host mr-3" title="Active host">
       <span class="yp-host-name">{{ hostLabel }}</span>
     </div>
 
@@ -60,11 +60,12 @@
             class="text-none px-3 ml-1 yp-user-btn"
             rounded="pill"
             v-bind="props"
+            :aria-label="`Account menu for ${username || 'user'}`"
           >
             <v-avatar size="28" class="mr-2 yp-avatar">
               <span class="text-caption font-weight-bold">{{ usernameInitial }}</span>
             </v-avatar>
-            <span class="mr-1 hidden-xs text-body-2 font-weight-medium">{{ username }}</span>
+            <span class="mr-1 yp-account-name text-body-2 font-weight-medium">{{ username }}</span>
             <v-icon size="small" class="ml-1 text-medium-emphasis">mdi-chevron-down</v-icon>
           </v-btn>
         </template>
@@ -73,17 +74,17 @@
           <v-list-subheader class="text-uppercase text-caption">User Account</v-list-subheader>
 
           <v-list-item :to="{ path: '/user/info' }" prepend-icon="mdi-account-settings-outline">
-            <v-list-item-title>Profile Settings</v-list-item-title>
+            <v-list-item-title>Account settings</v-list-item-title>
           </v-list-item>
 
           <v-list-item :to="{ path: '/settings/info' }" prepend-icon="mdi-cog-outline">
-            <v-list-item-title>System Settings</v-list-item-title>
+            <v-list-item-title>Server settings</v-list-item-title>
           </v-list-item>
 
           <v-divider class="my-2"></v-divider>
 
           <v-list-item @click="logout()" prepend-icon="mdi-logout-variant" class="text-error">
-            <v-list-item-title>Logout</v-list-item-title>
+            <v-list-item-title>Sign out</v-list-item-title>
           </v-list-item>
         </v-list>
       </v-menu>
@@ -148,6 +149,14 @@ export default {
   align-self: flex-start;
   margin-top: 16px;
 }
+.yp-mobile-brand, .yp-mobile-nav, .yp-mobile-search-trigger { display: none !important; }
+@media (max-width: 959px) {
+  .yp-mobile-nav, .yp-mobile-search-trigger { display: inline-flex !important; }
+  .yp-mobile-brand { display: flex !important; min-width: 0; max-width: 150px; }
+  .yp-mobile-brand .v-toolbar-title { font-size: 16px; }
+  .yp-search-wrap, .yp-host { display: none !important; }
+}
+@media (max-width: 599px) { .yp-account-name { display: none; } }
 .main-logo {
   height: 32px;
   width: auto;
@@ -194,6 +203,6 @@ export default {
 .yp-avatar {
   background: linear-gradient(135deg, #475569, #1e293b);
   border: 1px solid var(--yp-border);
-  color: var(--yp-text) !important;
+  color: #F8FAFC !important;
 }
 </style>

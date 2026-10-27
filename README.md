@@ -6,6 +6,10 @@ YachtPlus is a self-hosted container management UI for Docker and Docker Compose
 
 ## Using the interface
 
+The [operations guide](docs/OPERATIONS_GUIDE.md) covers saved container views,
+durable tasks, Compose previews, volume backups/restoration, project update plans
+and searchable activity logs, including their permissions and limits.
+
 The sidebar groups containers, images, volumes and networks under Workspace;
 Compose stacks and templates are under Orchestration. Use the arrow beside
 the brand to collapse or expand the sidebar. On small screens, open navigation
@@ -23,6 +27,16 @@ separate while requests are loading.
 Deploy containers in four steps: General, Networking, Volumes and Environment.
 Advanced settings hold command, device, label, sysctl, capability and runtime
 options. Required fields are checked before deployment.
+Container filters, search and columns can be saved as named browser views.
+Dashboard counters open matching filters; connection failures display the last
+verified snapshot and its age. Tasks show actual progress phases and results
+while long operations continue across page changes.
+
+Compose editing offers a read-only security/change preview and detects stale
+saves. Administrators can create checked volume archives, restore into a new
+volume, and opt in to daily UTC backup schedules. Per-project update plans add
+UTC maintenance windows and exclusions. New schedules start disabled. Activity
+logs support filtered server-side pagination and bounded CSV export.
 
 Both search fields share the same result handling. Use Up/Down to select,
 Enter to open and Escape to close results. The global search is also available
@@ -273,6 +287,10 @@ result instead of returning success while the job is still pending.
 | `YACHT_DOCKER_PROXY_NETWORK` | `${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api` in Compose | Network used by rootless update workers; updates never mount the host socket. |
 | `COMPOSE_DIR` | `/compose/` | Compose project directory; trailing slash is optional. |
 | `COMPOSE_AUTO_UPDATE` | `false` | Enable daily automatic Compose pull/recreate jobs. |
+| `BACKUP_DIR` | `/config/backups` | Private persistent volume archives and staging. |
+| `BACKUP_HELPER_IMAGE` | auto | Existing local archive helper image, normally current YachtPlus; never started or automatically pulled. |
+| `BACKUP_MAX_BYTES` | `1073741824` | Maximum archive size including tar overhead; minimum 10 KiB. |
+| `NO_PROXY` / `no_proxy` | internal hosts plus inherited list in Compose | Keep private Docker API traffic out of an HTTP egress proxy. |
 | `AUDIT_RETENTION_DAYS` | `90` | Activity log retention, cleaned hourly; minimum 1 day. |
 | `LOGIN_RETENTION_DAYS` | `30` | Login-attempt retention, cleaned hourly; minimum 1 day. |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | slowapi storage backend; the image runs one API worker so limits are shared by all its requests. Custom multiple-worker deployments need shared storage and its client dependency. |
@@ -340,11 +358,13 @@ npx vitest run
 
 Run publication-policy checks from the repository root with the backend
 environment: `python -m unittest discover -s scripts -p 'test_*.py' -v`.
-Local verification on 2026-10-27 passed **922 backend, 244 frontend and 44
+Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 45
 publication-policy/security-script tests**. The latest [changelog](CHANGELOG.md) and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record the completed
 checks and remaining work. Older audit documents contain historical counts.
-The candidate still requires Docker/runtime verification before release.
+The local candidate also passed image/start/health, real fail2ban protection,
+volume restoration and browser checks. Remote CI/CodeQL, PostgreSQL/MySQL and
+multiarch verification remain separate; see the latest changelog.
 
 ---
 

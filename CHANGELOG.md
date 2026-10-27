@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-27 10:06 CET — Run R-028: Bedienung und Betriebsfunktionen
+
+- Commit: dieser Commit; Ausgangsstand `6c97521` (3.0.4).
+- Version: `3.1.0`; kanonisches Paket, Lockfile, Buildmetadaten und
+  angezeigte Version stimmen überein. Keine Python-/npm-Paketänderungen.
+- Geändert: Gemeinsame Seitenköpfe, konsistente Begriffe, sichtbarer
+  Tastaturfokus, mobile Layouts, Hellmodus und reduzierte Animationen.
+  Dashboard veröffentlicht verifizierte Momentaufnahmen mit Zeit/Fehlerstatus,
+  priorisiert Problemcontainer und verlinkt passende Filter. Containeransichten
+  speichern Suche, Status/Health/Stack/Updates und Spalten pro Browserkonto.
+- Geändert: Persistente Aufgaben mit erlaubten Aktionen, echten Phasen,
+  Besitzprüfung, begrenzter Queue, Worker-Leases, Neustartstatus und sicherem
+  Retry. Container-/Stackaktionen, Deployments und Image-Pulls sind angebunden;
+  spätere Ergebnisse navigieren nicht aus einer anderen Ansicht zurück.
+- Geändert: Schreibfreie Compose-Vorschau mit normalisiertem Ergebnis,
+  Sicherheitsänderungen und Diff; bestätigte aktuelle Vorschau, HMAC gegen
+  veraltete Speicherungen, Prozesssperre und Warnung vor ungespeichertem Verlassen.
+- Geändert: Geprüfte Volume-Archive, tägliche UTC-Sicherungspläne/Aufbewahrung
+  und geführter Restore ausschließlich in neue Volumes. Gehärtete, nie
+  gestartete Helfer lesen Quellen schreibgeschützt; Pfad-/Typ-/Größenprüfung,
+  SHA-256, private Stagingdateien und Transaktionsnachweise schützen Wiederherstellungen.
+- Geändert: Updatepläne pro Compose-Projekt mit UTC-Wartungsfenstern,
+  Mindestabstand und Ausschlüssen; erneute Freigabe unmittelbar vor Pull/Up.
+  Audit-Suche mit serverseitigen Filtern/Pagination und begrenztem CSV-Export.
+- Laufzeitkorrekturen: Echte FastAPI-Response-Injektion für alle 41 limitierten
+  Endpoints behebt den zuvor durch Unit-Stubs verdeckten Login-/`/auth/me`-500.
+  Dateibasiertes SQLite trennt Request-/Jobtransaktionen. Fail2ban-Konfiguration
+  ist unabhängig vom Checkout-Modus lesbar; Buildprobe nutzt aktuelle UTC-Zeit.
+  Docker-CLI kommt aus einem digest-gepinnten offiziellen Buildstage;
+  optionaler CA-Buildsecret, Compose-Prüfsumme und interne NO_PROXY-Einträge bleiben wirksam.
+- Migration: `20261027_0001` bis `20261027_0003` ergänzen Aufgaben, stabile
+  Kontoidentität, Backupmetadaten und Updatepläne. Frische und bestehende
+  3.0.x-SQLite-Datenbanken erfolgreich und wiederholbar aktualisiert;
+  Credential-Versionen erhalten, neue Richtlinien standardmäßig deaktiviert.
+- Ergebnis: **1068 Backend-, 344 Frontend- und 45 Skripttests bestanden**;
+  **247 zusätzliche automatisierte Tests** gegenüber 3.0.4. Produktionsbuild und
+  Bundle-Grenzen bestanden. Browser: insgesamt 13 Flowgruppen und 22 selbst
+  betrachtete Screenshots, Desktop/390px, Hell/Dunkel; finaler 3.1.0-Artefaktcheck grün.
+  Darunter reales Deployment über alle vier Formularschritte bis zum laufenden
+  gehärteten Container und erfolgreicher Aufgabe geprüft.
+  Reale Archiv-Wiederherstellung bytegenau mit UID/GID 1000:1000,
+  bestehende Ziele verweigert; Worker-Neustart ohne automatische Wiederholung geprüft.
+- Docker: lokales Kandidatenimage `yachtplus:3.1.0`, **482178073 Bytes**,
+  Image-ID `sha256:2921036ef5a184d6e2e57f9ce2cdbb33538de6aa5cef837c1c83880b4666e0bb`.
+  Inhaltsprüfung, Start/Health und realer Schutzstack einschließlich
+  Ban/Unban, Persistenz und Ausfall/Wiederherstellung erfolgreich. Die lokale
+  Image-ID ist kein veröffentlichter Registry-Manifest-Digest.
+- Dokumentation: [Bedienungs-/Betriebsanleitung](docs/OPERATIONS_GUIDE.md),
+  README, Architektur-/Sicherheitsverträge und Run-Protokoll aktualisiert.
+  Nachweisübersicht: `report/audit-r028-summary.json`; lokale Logs/Screenshots
+  unter `report/audit-r028-*.txt` und `report/tools/r028/`.
+- Aufgeräumt: eigene Zwischenimages/Buildcaches, Buildausgabe und isolierte
+  Testcontainer/-volumes entfernt; finalen Kandidaten, Prüfnachweise und
+  wiederverwendbare Python-/Node-Entwicklungsumgebungen erhalten.
+- Grenzen: Backups unterstützen reguläre Dateien/Verzeichnisse gewöhnlicher
+  lokaler Volumes; keine Links/Spezialdateien, kein In-place-Restore.
+  Live-Backups benötigen Bestätigung, externe Sicherung bleibt Betreiberaufgabe.
+  Remote-CI/CodeQL, PostgreSQL/MySQL und Multiarch nicht ausgeführt;
+  lokaler Commit ohne Remote-Integration oder Veröffentlichung.
+
 ## [3.0.4] - 2026-10-27 08:30 CET — Run R-027: Fehlerprüfung von Backend und Frontend
 
 - Commit: dieser Commit; Ausgangsstand `94209fe` (Merge von 3.0.3).

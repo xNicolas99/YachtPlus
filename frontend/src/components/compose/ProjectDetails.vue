@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <v-progress-linear v-if="!project && isLoading" indeterminate color="primary" />
-    <v-alert v-else-if="!project" type="error">Project details are unavailable.</v-alert>
+    <v-alert v-else-if="!project" type="error">Stack details are unavailable.</v-alert>
     <template v-if="project">
     <v-card color="foreground">
       <v-fade-transition>
@@ -22,7 +22,7 @@
 
             >
               <template v-slot:activator="{ props }">
-                <v-btn icon size="small" v-bind="props" class="" aria-label="Project Details Actions" title="Project Details Actions">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Stack actions" title="Stack actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
@@ -135,7 +135,7 @@
       >
     </v-card>
     <v-card color="foreground" class="mt-2">
-      <v-card-title> Project Details </v-card-title>
+      <v-card-title> Stack details </v-card-title>
       <v-list color="foreground" density="compact">
         <v-list-item>
           <div> Name </div>
@@ -331,6 +331,7 @@
                   v-else-if="
                     project.services[service].networks &&
                       typeof project.services[service].networks === 'object'
+                      && !Array.isArray(project.services[service].networks)
                   "
                 >
                   <div> Networks </div>
@@ -485,7 +486,7 @@
       <v-card-title> Download Support Bundle </v-card-title>
       <v-card-text>
         Download the logs and docker-compose to get help with your
-        project</v-card-text
+        stack</v-card-text
       >
       <v-btn
         :href="`/api/compose/${project.name}/support`"
@@ -500,10 +501,10 @@
     <v-dialog v-if="selectedProject" v-model="deleteDialog" :persistent="deleting" max-width="400">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all">
-          Delete {{ selectedProject["name"] }} project?
+          Delete {{ selectedProject["name"] }} stack?
         </v-card-title>
         <v-card-text>
-          The project directory and all files within it will be permanently
+          The stack directory and all files within it will be permanently
           deleted. This action cannot be revoked.
         </v-card-text>
         <v-card-actions>
