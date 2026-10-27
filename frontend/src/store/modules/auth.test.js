@@ -1,8 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import axios from 'axios';
 import router from '@/router/index';
 
-vi.mock('axios', () => ({ default: { post: vi.fn() } }));
+vi.mock('axios', () => ({ default: { post: vi.fn(), get: vi.fn() } }));
 vi.mock('@/router/index', () => ({ default: { push: vi.fn().mockResolvedValue() } }));
 
 const storage = new Map();
@@ -13,8 +13,28 @@ vi.stubGlobal('localStorage', {
 });
 
 const { default: auth } = await import('./auth.js');
+afterEach(() => vi.restoreAllMocks());
 
 describe('auth session actions', () => {
+  it.each([null, true, false])('retains setup state %s after a failed status request', async isSetup => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const commit = vi.fn();
+    axios.get.mockRejectedValueOnce(new Error('Server unavailable'));
+
+    await expect(auth.actions.CHECK_SETUP({ commit, state: { isSetup } })).resolves.toBe(isSetup);
+
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('enters setup only after the backend confirms it is incomplete', async () => {
+    const commit = vi.fn();
+    axios.get.mockResolvedValueOnce({ data: { is_setup: false } });
+
+    await expect(auth.actions.CHECK_SETUP({ commit, state: { isSetup: null } })).resolves.toBe(false);
+
+    expect(commit).toHaveBeenCalledWith('SET_SETUP_STATUS', false);
+  });
+
   it('rejects failed refreshes so requests cannot wait forever', async () => {
     axios.post.mockRejectedValueOnce(new Error('expired'));
     await expect(auth.actions.AUTH_REFRESH()).rejects.toThrow('expired');

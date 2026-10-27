@@ -390,6 +390,38 @@ def test_conv_env2data_unset_variable(mock_session_local):
     assert exc.value.status_code == 400
     assert "Unset template variable used" in str(exc.value.detail)
 
+
+def test_conv_env2data_preserves_explicit_empty_values():
+    data = [
+        MockEnvData(name="EMPTY", default=""),
+        MockEnvData(name="UNSET", default=None),
+        MockEnvData(name="ENABLED", default="false"),
+        MockEnvData(name=None, default=""),
+    ]
+
+    assert conv_env2data(data, t_variables=[]) == ["EMPTY=", "ENABLED=false"]
+
+
+def test_conv_env2data_resolves_all_variables_in_one_value():
+    data = [MockEnvData(name="URL", default="https://!HOST!:!PORT!/api")]
+    variables = [MockTemplateVariable("!HOST!", "example.com"), MockTemplateVariable("!PORT!", "8443")]
+
+    assert conv_env2data(data, t_variables=variables) == ["URL=https://example.com:8443/api"]
+
+
+def test_conv_env2data_accepts_template_replacement_starting_with_exclamation():
+    data = [MockEnvData(name="PASSWORD", default="!PASSWORD!")]
+    variables = [MockTemplateVariable("!PASSWORD!", "!secret")]
+
+    assert conv_env2data(data, t_variables=variables) == ["PASSWORD=!secret"]
+
+
+def test_conv_env2data_rejects_populated_value_without_name():
+    with pytest.raises(HTTPException) as exc:
+        conv_env2data([MockEnvData(name=None, default="value")], t_variables=[])
+
+    assert exc.value.status_code == 422
+
 @patch('api.utils.apps.SessionLocal')
 def test_conv_labels2data(mock_session_local):
     mock_db = MagicMock()

@@ -15,6 +15,7 @@ case-insensitively.
 """
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from api.db.models.users import User
 from api.db.crud.users import (
@@ -65,6 +66,22 @@ def testnormalize_username_lowercases_and_strips():
     assert normalize_username("Admin") == "admin"
     assert normalize_username("  ADMIN  ") == "admin"
     assert normalize_username("MiXeD") == "mixed"
+
+
+@pytest.mark.parametrize("schema", [UserCreate, UserUpdate, UserSelfUpdate])
+@pytest.mark.parametrize("username", ["", "   ", "\t\n", "\u2003", "a" * 265, "\u00df" * 133])
+def test_account_input_rejects_unusable_usernames(schema, username):
+    # A whitespace-only rename previously persisted an empty username and
+    # locked the account out. Casefold expansion must fit the DB column too.
+    with pytest.raises(ValidationError):
+        schema(username=username, password="pw")
+
+
+@pytest.mark.parametrize("schema", [UserCreate, UserUpdate, UserSelfUpdate])
+def test_account_input_preserves_supported_username_normalization(schema):
+    payload = schema(username="  Alice  ", password="pw")
+    assert normalize_username(payload.username) == "alice"
+    assert normalize_username(schema(username="\u00df" * 132, password="pw").username) == "ss" * 132
 
 
 @pytest.mark.asyncio

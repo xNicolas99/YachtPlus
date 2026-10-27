@@ -340,7 +340,10 @@ def _write_compose_sync(compose):
     # symlink redirected the target; resolve() + is_relative_to() closes
     # both paths.
     base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
-    target_dir = (base_dir / compose.name).resolve()
+    project_dir = base_dir / compose.name
+    if project_dir.is_symlink():
+        raise HTTPException(400, "Compose project directory cannot be a symlink")
+    target_dir = project_dir.resolve()
     if not target_dir.is_relative_to(base_dir):
         raise HTTPException(status_code=400, detail="Invalid compose project name.")
     target_dir.mkdir(parents=True, exist_ok=True)

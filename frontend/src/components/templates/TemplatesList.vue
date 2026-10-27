@@ -206,7 +206,7 @@
 
     <!-- Create / Edit manual JSON dialog. Same dialog used for both
          flows; manualForm.editingId == null => create, else update. -->
-    <v-dialog v-model="manualDialog" max-width="780">
+    <v-dialog v-model="manualDialog" :persistent="manualSaving" max-width="780">
       <v-card color="foreground">
         <v-card-title>
           {{ manualForm.editingId == null ? 'Create catalog' : 'Edit catalog' }}
@@ -214,12 +214,15 @@
         <v-card-text>
           <v-text-field
             v-model="manualForm.title"
+            :disabled="manualLoading || manualSaving"
             label="Catalog title"
             :rules="[v => !!v || 'Required']"
             required
           />
           <v-textarea
             v-model="manualForm.content"
+            :disabled="manualLoading || manualSaving"
+            :loading="manualLoading"
             label="Catalog JSON (array of template entries)"
             rows="14"
             auto-grow
@@ -238,11 +241,11 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer />
-          <v-btn variant="text" @click="manualDialog = false">Cancel</v-btn>
+          <v-btn variant="text" :disabled="manualSaving" @click="manualDialog = false">Cancel</v-btn>
           <v-btn
             color="primary"
             :loading="manualSaving"
-            :disabled="manualSaving || !manualForm.title || !manualForm.content"
+            :disabled="manualLoading || manualSaving || !manualForm.title || !manualForm.content"
             @click="submitManual"
           >
             {{ manualForm.editingId == null ? 'Create' : 'Save' }}
@@ -303,6 +306,7 @@ export default {
       uploadError: null,
       uploadForm: { title: "", file: null },
       manualDialog: false,
+      manualLoading: false,
       manualSaving: false,
       manualError: null,
       manualForm: { title: "", content: "", editingId: null },
@@ -391,20 +395,28 @@ export default {
       };
       this.manualError = null;
       this.manualDialog = true;
+      this.manualLoading = true;
+      const form = this.manualForm;
       // Async fetch of the items so the user can edit content
-      axios
+      return axios
         .get(`/templates/${item.id}`)
         .then(resp => {
+          if (!this.manualDialog || this.manualForm !== form) return;
           const items = resp?.data?.items || [];
-          this.manualForm.content = JSON.stringify(items, null, 2);
+          form.content = JSON.stringify(items, null, 2);
         })
         .catch(err => {
+          if (!this.manualDialog || this.manualForm !== form) return;
           this.manualError = this.extractError(err, "Failed to load template content");
+        })
+        .finally(() => {
+          if (this.manualForm === form) this.manualLoading = false;
         });
     },
     openCreateDialog() {
       this.manualForm = { title: "", content: "", editingId: null };
       this.manualError = null;
+      this.manualLoading = false;
       this.manualDialog = true;
     },
     extractError(err, fallback) {
@@ -458,6 +470,7 @@ export default {
       }
     },
     async submitManual() {
+      if (this.manualLoading || this.manualSaving) return;
       this.manualError = null;
       this.manualSaving = true;
       try {

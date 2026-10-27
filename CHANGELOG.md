@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.4] - 2026-10-27 08:30 CET — Run R-027: Fehlerprüfung von Backend und Frontend
+
+- Commit: dieser Commit; Ausgangsstand `94209fe` (Merge von 3.0.3).
+- Version: `3.0.4`; Paket, Lockfile und geprüftes `dist/version.json`
+  stimmen exakt überein. Keine Abhängigkeitsänderungen.
+- Geändert: Validierungsfehler mit Exception-Kontext, Rohbytes und
+  nichtendlichen Zahlen liefern 422 statt 500; rohe Request-Bodys werden
+  vollständig maskiert. Benutzeranlage/-änderung verweigert leere und nach
+  Normalisierung zu lange Namen. Überlange Passwortbestätigungen werden
+  vor bcrypt ohne Kontomutation abgewiesen.
+- Geändert: Compose-Speichern verweigert Projektverzeichnis-Symlinks vor
+  Dateiänderungen. Containerformulare erhalten explizit leere Env-Werte,
+  ersetzen mehrere Templatevariablen pro Wert und melden fehlende Env-Namen
+  mit 422. Ein bestehender Compose-Größentest verwendet den aktuellen
+  Settings-Zugriff statt eines testreihenfolgenabhängigen Cacheobjekts.
+- Geändert: Erfolgreicher Token-Refresh meldet nachfolgende API-Fehler ohne
+  Abmeldung; erneute 401 bleiben begrenzt. Fehlgeschlagene Setup-Abfragen
+  erhalten unbekannten/bekannten Zustand. Compose-Details unterstützen
+  Direktaufrufe, Routenwechsel und gültige Mapping-/Langformen; Löschdialoge
+  warten auf Erfolg und verhindern Doppelanfragen. Späte Katalogantworten
+  überschreiben keine anderen Editoren; Laden/Speichern sperrt Konflikte.
+- Ergebnis: **922 Backend-, 244 Frontend- und 44 Skripttests bestanden**,
+  darunter **65 zusätzliche Regressionstests**. Produktionsbuild mit
+  Bundle-Grenzen und frisches SQLite-Alembic-Upgrade auf `20261001_0001`
+  erfolgreich. Lokale Nachweise unter `report/audit-r027-backend-final.txt`,
+  `report/audit-r027-frontend-final.txt`, `report/audit-r027-scripts.txt`,
+  `report/audit-r027-build-final.txt` und `report/audit-r027-migration.txt`.
+- Aufgeräumt: eigene Buildausgabe entfernt; temporäre Migrationsdatenbank
+  automatisch entfernt. Prüflogs, wiederverwendbare Testcaches und
+  Entwicklungsumgebungen erhalten.
+- Offen: Docker-Releaseimage/Schutzstack, visuelle Browserprüfung,
+  PostgreSQL/MySQL und Remote-CI/CodeQL wurden für diesen Kandidaten nicht
+  ausgeführt. Lokaler Commit; keine Veröffentlichung oder Remote-Integration.
+
 ## [3.0.3] - 2026-10-02 15:23 — Run R-026: Dependency-Graph-Erkennung
 
 - Commit: dieser Commit; neue Patch-Lieferung nach dem Merge und der

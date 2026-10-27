@@ -15,6 +15,10 @@ Resource tables search and paginate the complete resource list. Row menus
 open actions without navigating to details. Failed creation and deletion
 requests preserve the form or confirmation so you can correct the problem
 and retry. Prune actions ask for confirmation and affect the whole Docker host.
+Compose deletion waits for the result and prevents duplicate requests. Project
+details support Compose mapping and long syntax, including labels, dependencies,
+ports and volumes. Switching template catalogs keeps each editor's content
+separate while requests are loading.
 
 Deploy containers in four steps: General, Networking, Volumes and Environment.
 Advanced settings hold command, device, label, sysctl, capability and runtime
@@ -29,8 +33,8 @@ The terminal downloads only when opened. If it cannot load, retry or close it.
 A failed page download keeps the current page and offers Retry page. Reload
 application is a separate action because it discards unsaved inputs.
 
-Local frontend development requires Node.js 20.19 or newer in the 20.x line,
-or Node.js 22.12 or newer. Docker and CI use Node.js 22. The UI version defaults to `frontend/package.json`;
+Local frontend development requires Node.js 22.12 or newer, as declared in
+`frontend/package.json`. Docker and CI use Node.js 22. The UI version defaults to `frontend/package.json`;
 release builds can override it with `VITE_VERSION`.
 
 Charts use Docker's cache-adjusted memory usage. Container logs show bounded
@@ -115,6 +119,8 @@ token's credential version still matches. Password, username, permissions and
 or password requires your current password and returns you to login. User
 management preserves at least one active administrator, including during
 concurrent changes; administrators cannot disable or demote themselves.
+Account input rejects blank usernames and names exceeding 264 characters after
+normalization. Passwords and password confirmations are limited to 72 UTF-8 bytes.
 
 TOTP codes are consumed once for their matched time step. After using a code
 to enable 2FA or log in, wait for a new code before another confirmation.
@@ -125,6 +131,9 @@ sends it as `X-CSRF-TOKEN` for cookie-authenticated mutations; it contains no
 JWT. Browser mutations and terminal connections require an exact matching
 Origin, including scheme and port. Refresh requests share one in-flight
 operation and revoke the previous token before issuing a replacement.
+After a successful refresh, a failed API operation keeps its own error without
+ending the session. An unavailable setup-status endpoint preserves unknown or
+previously confirmed setup state instead of treating the installation as new.
 
 WebSocket exec sessions (container terminal) reuse the same cookie: `backend/api/routers/containers.py` reads `access_token_cookie` straight off the WS handshake; no token is ever passed in the URL.
 The terminal closes when its token expires, is revoked, or loses the required
@@ -230,6 +239,9 @@ Compose projects support `compose.yaml`, `compose.yml`, `docker-compose.yaml`
 and `docker-compose.yml` in direct project directories. YAML must be valid
 before an atomic save; the existing filename is preserved. Deletion runs
 `docker compose down` before removing files and retains them if shutdown fails.
+Saving through a project-directory symlink is rejected before any file change.
+Container forms preserve explicitly empty environment values and replace all
+configured template variables within each value.
 Daily automatic Compose updates are disabled by default; set
 `COMPOSE_AUTO_UPDATE=true` to opt in. Manual updates report their completed
 result instead of returning success while the job is still pending.
@@ -328,8 +340,8 @@ npx vitest run
 
 Run publication-policy checks from the repository root with the backend
 environment: `python -m unittest discover -s scripts -p 'test_*.py' -v`.
-Local verification on 2026-10-02 passed **852 backend, 197 frontend and 42
-publication-policy tests**. The latest [changelog](CHANGELOG.md) and
+Local verification on 2026-10-27 passed **922 backend, 244 frontend and 44
+publication-policy/security-script tests**. The latest [changelog](CHANGELOG.md) and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record the completed
 checks and remaining work. Older audit documents contain historical counts.
 The candidate still requires Docker/runtime verification before release.

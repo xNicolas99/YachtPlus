@@ -227,7 +227,7 @@
         </template>
       </v-data-table>
     </v-card>
-    <v-dialog v-if="selectedProject" v-model="deleteDialog" max-width="400">
+    <v-dialog v-if="selectedProject" v-model="deleteDialog" :persistent="deleting" max-width="400">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
           Delete {{ selectedProject["name"] }} stack?
@@ -238,16 +238,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
             variant="text"
             color="error"
-            @click="
-              ProjectAction({ Name: selectedProject.name, Action: 'delete' });
-              deleteDialog = false;
-            "
+            :loading="deleting"
+            :disabled="deleting"
+            @click="confirmDelete"
           >
             Delete Stack
           </v-btn>
@@ -264,6 +263,7 @@ export default {
     return {
       selectedProject: null,
       deleteDialog: false,
+      deleting: false,
       form: {
         name: ""
       },
@@ -294,6 +294,18 @@ export default {
     };
   },
   methods: {
+    async confirmDelete() {
+      if (this.deleting || !this.selectedProject) return;
+      this.deleting = true;
+      try {
+        const succeeded = await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
+        if (succeeded) this.deleteDialog = false;
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
+      }
+    },
     ...mapActions({
       readProjects: "projects/readProjects",
       ProjectAction: "projects/ProjectAction"

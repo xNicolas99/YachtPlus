@@ -170,27 +170,25 @@ def conv_volumes2data(data, t_variables=None):
 #     "SOMEVARIABLE=xxx", "OTHERVARIABLE=yyy"
 # ]
 def conv_env2data(data, t_variables=None):
-    # Set is depracated. Name is the actual value. Label is the name of the field.
-    # Label is the label of the label field.
     if not data:
         return []
     if t_variables is None:
         t_variables = _load_template_variables()
 
-    for i, variable in enumerate(data):
+    for variable in data:
+        if variable.default and not variable.name:
+            raise HTTPException(422, "Environment variable name is required")
+        substituted = False
         for t_var in t_variables:
-            if variable.default:
-                if t_var.variable in variable.default:
-                    new_var = data[i].default.replace(t_var.variable, t_var.replacement)
-                    variable.default = new_var
-                    break
-        else:
-            if variable.default and variable.default.startswith("!"):
-                raise HTTPException(
-                    400, "Unset template variable used: " + variable.default
-                )
+            if variable.default and t_var.variable in variable.default:
+                variable.default = variable.default.replace(t_var.variable, t_var.replacement)
+                substituted = True
+        if not substituted and variable.default and variable.default.startswith("!"):
+            raise HTTPException(
+                400, "Unset template variable used: " + variable.default
+            )
     delim = "="
-    return [delim.join((d.name, d.default)) for d in data if d.default]
+    return [delim.join((d.name, d.default)) for d in data if d.name and d.default is not None]
 
 
 def conv_sysctls2data(data):

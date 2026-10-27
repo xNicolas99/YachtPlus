@@ -1,5 +1,8 @@
 <template>
   <div class="page">
+    <v-progress-linear v-if="!project && isLoading" indeterminate color="primary" />
+    <v-alert v-else-if="!project" type="error">Project details are unavailable.</v-alert>
+    <template v-if="project">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
@@ -298,7 +301,7 @@
                 <v-list-item v-if="project.services[service].depends_on">
                   <div> Depends on </div>
                   <div>
-                    {{ project.services[service].depends_on.join(", ") }}
+                    {{ composeNames(project.services[service].depends_on) }}
                   </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].restart">
@@ -332,17 +335,16 @@
                 >
                   <div> Networks </div>
                   <div
-                    v-for="(content, network) in project.services[service]
-                      .networks"
+                    v-for="([network, content]) in networkEntries(project.services[service].networks)"
                     :key="network"
                   >
-                    {{ network }}, {{ content[Object.keys(content)[0]] }}
+                    {{ network }}<template v-if="content">, {{ content }}</template>
                   </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].ports">
                   <div> Ports </div>
                   <div>
-                    {{ project.services[service].ports.join(", ") }}
+                    {{ project.services[service].ports.map(formatPort).join(", ") }}
                   </div>
                 </v-list-item>
                 <v-list-item v-if="project.services[service].volumes">
@@ -363,10 +365,10 @@
                             :key="index"
                           >
                             <td>
-                              {{ value.split(":")[0] }}
+                              {{ volumeParts(value)[0] }}
                             </td>
                             <td>
-                              {{ value.split(":")[1] }}
+                              {{ volumeParts(value)[1] }}
                             </td>
                           </tr>
                         </tbody>
@@ -385,36 +387,13 @@
                             <th>Value</th>
                           </tr>
                         </thead>
-                        <tbody
-                          v-if="
-                            Array.isArray(project.services[service].environment)
-                          "
-                        >
+                        <tbody>
                           <tr
-                            v-for="(value, index) in project.services[service]
-                              .environment"
+                            v-for="([name, value], index) in keyValueEntries(project.services[service].environment)"
                             :key="index"
                           >
                             <td>
-                              {{ value.split("=")[0] }}
-                            </td>
-                            <td>
-                              {{ value.split("=")[1] }}
-                            </td>
-                          </tr>
-                        </tbody>
-                        <tbody
-                          v-else-if="
-                            isObject(project.services[service].environment)
-                          "
-                        >
-                          <tr
-                            v-for="(value, index) in project.services[service]
-                              .environment"
-                            :key="index"
-                          >
-                            <td>
-                              {{ index }}
+                              {{ name }}
                             </td>
                             <td>
                               {{ value }}
@@ -438,15 +417,14 @@
                         </thead>
                         <tbody>
                           <tr
-                            v-for="(value, index) in project.services[service]
-                              .labels"
+                            v-for="([name, value], index) in keyValueEntries(project.services[service].labels)"
                             :key="index"
                           >
                             <td>
-                              {{ value.split("=")[0] }}
+                              {{ name }}
                             </td>
                             <td>
-                              {{ value.split("=")[1] }}
+                              {{ value }}
                             </td>
                           </tr>
                         </tbody>
@@ -518,7 +496,8 @@
         >Download</v-btn
       >
     </v-card>
-    <v-dialog v-if="selectedProject" v-model="deleteDialog" max-width="400">
+    </template>
+    <v-dialog v-if="selectedProject" v-model="deleteDialog" :persistent="deleting" max-width="400">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all">
           Delete {{ selectedProject["name"] }} project?
@@ -529,10 +508,12 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false"> Cancel </v-btn>
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false"> Cancel </v-btn>
           <v-btn
             variant="text"
             color="error"
+            :loading="deleting"
+            :disabled="deleting"
             @click="confirmDelete"
           >
             Delete
@@ -550,11 +531,12 @@ export default {
   data() {
     return {
       selectedProject: null,
-      deleteDialog: false
+      deleteDialog: false,
+      deleting: false
     };
   },
   computed: {
-    ...mapState("projects", ["project", "projects", "isLoading", "action"]),
+    ...mapState("projects", ["projects", "isLoading", "action"]),
     ...mapState("apps", ["apps"]),
     ...mapGetters({
       getProjectByName: "projects/getProjectByName"
@@ -566,8 +548,19 @@ export default {
   },
   methods: {
     async confirmDelete() {
-      const succeeded = await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
-      if (succeeded) this.postDelete();
+      if (this.deleting || !this.selectedProject) return;
+      this.deleting = true;
+      try {
+        const succeeded = await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
+        if (succeeded) {
+          this.deleteDialog = false;
+          this.postDelete();
+        }
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
+      }
     },
     ...mapActions({
       readProject: "projects/readProject",
@@ -581,11 +574,30 @@ export default {
     postDelete() {
       this.$router.push({ name: "View Projects" });
     },
-    isObject(val) {
-      if (val === null) {
-        return false;
-      }
-      return typeof val === "function" || typeof val === "object";
+    composeNames(value) {
+      return (Array.isArray(value) ? value : Object.keys(value || {})).join(", ");
+    },
+    networkEntries(value) {
+      return Array.isArray(value) ? value.map(name => [name, null]) : Object.entries(value || {});
+    },
+    keyValueEntries(value) {
+      if (!Array.isArray(value)) return Object.entries(value || {});
+      return value.map(entry => {
+        const text = String(entry);
+        const separator = text.indexOf("=");
+        return separator < 0 ? [text, ""] : [text.slice(0, separator), text.slice(separator + 1)];
+      });
+    },
+    volumeParts(value) {
+      if (typeof value === "object" && value) return [value.source || "", value.target || ""];
+      const parts = String(value).split(":");
+      return parts.length === 1 ? ["", parts[0]] : parts;
+    },
+    formatPort(value) {
+      if (typeof value !== "object" || !value) return String(value);
+      const host = value.host_ip ? `${value.host_ip}:` : "";
+      const published = value.published != null ? `${value.published}:` : "";
+      return `${host}${published}${value.target}/${value.protocol || "tcp"}`;
     },
     getStatus(name) {
       for (var app in this.apps) {
@@ -602,17 +614,16 @@ export default {
       }
     },
 
-    reload() {
+    async reload() {
       const projectName = this.$route.params.projectName;
-      this.readProject(projectName);
-      this.readApps();
+      await Promise.allSettled([this.readProject(projectName), this.readApps()]);
     }
   },
-  mounted() {
-    const projectName = this.$route.params.projectName;
-    this.readProject(projectName);
-
-    this.readApps();
+  watch: {
+    "$route.params.projectName": {
+      immediate: true,
+      handler() { this.reload(); }
+    }
   }
 };
 </script>

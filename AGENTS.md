@@ -1,6 +1,14 @@
 # AGENTS.md — orientation for coding agents
 
-Current candidate: **3.0.3, run R-026 (2026-10-02)**. The development lock is
+Current local candidate: **3.0.4, run R-027 (2026-10-27)**, based on
+`94209fe` (the merge of 3.0.3). The audit fixes validation error serialization,
+account input validation, Compose symlink writes and environment conversion,
+frontend refresh/setup handling, Compose rendering/deletion and catalog-editor
+request races. Validation and remaining limits are recorded in the latest
+`CHANGELOG.md` entry and the run table below. Image/runtime and remote CI results
+from earlier deliveries do not verify this candidate.
+
+Previous delivery: **3.0.3, run R-026 (2026-10-02)**. The development lock is
 `backend/requirements-dev-lock.txt` so GitHub can discover included requirements;
 all 84 dependency pins, markers and hashes are preserved. Hash-enforced pip
 dry-run, 884 backend and 217 frontend tests, production build/bundle gates and
@@ -136,7 +144,8 @@ frontend/
       auth/Login.vue       # Cookie-based login + 2FA flow
       auth/Setup.vue       # First-run wizard
     components/            # Reusable UI: applications/, compose/, charts/, auth/, nav/, …
-    utils/                 # JS helpers + specs; resourcePages.js loads paginated resource API results
+    utils/                 # JS helpers + specs; authInterceptor.js installs bounded auth retries;
+                           # resourcePages.js loads paginated resource API results
   vite.config.js
   scripts/check-bundle.mjs  # Manifest/asset, initial size and lazy-feature build gates (+ Vitest tests)
   package.json
@@ -235,6 +244,10 @@ hook via `await engine.run_sync(Base.metadata.create_all)` — never sync
   and periodic refreshes → POST `/api/auth/refresh` with CSRF proof → retry.
   A refresh blacklists the old JTI before issuing its replacement; repeated
   use of the same token fails. Blacklist/account DB failures fail closed.
+  `frontend/src/utils/authInterceptor.js` preserves errors from an operation
+  retried after a successful refresh; a repeated 401 ends the session without
+  another refresh. Failed setup-status requests preserve unknown or previously
+  confirmed state.
 - **API keys:** `type=api_key` allows only GET/HEAD data routes and excludes
   `/api/auth`. Existing user permissions still apply. Keys cannot refresh,
   manage accounts, mutate Docker/Compose/settings, or open a terminal. The
@@ -245,6 +258,9 @@ hook via `await engine.run_sync(Base.metadata.create_all)` — never sync
   User create/edit persists every action permission, including restart.
   Admin edits/deletions lock the active-admin set and preserve at least one
   active superuser; an administrator cannot deactivate/demote their own account.
+  Input schemas reject blank usernames and normalized names exceeding the
+  264-character DB column. Password verification rejects input over 72 UTF-8
+  bytes before bcrypt, including confirmations outside the login schema.
 - **TOTP:** generate is POST-only and refuses an already enabled secret.
   `utils/totp.py` verifies the adjacent time-step window and atomically
   consumes the matched `otp_last_step`, so a successful code cannot be
@@ -665,9 +681,16 @@ called from an `async def`, it must be isolated (async library or
   project folders, skip symlinks, validate bounded mapping YAML before atomic
   save, and preserve the selected filename. Project deletion runs `down`
   before deleting files and preserves them on failure. Raw YAML is admin-only.
+  Writes reject project-directory symlinks before resolving or modifying the
+  target. Project details handle mapping/list and long syntax. Delete dialogs
+  await success and prevent duplicate requests.
 - **Templates.** Refresh is POST-only; eagerly load ORM items before async
   serialization. String commands are split into argument arrays; every port
   survives conversion and per-item refresh state must not leak to later rows.
+  Environment conversion retains explicit empty strings and replaces every
+  configured variable in a value; populated values require an environment name.
+  Catalog editors ignore responses for replaced/closed forms and block saving
+  during loading or an existing save.
 - **Schedulers.** Hourly retention runs under one filesystem-elected leader.
   Daily Compose pulls/recreates require `COMPOSE_AUTO_UPDATE=true`; manual
   update endpoints await completion and propagate errors.
@@ -718,6 +741,8 @@ Frontend reads `err.response?.data?.detail` and surfaces it via `snackbar/setErr
 (500 → generic `{"detail": ..., "trace_id": ...}`, full traceback logged
 server-side) and `validation_exception_handler` (422 → sensitive fields masked,
 never echoed back). Both live in `api/utils/error_handler.py`.
+Validation responses encode exception context and non-finite numbers safely;
+raw body bytes are masked entirely because they may contain credentials.
 
 ---
 
@@ -737,7 +762,7 @@ uvicorn api.main:app --reload --port 8000
 
 ### Frontend
 
-Use Node.js `^20.19.0 || >=22.12.0`, matching Vite's supported engines.
+Use Node.js `>=22.12.0`, matching `frontend/package.json`.
 
 ```bash
 cd frontend
@@ -767,12 +792,12 @@ Useful subsets:
 - `python -m pytest tests/test_compose_perms.py tests/test_compose_delete_path.py` — compose permission and path-safety gates.
 - `python -m pytest tests/test_image_inspect.py` — Docker Hub manifest/tag handling.
 
-Local verification before remote integration on 2026-10-02 passed **852 backend, 197 frontend and 42
-publication-policy tests**. The latest [changelog](CHANGELOG.md) entry and
-[remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record build/migration
-evidence, subsequent Linux/CodeQL verification and remaining platform/
-integration checks. Historical audit test counts
-are not the current baseline.
+Local verification for R-027 on 2026-10-27 passed **922 backend, 244 frontend and 44
+publication-policy/security-script tests**, production build/bundle gates and a
+fresh SQLite migration. The latest [changelog](CHANGELOG.md) entry records the
+current evidence and remaining checks. The older
+[remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) describes the previous
+delivery's Linux/CodeQL verification; historical counts are not the current baseline.
 Run the independent publication policy suite from the repository root with
 `python -m unittest discover -s scripts -p 'test_*.py' -v` (using the
 backend environment, which includes PyYAML). It exercises policy failures,
@@ -1193,6 +1218,7 @@ Kurzgedächtnis des Projekts, welcher Run was geändert hat; neueste zuerst; wir
 
 | Run | Datum | Commit | Kernänderung | Tests (Backend/Frontend) |
 |---|---|---|---|---|
+| R-027 | 2026-10-27 | dieser Commit; lokale Patch-Lieferung 3.0.4 | Validierungsantworten und Kontoeingaben, Compose-Symlink-/Env-Fehler, Refresh-/Setup-Zustand, Compose-Details/Löschdialoge und Katalog-Editor-Races korrigiert | lokal 922/244 sowie 44 Skripttests; Build/Bundle und frische SQLite-Migration bestanden; Image-/Browser-/Remote-Prüfungen offen |
 | R-026 | 2026-10-02 | dieser Commit; neue Lieferung 3.0.3 | Dev-Lock für Dependency Graph nach requirements-dev-lock.txt umbenannt; lokale/CI-/Doku-Verweise synchronisiert; 3.0.2-Master-Merge und Publikation belegt | lokal 884/217; 84 Requirements unverändert; Hash-pip-Dry-run, Build/Bundle und frische SQLite-Migration bestanden; finale HEAD-/Graph-Nachweise erforderlich |
 | R-025 | 2026-10-02 | dieser Doku-Folgecommit; gleiche Lieferung 3.0.2 | Abschließende CI-/CodeQL-Nachweise auf 93fa8da dokumentiert; keine zusätzliche Version; letzte HEAD-Checks bestimmen Merge/Publikation | CI 884/217 und alle 44 Linux-Skripte; Build/Migration/Image/Schutzstack/Ruff/CodeQL inklusive Results erfolgreich |
 | R-024 | 2026-10-02 | 93fa8da; Fortsetzung von 3.0.2 | Drei High-CodeQL-Befunde mit linearem GHCR-Parser/exakten Fixture-Vergleichen korrigiert; erster grüner Linux-Schutzstack auf ac869d7 belegt | lokal 884/217, Build/Bundle und Migration grün; ac869d7 alle 44 Linux-Skripte/Image/Schutzstack grün; damalige ausstehende HEAD-CI/CodeQL-Prüfung abgeschlossen in R-025 |

@@ -218,7 +218,10 @@ def test_register_first_user_rejects_blank_username(override_db):
     with patch("api.routers.setup.setup.is_setup_completed_async", new=AsyncMock(return_value=False)):
         response = client.post("/api/setup/register", json={"username": "  ", "password": "password"})
     assert response.status_code == 422
-    assert response.json() == {"detail": "Username and password are required."}
+    assert response.json()["detail"][0]["loc"] == ["body", "username"]
+    assert response.json()["detail"][0]["type"] == "value_error"
+    override_db.execute.assert_not_awaited()
+    override_db.commit.assert_not_awaited()
 
 
 # --- finalize_setup ---------------------------------------------------------
