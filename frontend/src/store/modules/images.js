@@ -1,5 +1,5 @@
 import axios from "axios";
-import router from "@/router/index";
+import { runTrackedOperation } from "@/utils/operations";
 import { readResourcePages } from "@/utils/resourcePages";
 
 const state = {
@@ -67,9 +67,8 @@ const actions = {
   async writeImage({ commit, dispatch }, payload) {
     commit("setLoading", true);
     try {
-      await axios.post("/resources/images/", payload);
+      await runTrackedOperation(axios, { kind: "image.pull", resource: payload.image });
       await dispatch("readImages");
-      await router.push({ name: "Images" });
       return true;
     } catch (error) {
       commit("snackbar/setErr", error, { root: true });
@@ -78,22 +77,16 @@ const actions = {
       commit("setLoading", false);
     }
   },
-  updateImage({ commit, dispatch }, id) {
+  async updateImage({ commit, dispatch }, id) {
     commit("setLoading", true);
-    const url = `/resources/images/${id}/pull`;
-    return axios
-      .post(url)
-      .then(response => {
-        const image = response.data;
-        commit("setImage", image);
-        return dispatch("readImages");
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setLoading", false);
-      });
+    try {
+      await runTrackedOperation(axios, { kind: "image.pull", resource: id, action: "update" });
+      await dispatch("readImages");
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally { commit("setLoading", false); }
   },
   deleteImage({ commit }, id) {
     commit("setLoading", true);

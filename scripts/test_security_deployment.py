@@ -59,6 +59,8 @@ class DeploymentTests(unittest.TestCase):
                 self.assertEqual(services['dockerproxy']['networks'], ['docker_api'])
                 self.assertEqual(set(app['networks']), {'docker_api', 'app_egress'})
                 proxy = services['dockerproxy']
+                self.assertIn('dockerproxy', app['environment']['NO_PROXY'].split(','))
+                self.assertIn('dockerproxy', app['environment']['no_proxy'].split(','))
                 self.assertTrue(proxy['read_only'])
                 self.assertIn('/run:noexec,nosuid,nodev,size=1m,mode=0755', proxy['tmpfs'])
 
@@ -81,6 +83,13 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn('proxy_set_header X-Real-IP $remote_addr;', nginx)
         self.assertNotIn('$proxy_add_x_forwarded_for', nginx)
         self.assertIn('geo $realip_remote_addr $trusted_http_proxy', nginx)
+
+    def test_guard_image_files_are_readable_independently_of_checkout_modes(self):
+        dockerfile = (ROOT / 'fail2ban/Dockerfile').read_text(encoding='utf-8')
+        copied = [line for line in dockerfile.splitlines() if line.startswith('COPY ')]
+        self.assertTrue(copied)
+        self.assertTrue(all('--chmod=0644' in line for line in copied))
+        self.assertNotIn('2026-09-30 12:00:00', dockerfile)
 
 
 class Fail2banStateTests(unittest.TestCase):

@@ -7,6 +7,7 @@ import VueUtils from './plugins/vueutils'
 import axios from 'axios'
 import DOMPurify from 'dompurify'
 import { enforceLinkRelNoopener } from './utils/linkRel'
+import { installAuthInterceptor } from './utils/authInterceptor'
 import './assets/styles/main.css'
 
 // Vee Validate Rules
@@ -91,57 +92,7 @@ axios.defaults.baseURL = `${window.location.origin}/api`;
 axios.defaults.withCredentials = true;
 axios.defaults.xsrfCookieName = "csrf_access_token";
 axios.defaults.xsrfHeaderName = "X-CSRF-TOKEN";
-let refreshPromise = null;
-
-// Auth Interceptor
-function createAxiosResponseInterceptor() {
-  axios.interceptors.response.use(
-    response => response,
-    error => {
-      // Only handle 401s, honour explicit opt-out, and avoid retry loops.
-      if (
-        !error.config ||
-        error.config.skipAuthRefresh ||
-        (error.response && error.response.status !== 401) ||
-        !error.response
-      ) {
-        return Promise.reject(error);
-      }
-
-      // Guard against an endless refresh loop if /auth/refresh itself
-      // keeps returning 401 or the retry request also comes back 401.
-      const refreshCount = error.config._authRefreshCount || 0;
-      if (refreshCount >= 1) {
-        store.commit("auth/AUTH_CLEAR");
-        store.commit("clearUserData");
-        router.push("/login");
-        return Promise.reject(error);
-      }
-
-      if (!refreshPromise) {
-        refreshPromise = store.dispatch("auth/AUTH_REFRESH").finally(() => { refreshPromise = null; });
-      }
-      return refreshPromise
-        .then(() => {
-          const retryConfig = {
-            ...error.config,
-            xsrfCookieName: "csrf_access_token",
-            xsrfHeaderName: "X-CSRF-TOKEN",
-            skipAuthRefresh: true,
-            _authRefreshCount: refreshCount + 1,
-          };
-          return axios(retryConfig);
-        })
-        .catch(() => {
-          store.commit("auth/AUTH_CLEAR");
-          store.commit("clearUserData");
-          router.push("/login");
-          return Promise.reject(error);
-        });
-    }
-  );
-}
-createAxiosResponseInterceptor();
+installAuthInterceptor(axios, store, router);
 
 // Aggressively unregister leftover service workers + their caches.
 // Earlier YachtPlus versions registered a Workbox precache SW. The

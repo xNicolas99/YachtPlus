@@ -4,6 +4,7 @@ user could fill the compose volume by POSTing an arbitrarily large
 string. The fix caps payload at 1 MiB and rejects NUL bytes.
 """
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
@@ -62,7 +63,7 @@ def test_rejects_nul_bytes():
 
 
 def test_accepts_payload_at_size_limit(tmp_path, monkeypatch):
-    monkeypatch.setattr("api.actions.compose.settings.COMPOSE_DIR", str(tmp_path) + "/")
+    monkeypatch.setattr("api.actions.compose.get_settings", lambda: SimpleNamespace(COMPOSE_DIR=str(tmp_path)))
     # Stub the post-write read so we don't depend on actual compose parsing.
     monkeypatch.setattr(
         "api.actions.compose._get_compose_sync",
@@ -73,3 +74,24 @@ def test_accepts_payload_at_size_limit(tmp_path, monkeypatch):
     compose = _compose(content=payload)
     result = _write_compose_sync(compose)
     assert result["name"] == "myproj"
+
+
+def test_project_symlink_cannot_overwrite_another_project(tmp_path, monkeypatch):
+    original = "services:\n  database:\n    image: postgres\n"
+    destination = tmp_path / "database"
+    destination.mkdir()
+    compose_file = destination / "docker-compose.yml"
+    compose_file.write_text(original)
+    alias = tmp_path / "myproj"
+    try:
+        alias.symlink_to(destination, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Directory symlinks are unavailable")
+    monkeypatch.setattr("api.actions.compose.get_settings", lambda: SimpleNamespace(COMPOSE_DIR=str(tmp_path)))
+
+    with pytest.raises(HTTPException) as exc:
+        _write_compose_sync(_compose(content="services:\n  web:\n    image: nginx\n"))
+
+    assert exc.value.status_code == 400
+    assert compose_file.read_text() == original
+    assert sorted(path.name for path in destination.iterdir()) == ["docker-compose.yml"]

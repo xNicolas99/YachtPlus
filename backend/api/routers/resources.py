@@ -1,5 +1,5 @@
 from __future__ import annotations
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.jwt import get_auth_wrapper
 
@@ -22,6 +22,7 @@ async def get_images(
     offset: int = 0,
     limit: int = 100,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     return await resources.get_images(offset=offset, limit=limit)
@@ -36,6 +37,7 @@ async def write_image(
     image: ImageWrite,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     return await resources.write_image(image.image)
@@ -58,6 +60,7 @@ async def pull_image(
     image_id,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     return await resources.update_image(image_id)
@@ -72,6 +75,7 @@ async def delete_image(
     image_id,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     # Image deletion is destructive and shared across the whole host; a
     # non-admin pulling the rug out under another user's deploy is a real
@@ -90,6 +94,7 @@ async def get_volumes(
     offset: int = 0,
     limit: int = 100,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     return await resources.get_volumes(offset=offset, limit=limit)
@@ -104,6 +109,7 @@ async def write_volume(
     name: VolumeWrite,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     return await resources.write_volume(name.name)
@@ -126,6 +132,7 @@ async def delete_volume(
     volume_name,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     # Volume deletion permanently destroys data — without a superuser gate
     # any logged-in operator could wipe another team's persistent state.
@@ -143,6 +150,7 @@ async def get_networks(
     offset: int = 0,
     limit: int = 100,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     return await resources.get_networks(offset=offset, limit=limit)
@@ -157,6 +165,7 @@ async def write_network(
     form: NetworkWrite,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     return await resources.write_network(form)
@@ -179,6 +188,7 @@ async def delete_network(
     network_name,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     return await resources.delete_network(network_name)

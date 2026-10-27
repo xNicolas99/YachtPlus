@@ -14,7 +14,8 @@ from sqlalchemy import select
 
 from api.db.database import Base
 from api.db.models.users import User
-from api.db.crud.users import get_password_hash
+from api.db.crud.users import get_password_hash, verify_password, update_user
+from api.db.schemas.users import UserSelfUpdate
 from api.utils.crypto import encrypt
 from api.routers.auth_2fa import disable_2fa, Disable2FARequest
 
@@ -77,6 +78,42 @@ async def test_disable_2fa_rejects_wrong_password(db):
     user = await _get_user(db)
     assert user.is_2fa_enabled is True
     assert user.otp_secret is not None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["x" * 73, "\u00e4" * 37])
+async def test_disable_2fa_rejects_oversized_password_without_server_error(db, password):
+    await _seed(db, "rightpass")
+    payload = Disable2FARequest(password=password, code="000000")
+    with pytest.raises(HTTPException) as exc:
+        await disable_2fa(payload=payload, db=db, Authorize=MockAuth("alice"))
+    assert exc.value.status_code == 400
+    assert exc.value.detail == "Password incorrect"
+    user = await _get_user(db)
+    assert user.is_2fa_enabled is True
+    assert user.otp_secret is not None
+
+
+@pytest.mark.asyncio
+async def test_password_change_rejects_oversized_confirmation_without_mutating_account(db):
+    await _seed(db, "rightpass")
+    user = await _get_user(db)
+    original_version = user.auth_version
+    with pytest.raises(HTTPException) as exc:
+        await update_user(db, UserSelfUpdate(password="newpass", current_password="x" * 73), "alice")
+    assert exc.value.status_code == 400
+    assert user.auth_version == original_version
+    assert await verify_password("rightpass", user.hashed_password)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("password", ["x" * 72, "\u00e4" * 36])
+async def test_password_verification_accepts_exact_byte_limit_and_rejects_longer_prefix(password):
+    digest = await get_password_hash(password)
+    assert await verify_password(password, digest)
+    assert await verify_password(password.encode("utf-8"), digest)
+    assert not await verify_password(password + "x", digest)
+    assert not await verify_password((password + "x").encode("utf-8"), digest)
 
 
 @pytest.mark.asyncio

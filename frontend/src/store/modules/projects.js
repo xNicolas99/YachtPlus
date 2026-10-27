@@ -1,4 +1,5 @@
 import axios from "axios";
+import { runTrackedOperation } from "@/utils/operations";
 import router from "@/router/index";
 
 const state = {
@@ -113,29 +114,24 @@ const actions = {
         commit("setLoading", false);
       });
   },
-  ProjectAction({ commit, dispatch }, { Name, Action }) {
+  async ProjectAction({ commit, dispatch }, { Name, Action }) {
     commit("setLoading", true);
     commit("setAction", Action);
-    const url = `/compose/${Name}/actions/${Action}`;
-    return axios
-      .post(url)
-      .then(response => {
-        const projects = response.data;
-        commit("setProjects", projects);
-        dispatch("apps/readApps", null, { root: true });
-        commit("snackbar/setMessage", `${Name} has been ${Action}ed.`, {
-          root: true
-        });
-        return true;
-      })
-      .catch(err => {
-        commit("snackbar/setErr", err, { root: true });
-        return false;
-      })
-      .finally(() => {
-        commit("setLoading", false);
-        commit("setAction", "");
+    try {
+      await runTrackedOperation(axios, { kind: "compose.action", resource: Name, action: Action }, {
+        onUpdate: task => commit("setAction", task.phase),
       });
+      await dispatch("_readProjects");
+      await dispatch("apps/readApps", null, { root: true });
+      commit("snackbar/setMessage", `${Name}: ${Action} completed.`, { root: true });
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+      commit("setAction", "");
+    }
   },
   ProjectAppAction({ commit, dispatch }, { Project, Name, Action }) {
     commit("setLoading", true);

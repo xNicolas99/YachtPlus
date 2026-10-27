@@ -1,4 +1,5 @@
 import axios from "axios";
+import { runTrackedOperation } from "@/utils/operations";
 
 const state = {
   apps: [],
@@ -62,11 +63,12 @@ const actions = {
     await commit("setLoading", true);
     await commit("setAction", "Getting Apps ...");
     const url = "/apps/";
-    await axios
+    return axios
       .get(url)
       .then(response => {
         var apps = response.data;
         commit("setApps", apps);
+        return true;
       })
       .catch(err => {
         console.error(
@@ -74,6 +76,7 @@ const actions = {
             (err.response?.data?.detail || err.message)
         );
         commit("snackbar/setErr", err, { root: true });
+        return false;
       })
       .finally(() => {
         commit("setLoading", false);
@@ -157,62 +160,41 @@ const actions = {
         commit("snackbar/setErr", err, { root: true });
       });
   },
-  AppUpdate({ commit }, Name) {
+  async AppUpdate({ commit, dispatch }, Name) {
     commit("setLoading", true);
-    commit("setAction", "Updating " + Name + " ...");
-    console.log("Update started for " + Name + ", please wait...");
-    const url = `/apps/${Name}/update`;
-    return axios
-      .post(url)
-      .then(response => {
-        const app = response.data;
-        commit(Array.isArray(app) ? "setApps" : "setApp", app);
-        console.log(Name + " updated successfully");
-      })
-      .catch(err => {
-        console.error("Failed to update " + Name);
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        commit("setUpdated", Name);
-        commit("setLoading", false);
-        commit("setAction", "");
+    commit("setAction", `Updating ${Name}…`);
+    try {
+      await runTrackedOperation(axios, { kind: "container.action", resource: Name, action: "update" }, {
+        onUpdate: task => commit("setAction", task.phase),
       });
+      await dispatch("readApps");
+      commit("setUpdated", Name);
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+      commit("setAction", "");
+    }
   },
-  AppAction({ commit }, { Name, Action }) {
+  async AppAction({ commit, dispatch }, { Name, Action }) {
     commit("setLoading", true);
-    commit("setAction", Action + " " + Name + " ...");
-
-    console.log(
-      Action.charAt(0).toUpperCase() + Action.slice(1) + "ing " + Name + "..."
-    );
-
-    const url = `/apps/actions/${Name}/${Action}`;
-    return axios
-      .post(url)
-      .then(response => {
-        const app = response.data;
-        commit(Array.isArray(app) ? "setApps" : "setApp", app);
-        console.log(Name + " " + Action + "ed successfully");
-      })
-      .catch(err => {
-        console.error(
-          "Failed to " +
-            Action +
-            " " +
-            Name +
-            ": " +
-            (err.response?.data?.detail || err.message)
-        );
-        commit("snackbar/setErr", err, { root: true });
-      })
-      .finally(() => {
-        if (Action == "update") {
-          commit("setUpdated", Name);
-        }
-        commit("setLoading", false);
-        commit("setAction", "");
+    commit("setAction", `${Action} ${Name}…`);
+    try {
+      await runTrackedOperation(axios, { kind: "container.action", resource: Name, action: Action }, {
+        onUpdate: task => commit("setAction", task.phase),
       });
+      await dispatch("readApps");
+      if (Action === "update") commit("setUpdated", Name);
+      return true;
+    } catch (error) {
+      commit("snackbar/setErr", error, { root: true });
+      return false;
+    } finally {
+      commit("setLoading", false);
+      commit("setAction", "");
+    }
   }
 };
 

@@ -1,9 +1,11 @@
 import logging
+import math
 import secrets
 import traceback
 from typing import List, Dict, Any, Optional
 
 from fastapi import Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -141,7 +143,17 @@ def validation_exception_handler(request: Request, exc: Exception) -> JSONRespon
     errors = getattr(exc, "errors", lambda: [])()
     sanitized = sanitize_error_message(errors)
     sanitized = _mask_sensitive_input(sanitized)
-    return JSONResponse(status_code=422, content={"detail": sanitized})
+    # Pydantic errors can contain ValueError context, raw request bytes, or
+    # non-finite numeric input. Convert them after redaction so malformed
+    # requests still receive a 422 instead of failing JSON serialization.
+    content = jsonable_encoder(
+        {"detail": sanitized},
+        custom_encoder={
+            bytes: lambda value: "***",
+            float: lambda value: value if math.isfinite(value) else str(value),
+        },
+    )
+    return JSONResponse(status_code=422, content=content)
 
 
 def docker_error_detail(exc) -> str:

@@ -1,14 +1,13 @@
 <template lang="html">
-  <v-card class="d-flex mx-auto page">
-    <v-container fluid class="component">
-      <Nav />
+  <div class="user-settings page">
+    <PageHeader title="Account" subtitle="Manage your profile and sign-in settings.">
+      <template v-if="username" #actions><span class="yp-tag">{{ username }}</span></template>
+    </PageHeader>
+    <v-container fluid class="component pa-0">
       <v-card tile>
+        <Nav />
         <v-row>
           <v-col class="flex-grow-1 flex-shrink-0">
-            <v-card-title>
-              {{ username }}
-            </v-card-title>
-            <v-card-subtitle> Manage {{ username }} </v-card-subtitle>
             <v-card-text>
               <transition
                 name="slide"
@@ -23,14 +22,16 @@
         </v-row>
       </v-card>
     </v-container>
-  </v-card>
+  </div>
 </template>
 
 <script>
 import { mapState } from "vuex";
 import UserSettingsNav from "../components/userSettings/UserSettingsNav";
+import PageHeader from "@/components/PageHeader.vue";
 export default {
   components: {
+    PageHeader,
     Nav: UserSettingsNav
   },
   computed: {

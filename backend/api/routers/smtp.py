@@ -1,5 +1,5 @@
 import time
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, EmailStr
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -108,6 +108,7 @@ async def send_test_email(
     email_data: TestEmailSchema,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     # Without a superuser gate this route is an authenticated open relay:
     # any user can fire mail through the configured SMTP server to any

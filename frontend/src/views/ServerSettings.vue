@@ -1,8 +1,9 @@
 <template lang="html">
-  <v-card class="d-flex mx-auto page">
-    <v-container fluid class="component">
-      <!-- <Nav> was referenced but never imported (Vuetify 2 leftover);
-           sidebar is the global nav in Vuetify 3 layout. -->
+  <div class="server-settings page">
+    <PageHeader title="Server settings" subtitle="Configure your server, security, and appearance.">
+      <template #actions><span class="yp-tag" aria-label="YachtPlus version">v{{ version }}</span></template>
+    </PageHeader>
+    <v-container fluid class="component pa-0">
       <v-card tile>
         <v-row>
           <v-col class="flex-grow-1 flex-shrink-0">
@@ -41,13 +42,10 @@
                 <v-tab class="text-left">
                   <v-icon start class="mr-1">mdi-history</v-icon>Audit Logs
                 </v-tab>
+                <v-tab class="text-left">
+                  <v-icon start class="mr-1">mdi-calendar-clock</v-icon>Update plans
+                </v-tab>
               </v-tabs>
-              <!-- Vuetify 3 replaced v-tabs-items / v-tab-item with
-                   v-window / v-window-item. The old elements silently
-                   render nothing in v3, so every tab past "Info"
-                   appeared blank and Audit Logs were unreachable.
-                   Migrated to the v3 names; behaviour and the
-                   SettingsTab v-model are unchanged. -->
               <v-window v-model="SettingsTab" class="mt-3">
                 <v-window-item> </v-window-item>
                 <v-window-item>
@@ -75,22 +73,24 @@
                 <v-window-item>
                   <AuditLogs />
                 </v-window-item>
+                <v-window-item>
+                  <UpdatePlans />
+                </v-window-item>
               </v-window>
             </div>
           </v-col>
         </v-row>
-        <v-card-text>Version: {{ version }}</v-card-text>
       </v-card>
 
       <v-snackbar
         v-model="snackbar.show"
         :color="snackbar.color"
-:timeout="3000"
+        :timeout="3000"
       >
         {{ snackbar.message }}
       </v-snackbar>
     </v-container>
-  </v-card>
+  </div>
 </template>
 
 <script>
@@ -103,12 +103,17 @@ import SMTPSettings from "../components/settings/SMTPSettings";
 import TwoFactor from "../components/settings/TwoFactor";
 import NetworkAccessSecurity from "../components/settings/NetworkAccessSecurity.vue";
 import AuditLogs from "../components/serverSettings/AuditLogs.vue";
+import PageHeader from "@/components/PageHeader.vue";
+import { defineAsyncComponent } from "vue";
+const UpdatePlans = defineAsyncComponent(() => import("../components/serverSettings/UpdatePlans.vue"));
 
 const tabPaths = [null, "/settings/info", "/settings/theme", "/settings/templateVariables",
-  "/settings/prune", "/settings/update", "/settings/smtp", "/settings/security", "/settings/audit"];
+  "/settings/prune", "/settings/update", "/settings/smtp", "/settings/security", "/settings/audit", "/settings/update-plans"];
 
 export default {
   components: {
+    PageHeader,
+    UpdatePlans,
     Info,
     Variables,
     Theme,

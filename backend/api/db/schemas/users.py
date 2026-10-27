@@ -21,6 +21,16 @@ def _within_bcrypt_byte_limit(value: Optional[str]) -> Optional[str]:
     return value
 
 
+def _valid_username(value: Optional[str]) -> Optional[str]:
+    if value is not None:
+        canonical = value.strip().casefold()
+        if not canonical:
+            raise ValueError("username must not be blank")
+        if len(canonical) > 264:
+            raise ValueError("username must be at most 264 characters after normalization")
+    return value
+
+
 class UserBase(BaseModel):
     username: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
@@ -43,6 +53,8 @@ class UserCreate(UserBase):
     perm_delete: bool = False
     model_config = ConfigDict(from_attributes=True)
 
+    _validate_username = field_validator("username")(_valid_username)
+
     @field_validator("password")
     @classmethod
     def _validate_password_bytes(cls, value: str) -> str:
@@ -63,6 +75,8 @@ class UserUpdate(UserBase):
     perm_delete: Optional[bool] = None
     model_config = ConfigDict(from_attributes=True)
 
+    _validate_username = field_validator("username")(_valid_username)
+
     @field_validator("password")
     @classmethod
     def _validate_password_bytes(cls, value: Optional[str]) -> Optional[str]:
@@ -82,6 +96,8 @@ class UserSelfUpdate(BaseModel):
     password: Optional[str] = None
     current_password: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
+
+    _validate_username = field_validator("username")(_valid_username)
 
     @field_validator("password")
     @classmethod

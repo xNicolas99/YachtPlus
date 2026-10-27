@@ -176,6 +176,11 @@ async def delete_user(db: AsyncSession, user_id: int):
 async def verify_password(plain_password, hashed_password):
     if isinstance(plain_password, str):
         plain_password = plain_password.encode('utf-8')
+    # Password confirmations do not all pass through UserLogin's schema.
+    # Reject oversized input instead of allowing bcrypt to raise ValueError
+    # (or silently truncate it on older versions).
+    if len(plain_password) > schemas.BCRYPT_MAX_PASSWORD_BYTES:
+        return False
     if isinstance(hashed_password, str):
         hashed_password = hashed_password.encode('utf-8')
     return await asyncio.to_thread(bcrypt.checkpw, plain_password, hashed_password)

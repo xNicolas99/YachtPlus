@@ -858,6 +858,7 @@
 
 <script>
 import axios from "axios";
+import { runTrackedDeployment } from "@/utils/operations";
 import { mapActions, mapMutations } from "vuex";
 import { Form, Field } from "vee-validate";
 
@@ -868,6 +869,7 @@ export default {
   },
   data() {
     return {
+      viewDisposed: false,
       deployStep: 1,
       deploySteps: 4,
       advancedPanels: [],
@@ -1091,6 +1093,7 @@ export default {
     async submitFormData() {
       if (this.isLoading) return;
       if (!this.workloadSecurityValid) return;
+      const submittingRoute = this.$route.fullPath || this.$route.path;
       this.isLoading = true;
       const refs = ["obs1", "obs2", "obs3", "obs4", "advanced"];
       const validation = await Promise.all(refs.map(ref => this.$refs[ref].validate()));
@@ -1113,15 +1116,16 @@ export default {
       }
 
       this.conflictErrors = []; // Clear previous errors
-      const url = `/apps/deploy`;
-      return axios
-        .post(url, payload)
+      return runTrackedDeployment(axios, payload)
         .then(() => {
           this.isLoading = false;
-          this.$router.push({ name: "View Applications" });
+          if (!this.viewDisposed && (this.$route.fullPath || this.$route.path) === submittingRoute) {
+            this.$router.push({ name: "View Applications" });
+          }
         })
         .catch(err => {
           this.isLoading = false;
+          if (this.viewDisposed || (this.$route.fullPath || this.$route.path) !== submittingRoute) return;
           this.deployStep = 1;
 
           if (err.response && err.response.status === 409 && err.response.data && err.response.data.conflicts) {
@@ -1245,6 +1249,9 @@ export default {
       }
       if (!this.form.network && !this.form.network_mode) this.form.network = "bridge";
     }
+  },
+  beforeUnmount() {
+    this.viewDisposed = true;
   },
   async created() {
     // ⚡ Bolt: Fetch form data and networks concurrently to reduce component mount time.

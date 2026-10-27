@@ -68,15 +68,28 @@ describe('browser-observed audit UI regressions', () => {
   });
 });
 
-describe('preserved remote application action contracts', () => {
-  it.each([
-    { shape: 'list', response: [{ Id: 'a', name: 'web' }] },
-    { shape: 'individual', response: { Id: 'a', name: 'web' } },
-  ])('accepts $shape app responses', async ({ response }) => {
+describe('tracked remote application action contracts', () => {
+  it('refreshes container inventory after a successful task without committing task metadata as an inspect record', async () => {
     const commit = vi.fn();
-    axios.post.mockResolvedValueOnce({ data: response });
-    await apps.actions.AppAction({ commit }, { Name: 'web', Action: 'start' });
-    expect(commit).toHaveBeenCalledWith(Array.isArray(response) ? 'setApps' : 'setApp', response);
+    const dispatch = vi.fn().mockResolvedValue(true);
+    axios.post.mockResolvedValueOnce({ data: { id: 'job', status: 'succeeded' } });
+    expect(await apps.actions.AppAction({ commit, dispatch }, { Name: 'web', Action: 'start' })).toBe(true);
+    expect(axios.post).toHaveBeenCalledWith('/operations', {
+      kind: 'container.action', resource: 'web', action: 'start',
+    }, { timeout: 15000 });
+    expect(dispatch).toHaveBeenCalledExactlyOnceWith('readApps');
+    expect(commit).not.toHaveBeenCalledWith('setApp', expect.anything());
+    expect(commit).not.toHaveBeenCalledWith('setApps', expect.anything());
+  });
+
+  it('preserves inventory and update flags when a task fails', async () => {
+    const commit = vi.fn();
+    const dispatch = vi.fn();
+    axios.post.mockResolvedValueOnce({ data: { id: 'job', status: 'failed', error: 'Update failed' } });
+    expect(await apps.actions.AppUpdate({ commit, dispatch }, 'web')).toBe(false);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalledWith('setUpdated', 'web');
+    expect(commit).toHaveBeenCalledWith('snackbar/setErr', expect.any(Error), { root: true });
   });
 });
 

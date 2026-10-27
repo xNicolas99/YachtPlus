@@ -27,7 +27,7 @@
     </div>
 
     <!-- Grouped nav -->
-    <nav class="yp-nav">
+    <nav class="yp-nav" aria-label="Main navigation">
       <div
         v-for="group in groups"
         :key="group.label"
@@ -43,10 +43,12 @@
         >
           <a
             :href="href"
+            :aria-label="item.title"
+            :aria-current="(item.exact ? isExactActive : isActive) ? 'page' : undefined"
             class="yp-nav-item"
             :class="{ active: item.exact ? isExactActive : isActive }"
             :title="rail ? item.title : undefined"
-            @click="navigate"
+            @click="navigateTo($event, navigate)"
           >
             <v-icon size="18" class="yp-nav-icon">{{ item.icon }}</v-icon>
             <span v-if="!rail" class="yp-nav-label">{{ item.title }}</span>
@@ -63,7 +65,7 @@
       <v-list density="compact" nav class="yp-side-actions">
         <v-list-item
           prepend-icon="mdi-logout"
-          title="Logout"
+          title="Sign out"
           @click="logout"
         ></v-list-item>
       </v-list>
@@ -99,6 +101,8 @@ export default {
           items: [
             { title: 'Stacks',    icon: 'mdi-docker',                  path: '/projects' },
             { title: 'Templates', icon: 'mdi-file-document-multiple',  path: '/templates' },
+            { title: 'Tasks', icon: 'mdi-progress-check', path: '/tasks' },
+            { title: 'Backups', icon: 'mdi-backup-restore', path: '/backups' },
           ],
         },
         {
@@ -106,6 +110,7 @@ export default {
           items: [
             { title: 'Users',    icon: 'mdi-account-multiple', path: '/users' },
             { title: 'Settings', icon: 'mdi-cog',              path: '/settings/info' },
+            { title: 'Update plans', icon: 'mdi-calendar-sync', path: '/settings/update-plans' },
           ],
         },
       ],
@@ -119,6 +124,10 @@ export default {
   },
   methods: {
     ...mapActions('auth', { logout: 'AUTH_LOGOUT' }),
+    navigateTo(event, navigate) {
+      navigate(event);
+      if (this.$vuetify.display.smAndDown && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) this.drawer = false;
+    },
   },
 };
 </script>

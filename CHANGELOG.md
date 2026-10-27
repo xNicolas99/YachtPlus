@@ -7,6 +7,138 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.1] - 2026-10-27 10:43 CET — Run R-029: Automatische versionierte Releases
+
+- Commit: dieser Commit; Ausgangsstand `952803c` (3.1.0).
+- Version: `3.1.1`; Paket, Lockfile und Produktionsmetadaten stimmen exakt
+  überein. Keine Paket-/Abhängigkeitsänderungen.
+- Geändert: Der bestehende geschützte CI-Publishjob reserviert nach allen
+  Kandidatenprüfungen `v<Version>` am geprüften Commit und erstellt nach
+  erfolgreicher GHCR-Veröffentlichung das zugehörige GitHub Release mit
+  Commit, Registrydigest und Buildlink. Alle gepushten Imagetags müssen
+  denselben Digest melden. Schreibrechte bleiben auf diesen Job beschränkt.
+- Geändert: Versionstags werden nie verschoben. Vorhandene Releases und deren
+  Versionsimages bleiben erhalten; spätere Mastercommits gleicher Version
+  aktualisieren nur SHA/latest. Wiederholung, konkurrierende Tagreservierung,
+  verlorene API-Antworten und fehlgeschlagene Veröffentlichung sind abgesichert.
+  Fertigstellung folgt dem reservierten Tag auch bei inzwischen fortgeschrittenem Master.
+  Bestehende Release-Entwürfe werden über die authentifizierte paginierte Liste
+  erkannt, da GitHubs Tagabfrage nur veröffentlichte Releases findet.
+- Ergebnis: **1068 Backend-, 344 Frontend- und 67 Skripttests bestanden**,
+  darunter 22 neue Release-Regressionstests. Produktionsbuild und Bundlegrenzen
+  grün; frisches SQLite-Upgrade auf `20261027_0003` und Wiederholung erfolgreich.
+  Voraussetzungen für den Patch-Versionsschritt vor der Erhöhung geprüft.
+- GitHub: [PR #262](https://github.com/xNicolas99/YachtPlus/pull/262) bündelt
+  diese Lieferung und die Prüfungen des jeweiligen HEAD. Am Ausgangsstand
+  `952803c` sind [CI](https://github.com/xNicolas99/YachtPlus/actions/runs/40482075996),
+  [CodeQL-Analysen](https://github.com/xNicolas99/YachtPlus/actions/runs/40482075973)
+  und der separate CodeQL-Ergebnischeck erfolgreich. Die automatische
+  Veröffentlichung prüft anschließend den tatsächlichen Master-Commit erneut.
+- Dokumentation: README mit Releaseablauf, Versionierung und Wiederaufnahme;
+  AGENTS.md mit Publikationsvertrag, Testbaseline und Run-Protokoll aktualisiert.
+  Lokale Nachweise: `report/audit-r029-*.txt`.
+- Aufgeräumt: eigene Frontend-Buildausgabe und temporäre Migrationsdatenbank
+  entfernt; Prüflogs und wiederverwendbare Entwicklungsumgebungen erhalten.
+- Grenzen: Eine ältere unvollständige Tagreservierung blockiert weitere
+  Publikation derselben Version ausdrücklich; ursprüngliche Veröffentlichung
+  wiederherstellen oder kanonische Version erhöhen. Mehrere Registrytags sind
+  nicht atomar; kein automatisches Verschieben veröffentlichter Versionen.
+  Live-PostgreSQL/MySQL und Multiarch werden dadurch nicht zusätzlich verifiziert.
+
+## [3.1.0] - 2026-10-27 10:06 CET — Run R-028: Bedienung und Betriebsfunktionen
+
+- Commit: dieser Commit; Ausgangsstand `6c97521` (3.0.4).
+- Version: `3.1.0`; kanonisches Paket, Lockfile, Buildmetadaten und
+  angezeigte Version stimmen überein. Keine Python-/npm-Paketänderungen.
+- Geändert: Gemeinsame Seitenköpfe, konsistente Begriffe, sichtbarer
+  Tastaturfokus, mobile Layouts, Hellmodus und reduzierte Animationen.
+  Dashboard veröffentlicht verifizierte Momentaufnahmen mit Zeit/Fehlerstatus,
+  priorisiert Problemcontainer und verlinkt passende Filter. Containeransichten
+  speichern Suche, Status/Health/Stack/Updates und Spalten pro Browserkonto.
+- Geändert: Persistente Aufgaben mit erlaubten Aktionen, echten Phasen,
+  Besitzprüfung, begrenzter Queue, Worker-Leases, Neustartstatus und sicherem
+  Retry. Container-/Stackaktionen, Deployments und Image-Pulls sind angebunden;
+  spätere Ergebnisse navigieren nicht aus einer anderen Ansicht zurück.
+- Geändert: Schreibfreie Compose-Vorschau mit normalisiertem Ergebnis,
+  Sicherheitsänderungen und Diff; bestätigte aktuelle Vorschau, HMAC gegen
+  veraltete Speicherungen, Prozesssperre und Warnung vor ungespeichertem Verlassen.
+- Geändert: Geprüfte Volume-Archive, tägliche UTC-Sicherungspläne/Aufbewahrung
+  und geführter Restore ausschließlich in neue Volumes. Gehärtete, nie
+  gestartete Helfer lesen Quellen schreibgeschützt; Pfad-/Typ-/Größenprüfung,
+  SHA-256, private Stagingdateien und Transaktionsnachweise schützen Wiederherstellungen.
+- Geändert: Updatepläne pro Compose-Projekt mit UTC-Wartungsfenstern,
+  Mindestabstand und Ausschlüssen; erneute Freigabe unmittelbar vor Pull/Up.
+  Audit-Suche mit serverseitigen Filtern/Pagination und begrenztem CSV-Export.
+- Laufzeitkorrekturen: Echte FastAPI-Response-Injektion für alle 41 limitierten
+  Endpoints behebt den zuvor durch Unit-Stubs verdeckten Login-/`/auth/me`-500.
+  Dateibasiertes SQLite trennt Request-/Jobtransaktionen. Fail2ban-Konfiguration
+  ist unabhängig vom Checkout-Modus lesbar; Buildprobe nutzt aktuelle UTC-Zeit.
+  Docker-CLI kommt aus einem digest-gepinnten offiziellen Buildstage;
+  optionaler CA-Buildsecret, Compose-Prüfsumme und interne NO_PROXY-Einträge bleiben wirksam.
+- Migration: `20261027_0001` bis `20261027_0003` ergänzen Aufgaben, stabile
+  Kontoidentität, Backupmetadaten und Updatepläne. Frische und bestehende
+  3.0.x-SQLite-Datenbanken erfolgreich und wiederholbar aktualisiert;
+  Credential-Versionen erhalten, neue Richtlinien standardmäßig deaktiviert.
+- Ergebnis: **1068 Backend-, 344 Frontend- und 45 Skripttests bestanden**;
+  **247 zusätzliche automatisierte Tests** gegenüber 3.0.4. Produktionsbuild und
+  Bundle-Grenzen bestanden. Browser: insgesamt 13 Flowgruppen und 22 selbst
+  betrachtete Screenshots, Desktop/390px, Hell/Dunkel; finaler 3.1.0-Artefaktcheck grün.
+  Darunter reales Deployment über alle vier Formularschritte bis zum laufenden
+  gehärteten Container und erfolgreicher Aufgabe geprüft.
+  Reale Archiv-Wiederherstellung bytegenau mit UID/GID 1000:1000,
+  bestehende Ziele verweigert; Worker-Neustart ohne automatische Wiederholung geprüft.
+- Docker: lokales Kandidatenimage `yachtplus:3.1.0`, **482178073 Bytes**,
+  Image-ID `sha256:2921036ef5a184d6e2e57f9ce2cdbb33538de6aa5cef837c1c83880b4666e0bb`.
+  Inhaltsprüfung, Start/Health und realer Schutzstack einschließlich
+  Ban/Unban, Persistenz und Ausfall/Wiederherstellung erfolgreich. Die lokale
+  Image-ID ist kein veröffentlichter Registry-Manifest-Digest.
+- Dokumentation: [Bedienungs-/Betriebsanleitung](docs/OPERATIONS_GUIDE.md),
+  README, Architektur-/Sicherheitsverträge und Run-Protokoll aktualisiert.
+  Nachweisübersicht: `report/audit-r028-summary.json`; lokale Logs/Screenshots
+  unter `report/audit-r028-*.txt` und `report/tools/r028/`.
+- Aufgeräumt: eigene Zwischenimages/Buildcaches, Buildausgabe und isolierte
+  Testcontainer/-volumes entfernt; finalen Kandidaten, Prüfnachweise und
+  wiederverwendbare Python-/Node-Entwicklungsumgebungen erhalten.
+- Grenzen: Backups unterstützen reguläre Dateien/Verzeichnisse gewöhnlicher
+  lokaler Volumes; keine Links/Spezialdateien, kein In-place-Restore.
+  Live-Backups benötigen Bestätigung, externe Sicherung bleibt Betreiberaufgabe.
+  Remote-CI/CodeQL, PostgreSQL/MySQL und Multiarch nicht ausgeführt;
+  lokaler Commit ohne Remote-Integration oder Veröffentlichung.
+
+## [3.0.4] - 2026-10-27 08:30 CET — Run R-027: Fehlerprüfung von Backend und Frontend
+
+- Commit: dieser Commit; Ausgangsstand `94209fe` (Merge von 3.0.3).
+- Version: `3.0.4`; Paket, Lockfile und geprüftes `dist/version.json`
+  stimmen exakt überein. Keine Abhängigkeitsänderungen.
+- Geändert: Validierungsfehler mit Exception-Kontext, Rohbytes und
+  nichtendlichen Zahlen liefern 422 statt 500; rohe Request-Bodys werden
+  vollständig maskiert. Benutzeranlage/-änderung verweigert leere und nach
+  Normalisierung zu lange Namen. Überlange Passwortbestätigungen werden
+  vor bcrypt ohne Kontomutation abgewiesen.
+- Geändert: Compose-Speichern verweigert Projektverzeichnis-Symlinks vor
+  Dateiänderungen. Containerformulare erhalten explizit leere Env-Werte,
+  ersetzen mehrere Templatevariablen pro Wert und melden fehlende Env-Namen
+  mit 422. Ein bestehender Compose-Größentest verwendet den aktuellen
+  Settings-Zugriff statt eines testreihenfolgenabhängigen Cacheobjekts.
+- Geändert: Erfolgreicher Token-Refresh meldet nachfolgende API-Fehler ohne
+  Abmeldung; erneute 401 bleiben begrenzt. Fehlgeschlagene Setup-Abfragen
+  erhalten unbekannten/bekannten Zustand. Compose-Details unterstützen
+  Direktaufrufe, Routenwechsel und gültige Mapping-/Langformen; Löschdialoge
+  warten auf Erfolg und verhindern Doppelanfragen. Späte Katalogantworten
+  überschreiben keine anderen Editoren; Laden/Speichern sperrt Konflikte.
+- Ergebnis: **922 Backend-, 244 Frontend- und 44 Skripttests bestanden**,
+  darunter **65 zusätzliche Regressionstests**. Produktionsbuild mit
+  Bundle-Grenzen und frisches SQLite-Alembic-Upgrade auf `20261001_0001`
+  erfolgreich. Lokale Nachweise unter `report/audit-r027-backend-final.txt`,
+  `report/audit-r027-frontend-final.txt`, `report/audit-r027-scripts.txt`,
+  `report/audit-r027-build-final.txt` und `report/audit-r027-migration.txt`.
+- Aufgeräumt: eigene Buildausgabe entfernt; temporäre Migrationsdatenbank
+  automatisch entfernt. Prüflogs, wiederverwendbare Testcaches und
+  Entwicklungsumgebungen erhalten.
+- Offen: Docker-Releaseimage/Schutzstack, visuelle Browserprüfung,
+  PostgreSQL/MySQL und Remote-CI/CodeQL wurden für diesen Kandidaten nicht
+  ausgeführt. Lokaler Commit; keine Veröffentlichung oder Remote-Integration.
+
 ## [3.0.3] - 2026-10-02 15:23 — Run R-026: Dependency-Graph-Erkennung
 
 - Commit: dieser Commit; neue Patch-Lieferung nach dem Merge und der

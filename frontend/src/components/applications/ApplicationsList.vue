@@ -1,36 +1,28 @@
 <template lang="html">
-  <div class="apps-list component" style="max-width: 90%">
+  <div class="apps-list component yp-workspace-page">
+    <div class="yp-page-head">
+      <div>
+        <h1 class="yp-page-title">Containers</h1>
+        <p class="yp-page-sub">Manage containers and keep your preferred views.</p>
+      </div>
+      <v-btn color="primary" to="/apps/deploy" prepend-icon="mdi-plus">New container</v-btn>
+    </div>
     <v-card color="foreground" class="apps-card">
-      <v-card-title class="primary font-weight-bold">
-        Apps
-        <v-btn class="ml-2" color="secondary" to="/apps/deploy" aria-label="Deploy new application" title="Deploy new application">
-          <v-icon>mdi-plus</v-icon>
-        </v-btn>
-        <v-spacer />
+      <div class="container-toolbar pa-4">
         <div class="apps-search-wrap">
-          <UnifiedSearch @input="val => search = val" />
+          <UnifiedSearch v-model="search" />
         </div>
-      </v-card-title>
-
-      <v-card-title color="secondary">
-        <v-btn class="ml-2" @click="checkUpdate(apps)" color="secondary" :loading="isCheckingUpdates" :disabled="isCheckingUpdates">
-          <span v-if="$vuetify.display.mdAndUp">Updates</span>
-          <v-icon>mdi-update</v-icon>
+        <v-spacer />
+        <v-btn @click="checkUpdate(apps)" variant="tonal" prepend-icon="mdi-update" :loading="isCheckingUpdates" :disabled="isCheckingUpdates">
+          Check updates
         </v-btn>
-        <v-btn class="ml-2" @click="refresh()" color="secondary" :loading="isRefreshing" :disabled="isRefreshing">
-          <span v-if="$vuetify.display.mdAndUp">Refresh</span>
-          <v-icon>mdi-refresh</v-icon>
+        <v-btn @click="refresh()" variant="tonal" prepend-icon="mdi-refresh" :loading="isRefreshing" :disabled="isRefreshing">
+          Refresh
         </v-btn>
-        <v-menu
-          :close-on-content-click="false"
-          bottom
-
-          color="secondary"
-        >
+        <v-menu :close-on-content-click="false" location="bottom end">
           <template v-slot:activator="{ props }">
-            <v-btn color="secondary" v-bind="props" class="ml-2">
-              <span v-if="$vuetify.display.mdAndUp">Columns</span>
-              <v-icon>mdi-border-all</v-icon>
+            <v-btn variant="tonal" v-bind="props" prepend-icon="mdi-view-column-outline">
+              Columns
             </v-btn>
           </template>
           <v-list color="foreground">
@@ -40,37 +32,63 @@
               :key="index"
             >
               <v-checkbox
-                v-model="selectedHeaders"
+                v-model="selectedColumnKeys"
                 :label="item.title"
-                :value="item"
+                :value="item.key"
+                :disabled="item.key === 'name'"
+                density="compact"
+                hide-details
                 multiple
               >
               </v-checkbox>
             </v-list-item>
           </v-list>
         </v-menu>
-      </v-card-title>
+      </div>
+
+      <div class="container-filter-grid px-4 pb-2" aria-label="Container filters">
+        <v-select v-model="view.status" :items="statusOptions" label="Status" density="compact" variant="outlined" hide-details />
+        <v-select v-model="view.health" :items="healthOptions" label="Health" density="compact" variant="outlined" hide-details />
+        <v-select v-model="view.stack" :items="stackOptions" label="Stack" density="compact" variant="outlined" hide-details />
+        <v-select v-model="view.updates" :items="updateOptions" label="Updates" density="compact" variant="outlined" hide-details />
+      </div>
+      <p v-if="view.updates === 'unconfirmed'" class="text-caption text-medium-emphasis px-4 mb-2">
+        No update confirmed includes containers that have not been checked. Use Check updates to refresh availability.
+      </p>
+      <div class="container-view-toolbar px-4 pb-3">
+        <v-select
+          :model-value="selectedView || null" :items="savedViewNames" label="Saved view" clearable
+          density="compact" variant="outlined" hide-details @update:model-value="applySavedView"
+        />
+        <v-chip v-if="selectedView && viewModified" size="small" variant="tonal">Modified</v-chip>
+        <v-btn variant="text" prepend-icon="mdi-content-save-outline" @click="openSaveView">Save view</v-btn>
+        <v-btn v-if="selectedView" variant="text" color="error" prepend-icon="mdi-delete-outline" @click="deleteSavedView">Delete view</v-btn>
+        <v-btn variant="text" prepend-icon="mdi-restore" @click="resetView">Reset view</v-btn>
+      </div>
+      <div class="container-filter-chips px-4 pb-3" aria-live="polite">
+        <span class="text-body-2 text-medium-emphasis">{{ filteredApps.length }} of {{ apps.length }} containers</span>
+        <v-chip v-for="filter in activeFilters" :key="filter.key" closable size="small" @click:close="clearFilter(filter.key)">{{ filter.label }}</v-chip>
+        <v-btn v-if="activeFilters.length" size="small" variant="text" @click="clearFilters">Clear filters</v-btn>
+      </div>
+      <v-alert v-if="storageWarning" type="info" density="compact" variant="tonal" class="mx-4 mb-3">{{ storageWarning }}</v-alert>
 
       <v-card-subtitle v-if="action">{{ action }} </v-card-subtitle>
 
       <!-- Error State -->
       <div v-if="loadError" class="text-center py-4">
         <v-alert type="error" variant="outlined" text>
-          Apps konnten nicht geladen werden. Bitte Seite aktualisieren oder Logs
-          prüfen.
+          Containers could not be loaded. Retry the request or check the server logs.
         </v-alert>
         <v-btn color="primary" @click="retryLoad">Retry</v-btn>
       </div>
 
       <v-data-table
         v-if="!loadError"
-        style="width: 99%"
         class="mx-auto foreground"
         :headers="selectedHeaders"
-        :items="apps"
+        :items="filteredApps"
         :items-per-page="25"
         :items-per-page-options="[15, 25, 50, -1]"
-        :search="search"
         @click:row="handleRowClick"
         single-select
         :loading="isLoading"
@@ -204,36 +222,6 @@
               </v-list>
             </v-menu>
 
-            <!-- Remove Dialog -->
-            <v-dialog v-if="selectedApp" v-model="removeDialog" max-width="290">
-              <v-card>
-                <v-card-title class="headline" style="word-break: break-all;">
-                  Remove {{ selectedApp.name }}?
-                </v-card-title>
-                <v-card-text>
-                  Are you sure you want to permanently remove
-                  {{ selectedApp.name }}?<br />
-                  All non peristent data will be removed.
-                </v-card-text>
-                <v-card-actions>
-                  <v-spacer></v-spacer>
-                  <v-btn variant="text" @click="removeDialog = false">
-                    Cancel
-                  </v-btn>
-                  <v-btn
-                    variant="text"
-                    color="error"
-                    @click="
-                      AppAction({ Name: selectedApp.name, Action: 'remove' });
-                      removeDialog = false;
-                    "
-                  >
-                    Remove
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-dialog>
-
             <span class="nametext ml-1">{{ item.name }}</span>
             <v-tooltip location="right"
               v-if="item.isUpdatable"
@@ -263,6 +251,9 @@
           <div class="statuscell">
             <span>{{ item.State.Status }} </span>
           </div>
+        </template>
+        <template v-slot:item.health="{ item }">
+          <v-chip :color="healthColor(item)" size="small" variant="tonal">{{ healthLabel(item) }}</v-chip>
         </template>
         <template v-slot:item.ports="{ item }">
           <ins
@@ -321,10 +312,44 @@
 
         <!-- No Data slot -->
         <template v-slot:no-data>
-          <div class="text-center">No Apps Found</div>
+          <div class="text-center pa-4">
+            <p>{{ apps.length ? 'No containers match this view.' : 'No containers found.' }}</p>
+            <v-btn v-if="activeFilters.length" variant="text" @click="clearFilters">Clear filters</v-btn>
+          </div>
         </template>
       </v-data-table>
     </v-card>
+
+    <v-dialog v-if="selectedApp" v-model="removeDialog" :persistent="removing" max-width="440">
+      <v-card>
+        <v-card-title style="word-break: break-word">Remove {{ selectedApp.name }}?</v-card-title>
+        <v-card-text>
+          This permanently removes the container and its writable layer. Mounted volumes are retained.
+          The result will also appear in Tasks.
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="removing" @click="removeDialog = false">Cancel</v-btn>
+          <v-btn variant="text" color="error" :loading="removing" :disabled="removing" @click="confirmRemove">Remove</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <v-dialog v-model="saveViewDialog" max-width="440">
+      <v-card>
+        <v-card-title>Save container view</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 mb-3">Save filters, search and columns in this browser for your account.</p>
+          <v-text-field v-model="viewName" label="View name" maxlength="60" counter="60" :error-messages="viewNameError" @keydown.enter.prevent="saveNamedView" />
+          <p v-if="replacingView" class="text-caption">The existing view with this name will be replaced.</p>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="saveViewDialog = false">Cancel</v-btn>
+          <v-btn color="primary" @click="saveNamedView">{{ replacingView ? 'Replace view' : 'Save view' }}</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <!-- Logs and Terminal Modals -->
     <ContainerLogs
@@ -351,6 +376,11 @@ import { mapActions, mapState } from "vuex";
 import ContainerLogs from "@/components/ContainerLogs.vue";
 import AsyncFeature from "@/components/AsyncFeature.vue";
 import UnifiedSearch from "@/components/UnifiedSearch.vue";
+import {
+  CONTAINER_VIEW_VERSION, MAX_SAVED_CONTAINER_VIEWS, NO_STACK,
+  normalizeContainerView, containerViewStorageKey, readContainerPreferences, writeContainerPreferences,
+  hasContainerViewQuery, containerViewFromQuery, containerViewQuery, containerHealth, containerStatus, containerStack, filterContainers,
+} from "@/utils/containerViews";
 
 export default {
   components: {
@@ -360,9 +390,32 @@ export default {
   },
   data() {
     return {
-      search: "",
+      view: normalizeContainerView(),
+      savedViews: [],
+      selectedView: "",
+      saveViewDialog: false,
+      viewName: "",
+      viewNameError: "",
+      storageWarning: "",
+      preferencesReady: false,
+      statusOptions: [
+        { title: "All statuses", value: "" }, { title: "Running", value: "running" },
+        { title: "Stopped", value: "stopped" }, { title: "Paused", value: "paused" },
+        { title: "Restarting", value: "restarting" }, { title: "Created", value: "created" },
+        { title: "Dead", value: "dead" },
+      ],
+      healthOptions: [
+        { title: "All health states", value: "" }, { title: "Healthy", value: "healthy" },
+        { title: "Unhealthy", value: "unhealthy" }, { title: "Starting", value: "starting" },
+        { title: "No health check", value: "none" },
+      ],
+      updateOptions: [
+        { title: "All updates", value: "" }, { title: "Update available", value: "available" },
+        { title: "No update confirmed", value: "unconfirmed" },
+      ],
       expanded: [],
       removeDialog: false,
+      removing: false,
       selectedApp: null,
       isCheckingUpdates: false,
       isRefreshing: false,
@@ -385,35 +438,134 @@ export default {
           align: "start"
         },
         project: {
-          title: "Project",
+          title: "Stack",
           key: "project",
+          value: containerStack,
           sortable: true
         },
         status: {
           title: "Status",
           key: "status",
+          value: containerStatus,
           sortable: true
+        },
+        health: {
+          title: "Health",
+          key: "health",
+          sortable: false,
         },
         image: {
           title: "Image",
           key: "image",
+          value: "Config.Image",
           sortable: true
         },
         ports: {
           title: "Ports",
           key: "ports",
-          sortable: true
+          sortable: false
         },
         created: {
           title: "Created At",
           key: "created",
+          value: "Created",
           sortable: true
         }
-      },
-      selectedHeaders: []
+      }
     };
   },
   methods: {
+    async confirmRemove() {
+      if (this.removing || !this.selectedApp) return;
+      this.removing = true;
+      try {
+        const succeeded = await this.AppAction({ Name: this.selectedApp.name, Action: "remove" });
+        if (succeeded) this.removeDialog = false;
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.removing = false;
+      }
+    },
+    preferenceStorage() {
+      try { return globalThis.localStorage || null; } catch { return null; }
+    },
+    restorePreferences() {
+      this.preferencesReady = false;
+      const stored = readContainerPreferences(this.preferenceStorage(), containerViewStorageKey(this.preferenceOwner));
+      this.view = stored.current;
+      this.savedViews = stored.savedViews;
+      this.selectedView = stored.selectedView;
+      if (hasContainerViewQuery(this.$route?.query)) {
+        this.view = containerViewFromQuery(this.$route.query, this.view.columns);
+      }
+      this.preferencesReady = true;
+    },
+    persistPreferences() {
+      if (!this.preferencesReady) return;
+      const succeeded = writeContainerPreferences(this.preferenceStorage(), containerViewStorageKey(this.preferenceOwner), {
+        version: CONTAINER_VIEW_VERSION, current: this.view, savedViews: this.savedViews, selectedView: this.selectedView,
+      });
+      this.storageWarning = succeeded ? "" : "Browser storage is unavailable. View changes will only last for this session.";
+    },
+    syncViewAddress() {
+      if (!this.preferencesReady || !this.$router?.replace || !this.$route) return;
+      const query = containerViewQuery(this.view, this.$route.query);
+      if (JSON.stringify(query) === JSON.stringify(this.$route.query || {})) return;
+      const navigation = this.$router.replace({ query });
+      navigation?.catch(() => {
+        this.storageWarning = "The view is available, but its address could not be updated.";
+      });
+    },
+    applySavedView(name) {
+      this.selectedView = name || "";
+      const saved = this.savedViews.find(item => item.name === name);
+      if (saved) this.view = normalizeContainerView(saved.config);
+      this.persistPreferences();
+    },
+    openSaveView() {
+      this.viewName = this.selectedView;
+      this.viewNameError = "";
+      this.saveViewDialog = true;
+    },
+    saveNamedView() {
+      const name = this.viewName.trim();
+      if (!name || name.length > 60) {
+        this.viewNameError = "Enter a view name between 1 and 60 characters.";
+        return;
+      }
+      const index = this.savedViews.findIndex(item => item.name.toLowerCase() === name.toLowerCase());
+      if (index < 0 && this.savedViews.length >= MAX_SAVED_CONTAINER_VIEWS) {
+        this.viewNameError = `You can save up to ${MAX_SAVED_CONTAINER_VIEWS} views. Delete a view first.`;
+        return;
+      }
+      const saved = { name, config: normalizeContainerView(this.view) };
+      if (index < 0) this.savedViews.push(saved);
+      else this.savedViews.splice(index, 1, saved);
+      this.selectedView = name;
+      this.saveViewDialog = false;
+      this.persistPreferences();
+    },
+    deleteSavedView() {
+      this.savedViews = this.savedViews.filter(item => item.name !== this.selectedView);
+      this.selectedView = "";
+      this.persistPreferences();
+    },
+    clearFilter(key) { this.view[key] = ""; },
+    clearFilters() {
+      this.view = normalizeContainerView({ columns: this.view.columns });
+    },
+    resetView() {
+      this.selectedView = "";
+      this.view = normalizeContainerView();
+      this.persistPreferences();
+    },
+    healthLabel(item) {
+      return ({ healthy: "Healthy", unhealthy: "Unhealthy", starting: "Starting", none: "No health check" })[containerHealth(item)] || "Unknown";
+    },
+    healthColor(item) {
+      return ({ healthy: "success", unhealthy: "error", starting: "warning" })[containerHealth(item)];
+    },
     portHref(port) { return containerPortLink(port, window.location); },
     loadTerminal() {
       return import("@/components/ContainerTerminal.vue");
@@ -483,7 +635,8 @@ export default {
       }, 10000);
 
       try {
-        await this.readApps();
+        const succeeded = await this.readApps();
+        if (succeeded === false) this.loadError = true;
       } catch (e) {
         this.loadError = true;
       } finally {
@@ -499,52 +652,93 @@ export default {
       "action",
       "updatable"
     ]),
-    showHeaders() {
-      return this.headers.filter(s => this.selectedHeaders.includes(s));
-    }
+    preferenceOwner() { return this.$store.state.auth?.username || ""; },
+    search: {
+      get() { return this.view.search; },
+      set(value) { this.view.search = typeof value === "string" ? value.slice(0, 128) : ""; },
+    },
+    selectedColumnKeys: {
+      get() { return this.view.columns; },
+      set(columns) { this.view.columns = normalizeContainerView({ columns }).columns; },
+    },
+    selectedHeaders() { return this.view.columns.map(key => this.headersMap[key]).filter(Boolean); },
+    filteredApps() { return filterContainers(this.apps, this.view, this.updatable); },
+    stackOptions() {
+      const names = new Set(this.apps.map(containerStack).filter(Boolean));
+      if (this.view.stack && this.view.stack !== NO_STACK) names.add(this.view.stack);
+      return [
+        { title: "All stacks", value: "" }, { title: "No stack", value: NO_STACK },
+        ...[...names].sort((a, b) => a.localeCompare(b)).map(name => ({ title: name, value: name })),
+      ];
+    },
+    savedViewNames() { return this.savedViews.map(item => item.name).sort((a, b) => a.localeCompare(b)); },
+    replacingView() { return this.savedViews.some(item => item.name.toLowerCase() === this.viewName.trim().toLowerCase()); },
+    viewModified() {
+      const saved = this.savedViews.find(item => item.name === this.selectedView);
+      return !!saved && JSON.stringify(saved.config) !== JSON.stringify(normalizeContainerView(this.view));
+    },
+    activeFilters() {
+      const filters = [];
+      if (this.view.search) filters.push({ key: "search", label: `Search: ${this.view.search}` });
+      for (const key of ["status", "health", "updates"]) {
+        if (this.view[key]) filters.push({ key, label: this[`${key === "updates" ? "update" : key}Options`].find(item => item.value === this.view[key])?.title || this.view[key] });
+      }
+      if (this.view.stack) filters.push({ key: "stack", label: `Stack: ${this.view.stack === NO_STACK ? "No stack" : this.view.stack}` });
+      return filters;
+    },
+  },
+  watch: {
+    view: {
+      deep: true,
+      handler() { this.persistPreferences(); this.syncViewAddress(); },
+    },
+    preferenceOwner() { this.restorePreferences(); },
+    "$route.query": {
+      deep: true,
+      handler(query) {
+        const next = containerViewFromQuery(query, this.view.columns);
+        if (JSON.stringify(next) !== JSON.stringify(this.view)) this.view = next;
+      },
+    },
   },
   created() {
     this.headers = Object.values(this.headersMap);
-    // Explicitly set default selected columns to include Name
-    this.selectedHeaders = [
-        this.headersMap.name,
-        this.headersMap.status,
-        this.headersMap.image,
-        this.headersMap.ports,
-        this.headersMap.created
-    ];
+    this.restorePreferences();
   },
   async mounted() {
     await this.loadAppsWithTimeout();
+  },
+  beforeUnmount() {
+    clearTimeout(this.loadTimeout);
   }
 };
 </script>
 
 <style>
+.apps-list.yp-workspace-page { width: 100%; max-width: 1600px; margin-inline: auto; }
 .apps-list > .apps-card {
   overflow: visible;
 }
-.apps-list > .apps-card > .v-card-title:first-child {
+.container-toolbar, .container-view-toolbar, .container-filter-chips {
   display: flex;
   align-items: center;
-  overflow: visible;
-  white-space: normal;
+  flex-wrap: wrap;
+  gap: 10px;
 }
-.apps-search-wrap {
-  width: 400px;
-  max-width: 100%;
-  min-width: 0;
+.container-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
+.container-view-toolbar > .v-input { flex: 0 1 300px; min-width: 190px; }
+.apps-search-wrap { width: 400px; max-width: 100%; min-width: 0; }
 @media (max-width: 600px) {
-  .apps-list > .v-card > .v-card-title:first-child {
-    flex-wrap: wrap;
-  }
-  .apps-search-wrap {
-    flex-basis: 100%;
-    margin-top: 8px;
-  }
+  .container-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .apps-search-wrap { flex-basis: 100%; width: 100%; }
+  .container-view-toolbar > .v-input { flex-basis: 100%; }
+  .container-toolbar > .v-spacer { display: none; }
 }
-tr:hover {
+.apps-list tr:hover {
   cursor: pointer;
 }
 .ImageName {

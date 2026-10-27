@@ -58,6 +58,8 @@ services:
       - "8000:8080"
     environment:
       DOCKER_HOST: tcp://dockerproxy:2375
+      NO_PROXY: "localhost,127.0.0.1,dockerproxy,${NO_PROXY:-}"
+      no_proxy: "localhost,127.0.0.1,dockerproxy,${NO_PROXY:-}"
       YACHT_DOCKER_PROXY_NETWORK: ${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api
       YACHT_ALLOW_PRIVATE_NETWORK_HOSTS: "true"
       YACHT_ALLOWED_HOSTS: ${YACHT_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}

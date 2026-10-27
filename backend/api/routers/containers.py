@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query, HTTPException
+from fastapi import APIRouter, Depends, status, Request, WebSocket, WebSocketDisconnect, Query, HTTPException, Response
 from sse_starlette.sse import EventSourceResponse
 from api.auth.jwt import get_auth_wrapper, get_secret_key, revoke_token, get_current_user_token
 from api.auth.auth import auth_check, check_permission
@@ -28,7 +28,7 @@ router = APIRouter()
 
 @router.get("/stats")
 @limiter.limit("60/minute")
-async def get_all_container_stats(request: Request, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper)):
+async def get_all_container_stats(request: Request, db: AsyncSession = Depends(get_db), Authorize: get_auth_wrapper = Depends(get_auth_wrapper), response: Response = None):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
     return await actions.get_all_stats()
@@ -71,7 +71,8 @@ def _validate_container_id(container_id: str) -> str:
 async def list_containers(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
@@ -84,7 +85,8 @@ async def start_container(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
@@ -121,7 +123,8 @@ async def stop_container(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_stop", Authorize, db)
@@ -153,7 +156,8 @@ async def restart_container(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_restart", Authorize, db)
@@ -185,7 +189,8 @@ async def delete_container(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_delete", Authorize, db)
@@ -223,7 +228,8 @@ async def get_container_logs(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)
@@ -254,7 +260,8 @@ async def get_container_stats(
     request: Request,
     container_id: str,
     db: AsyncSession = Depends(get_db),
-    Authorize: get_auth_wrapper = Depends(get_auth_wrapper)
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     await check_permission("perm_start", Authorize, db)

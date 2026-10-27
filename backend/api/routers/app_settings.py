@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile, Response
 from typing import List
 import io
 import json
@@ -208,6 +208,7 @@ async def prune_resources(
     resource: str,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     await require_superuser(Authorize, db)
     allowed = {"images", "containers", "volumes", "networks", "build_cache"}
@@ -226,6 +227,7 @@ async def update_self(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    response: Response = None,
 ):
     # Pulls + restarts the YachtPlus container itself. A non-admin able to
     # trigger this could force a denial-of-service via repeated restarts or

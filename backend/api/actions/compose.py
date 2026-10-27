@@ -13,7 +13,12 @@ import asyncio
 import functools
 import logging
 import tempfile
+import difflib
+import hashlib
+import hmac
+import json
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from api.utils.yaml_loader import load_yaml
 
 from api.settings import get_settings
@@ -300,19 +305,14 @@ def _get_compose_sync(name):
 async def get_compose(name):
     return await run_in_thread(_get_compose_sync, name)
 
-"""
-Creates a compose directory and writes content
-"""
+# Shared normalization keeps read-only previews identical to atomic saves.
 _COMPOSE_MAX_BYTES = 1 * 1024 * 1024  # 1 MiB — well past any real compose
 
 
-def _write_compose_sync(compose):
+def _normalize_compose_content(compose):
     validate_compose_project_name(compose.name)
 
-    # Bound the payload BEFORE we touch the disk. The previous code wrote
-    # `compose.content` straight to a YAML file with no length check, so
-    # an authenticated `perm_restart` user could trivially fill the
-    # compose volume by POSTing a multi-GB string.
+    # Bound the payload before parsing it or touching the destination.
     content = compose.content
     if content is None or content == "":
         raise HTTPException(status_code=422, detail="Compose file cannot be empty.")
@@ -333,24 +333,158 @@ def _write_compose_sync(compose):
     if len(content.encode("utf-8")) > _COMPOSE_MAX_BYTES:
         raise HTTPException(413, "Normalized Compose file is too large")
     load_yaml(content)  # Check the final document before changing any file.
+    return content
 
-    # Canonicalise the target directory and guarantee it stays inside the
-    # configured compose directory. String concatenation was vulnerable to
-    # traversal if COMPOSE_DIR contained a trailing slash mismatch or if a
-    # symlink redirected the target; resolve() + is_relative_to() closes
-    # both paths.
+
+def _compose_write_target(name):
+    """Resolve a permitted destination without creating a directory or file."""
     base_dir = pathlib.Path(get_settings().COMPOSE_DIR).resolve()
-    target_dir = (base_dir / compose.name).resolve()
+    project_dir = base_dir / name
+    if project_dir.is_symlink():
+        raise HTTPException(400, "Compose project directory cannot be a symlink")
+    target_dir = project_dir.resolve()
     if not target_dir.is_relative_to(base_dir):
         raise HTTPException(status_code=400, detail="Invalid compose project name.")
-    target_dir.mkdir(parents=True, exist_ok=True)
+    if target_dir.exists() and not target_dir.is_dir():
+        raise HTTPException(422, "Compose project path must be a directory")
     if any((target_dir / name).is_symlink() for name in ("compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml")):
         raise HTTPException(400, "Compose file cannot be a symlink")
 
-    selected = find_yml_files(str(target_dir)).get(compose.name)
+    selected = find_yml_files(str(target_dir)).get(name)
     target_file = pathlib.Path(selected) if selected else target_dir / "docker-compose.yml"
     if target_file.is_symlink():
         raise HTTPException(400, "Compose file cannot be a symlink")
+    return target_dir, target_file
+
+
+def _compose_source(target_file):
+    if not target_file.exists():
+        return "", "missing"
+    try:
+        with target_file.open("rb") as stream:
+            original = stream.read(_COMPOSE_MAX_BYTES + 1)
+        if len(original) > _COMPOSE_MAX_BYTES:
+            raise HTTPException(413, "Existing Compose file is too large")
+        return original.decode("utf-8"), hashlib.sha256(original).hexdigest()
+    except (OSError, UnicodeError):
+        raise HTTPException(422, "Existing Compose file could not be read as UTF-8") from None
+
+
+def _compose_preview_token(compose, normalized, source_digest):
+    from api.auth.jwt import get_secret_key
+
+    payload = json.dumps(
+        [compose.name, compose.content, normalized, source_digest],
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hmac.new(get_secret_key().encode("utf-8"), payload, hashlib.sha256).hexdigest()
+
+
+def _preview_compose_sync(compose):
+    normalized = _normalize_compose_content(compose)
+    _, target_file = _compose_write_target(compose.name)
+    original, source_digest = _compose_source(target_file)
+    submitted_document = load_yaml(compose.content)
+    normalized_document = load_yaml(normalized)
+    warnings = []
+    previous_document = {}
+    previous_services = {}
+    if original:
+        try:
+            previous_document = load_yaml(original)
+            if isinstance(previous_document, dict) and isinstance(previous_document.get("services"), dict):
+                previous_services = previous_document["services"]
+            else:
+                warnings.append("The existing file has no services mapping and will be replaced.")
+        except HTTPException:
+            warnings.append("The existing file is invalid YAML and will be replaced.")
+            previous_document = {}
+
+    submitted_services = submitted_document["services"]
+    services = normalized_document["services"]
+    shared_settings_changed = isinstance(previous_document, dict) and {
+        key: value for key, value in previous_document.items() if key != "services"
+    } != {key: value for key, value in normalized_document.items() if key != "services"}
+    affected = []
+    for name in sorted(previous_services.keys() | services.keys(), key=str):
+        if name not in previous_services:
+            affected.append({"name": str(name), "change": "added"})
+        elif name not in services:
+            affected.append({"name": str(name), "change": "removed"})
+        elif previous_services[name] != services[name] or shared_settings_changed:
+            affected.append({"name": str(name), "change": "changed"})
+
+    security_fields = {"user", "read_only", "cap_drop", "tmpfs", "security_opt", "pids_limit", "x-yachtplus-security"}
+    security_changes = []
+    for name, service in services.items():
+        changes = sorted(field for field in security_fields if submitted_services[name].get(field) != service.get(field))
+        if changes:
+            security_changes.append({"service": str(name), "fields": changes})
+        if service.get("x-yachtplus-security") == "image-default":
+            warnings.append(f"Service {name} uses explicitly selected image compatibility settings.")
+
+    return {
+        "name": compose.name,
+        "normalized_content": normalized,
+        "diff": "".join(
+            line if line.endswith("\n") else line + "\n\\ No newline at end of file\n"
+            for line in difflib.unified_diff(
+                original.splitlines(keepends=True), normalized.splitlines(keepends=True),
+                fromfile="Saved Compose", tofile="Compose after saving",
+            )
+        ),
+        "affected_services": affected,
+        "security_changes": security_changes,
+        "warnings": warnings,
+        "preview_token": _compose_preview_token(compose, normalized, source_digest),
+    }
+
+
+async def preview_compose(compose):
+    return await run_in_thread(_preview_compose_sync, compose)
+
+
+@contextmanager
+def _compose_save_lock(name):
+    """Serialize preview validation and replacement across API workers."""
+    resource = str(pathlib.Path(get_settings().COMPOSE_DIR).resolve() / name)
+    key = hashlib.sha256(resource.encode("utf-8")).hexdigest()
+    path = pathlib.Path(tempfile.gettempdir()) / f"yachtplus-compose-save-{key}.lock"
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        try:
+            if os.name == "nt":
+                import msvcrt
+                if os.fstat(descriptor).st_size == 0:
+                    os.write(descriptor, b"0")
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise HTTPException(409, "Another save is already in progress for this stack.") from None
+        yield
+    finally:
+        os.close(descriptor)
+
+
+def _write_compose_sync(compose):
+    content = _normalize_compose_content(compose)
+    with _compose_save_lock(compose.name):
+        return _write_compose_locked(compose, content)
+
+
+def _write_compose_locked(compose, content):
+    target_dir, target_file = _compose_write_target(compose.name)
+    preview_token = getattr(compose, "preview_token", None)
+    if isinstance(preview_token, str):
+        _, source_digest = _compose_source(target_file)
+        expected = _compose_preview_token(compose, content, source_digest)
+        if not hmac.compare_digest(preview_token, expected):
+            raise HTTPException(409, "Compose content or saved file changed. Generate and confirm a new preview.")
+    target_dir.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=target_dir, delete=False) as stream:

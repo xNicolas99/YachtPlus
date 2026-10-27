@@ -161,19 +161,10 @@ const actions = {
         return resp.data.is_setup;
       })
       .catch(err => {
-        // The previous behaviour was to commit `isSetup=false` on ANY
-        // error — including transient 502s while gunicorn was booting,
-        // or a bad cookie that 401's the request. That bounced finished
-        // installs straight into the setup wizard. We now:
-        //   - keep the last known value if we have one (cached from
-        //     localStorage or a previous successful call),
-        //   - only fall back to false when we have no prior signal at
-        //     all (genuine first run).
+        // A failed request cannot establish whether setup is complete.
+        // Preserve unknown as well as known state; only an API response
+        // may send a first-time visitor into the setup wizard.
         console.warn("Setup check failed; keeping last known state.", err);
-        if (state.isSetup === null) {
-          commit("SET_SETUP_STATUS", false);
-          return false;
-        }
         return state.isSetup;
       });
   },

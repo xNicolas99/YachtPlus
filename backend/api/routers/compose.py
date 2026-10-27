@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.jwt import get_auth_wrapper
 
@@ -10,6 +10,7 @@ from api.actions.compose import (
     write_compose,
     delete_compose,
     generate_support_bundle,
+    preview_compose,
 )
 from api.auth.auth import auth_check, check_permission, require_superuser
 from api.utils.auth import get_db
@@ -28,6 +29,22 @@ async def _require_superuser(Authorize, db: AsyncSession) -> None:
         raise HTTPException(status_code=403, detail="Superuser required.")
 
 router = APIRouter()
+
+
+@router.post("/preview", response_model=schemas.ComposePreview)
+@limiter.limit("30/minute")
+async def preview_compose_project(
+    request: Request,
+    compose: schemas.ComposeWrite,
+    Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
+    db: AsyncSession = Depends(get_db),
+    response: Response = None,
+):
+    await auth_check(Authorize)
+    if Authorize.is_api_key():
+        raise HTTPException(403, "Compose previews are not available via API key")
+    await require_superuser(Authorize, db)
+    return await preview_compose(compose)
 
 
 # Maps compose router action verbs to the user permission flags already
@@ -60,6 +77,7 @@ async def get_projects(
     request: Request,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     # The listing exposes project names + paths; gate behind perm_start
     # so a read-only-account user can't enumerate stack layouts. (perm_start
@@ -96,6 +114,7 @@ async def compose_project_action(
     action,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     if action not in ["up", "down", "start", "stop", "restart", "create", "delete", "pull", "kill", "rm"]:
@@ -115,6 +134,7 @@ async def write_compose_project(
     compose: schemas.ComposeWrite,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     # Raw Compose can explicitly select image compatibility, host mounts and
@@ -136,6 +156,7 @@ async def compose_app_action_route(
     app,
     Authorize: get_auth_wrapper = Depends(get_auth_wrapper),
     db: AsyncSession = Depends(get_db),
+    response: Response = None,
 ):
     await auth_check(Authorize)
     if action not in ["up", "down", "start", "stop", "restart", "create", "rm", "pull", "kill"]:

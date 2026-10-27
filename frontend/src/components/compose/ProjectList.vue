@@ -1,5 +1,5 @@
 <template lang="html">
-  <div class="projects-list component" style="max-width: 90%">
+  <div class="projects-list component">
     <v-card color="foreground">
       <v-fade-transition>
         <v-progress-linear
@@ -9,20 +9,21 @@
           bottom
         />
       </v-fade-transition>
-      <v-card-title class="primary font-weight-bold">
-        Compose Stacks
+      <v-card-title class="font-weight-bold d-flex flex-wrap ga-2">
+        Stacks
         <v-tooltip location="bottom">
           <template v-slot:activator="{ props }">
             <v-btn
               class="ml-2"
               color="secondary"
               to="/projects/_/edit"
+              aria-label="Create a stack"
               v-bind="props"
             >
               <v-icon>mdi-plus</v-icon>
             </v-btn>
           </template>
-          <span>Add Compose Stack</span>
+          <span>Create a stack</span>
         </v-tooltip>
         <v-spacer />
         <v-text-field
@@ -49,7 +50,7 @@
       >
         <template #no-data>
           <div>
-            No Compose available.
+            No stacks yet. Create a stack to manage services with Docker Compose.
           </div>
         </template>
         <template v-slot:item.name="{ item }">
@@ -60,7 +61,7 @@
              
             >
               <template v-slot:activator="{ props }">
-                <v-btn icon size="small" v-bind="props" class="" aria-label="Project Actions" title="Project Actions">
+                <v-btn icon size="small" v-bind="props" class="" aria-label="Stack actions" title="Stack actions">
                   <v-icon>mdi-chevron-down</v-icon>
                 </v-btn>
               </template>
@@ -227,7 +228,7 @@
         </template>
       </v-data-table>
     </v-card>
-    <v-dialog v-if="selectedProject" v-model="deleteDialog" max-width="400">
+    <v-dialog v-if="selectedProject" v-model="deleteDialog" :persistent="deleting" max-width="400">
       <v-card>
         <v-card-title class="headline" style="word-break: break-all;">
           Delete {{ selectedProject["name"] }} stack?
@@ -238,16 +239,15 @@
         </v-card-text>
         <v-card-actions>
           <v-spacer></v-spacer>
-          <v-btn variant="text" @click="deleteDialog = false">
+          <v-btn variant="text" :disabled="deleting" @click="deleteDialog = false">
             Cancel
           </v-btn>
           <v-btn
             variant="text"
             color="error"
-            @click="
-              ProjectAction({ Name: selectedProject.name, Action: 'delete' });
-              deleteDialog = false;
-            "
+            :loading="deleting"
+            :disabled="deleting"
+            @click="confirmDelete"
           >
             Delete Stack
           </v-btn>
@@ -264,6 +264,7 @@ export default {
     return {
       selectedProject: null,
       deleteDialog: false,
+      deleting: false,
       form: {
         name: ""
       },
@@ -294,6 +295,18 @@ export default {
     };
   },
   methods: {
+    async confirmDelete() {
+      if (this.deleting || !this.selectedProject) return;
+      this.deleting = true;
+      try {
+        const succeeded = await this.ProjectAction({ Name: this.selectedProject.name, Action: "delete" });
+        if (succeeded) this.deleteDialog = false;
+      } catch (error) {
+        this.$store.commit("snackbar/setErr", error);
+      } finally {
+        this.deleting = false;
+      }
+    },
     ...mapActions({
       readProjects: "projects/readProjects",
       ProjectAction: "projects/ProjectAction"

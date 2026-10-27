@@ -9,6 +9,22 @@ vi.mock('axios', () => ({ default: { get: vi.fn(), post: vi.fn(), delete: vi.fn(
 vi.mock('@/router/index', () => ({ default: { push: vi.fn().mockResolvedValue() } }));
 beforeEach(() => vi.clearAllMocks());
 
+it('lets an image pull finish after opening Tasks without navigating back', async () => {
+  let finish;
+  axios.post.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+  const commit = vi.fn();
+  const dispatch = vi.fn().mockResolvedValue([]);
+  const pending = images.actions.writeImage({ commit, dispatch }, { image: 'example/web' });
+  await vi.waitFor(() => expect(axios.post).toHaveBeenCalledOnce());
+  await router.push({ path: '/tasks' });
+
+  finish({ data: { id: 'pull-task', status: 'succeeded' } });
+  expect(await pending).toBe(true);
+
+  expect(dispatch).toHaveBeenCalledExactlyOnceWith('readImages');
+  expect(router.push).toHaveBeenCalledExactlyOnceWith({ path: '/tasks' });
+});
+
 describe.each([
   ['Images', images], ['Networks', networks], ['Volumes', volumes],
 ])('%s resource lists', (name, module) => {

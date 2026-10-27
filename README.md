@@ -6,6 +6,10 @@ YachtPlus is a self-hosted container management UI for Docker and Docker Compose
 
 ## Using the interface
 
+The [operations guide](docs/OPERATIONS_GUIDE.md) covers saved container views,
+durable tasks, Compose previews, volume backups/restoration, project update plans
+and searchable activity logs, including their permissions and limits.
+
 The sidebar groups containers, images, volumes and networks under Workspace;
 Compose stacks and templates are under Orchestration. Use the arrow beside
 the brand to collapse or expand the sidebar. On small screens, open navigation
@@ -15,10 +19,24 @@ Resource tables search and paginate the complete resource list. Row menus
 open actions without navigating to details. Failed creation and deletion
 requests preserve the form or confirmation so you can correct the problem
 and retry. Prune actions ask for confirmation and affect the whole Docker host.
+Compose deletion waits for the result and prevents duplicate requests. Project
+details support Compose mapping and long syntax, including labels, dependencies,
+ports and volumes. Switching template catalogs keeps each editor's content
+separate while requests are loading.
 
 Deploy containers in four steps: General, Networking, Volumes and Environment.
 Advanced settings hold command, device, label, sysctl, capability and runtime
 options. Required fields are checked before deployment.
+Container filters, search and columns can be saved as named browser views.
+Dashboard counters open matching filters; connection failures display the last
+verified snapshot and its age. Tasks show actual progress phases and results
+while long operations continue across page changes.
+
+Compose editing offers a read-only security/change preview and detects stale
+saves. Administrators can create checked volume archives, restore into a new
+volume, and opt in to daily UTC backup schedules. Per-project update plans add
+UTC maintenance windows and exclusions. New schedules start disabled. Activity
+logs support filtered server-side pagination and bounded CSV export.
 
 Both search fields share the same result handling. Use Up/Down to select,
 Enter to open and Escape to close results. The global search is also available
@@ -29,8 +47,8 @@ The terminal downloads only when opened. If it cannot load, retry or close it.
 A failed page download keeps the current page and offers Retry page. Reload
 application is a separate action because it discards unsaved inputs.
 
-Local frontend development requires Node.js 20.19 or newer in the 20.x line,
-or Node.js 22.12 or newer. Docker and CI use Node.js 22. The UI version defaults to `frontend/package.json`;
+Local frontend development requires Node.js 22.12 or newer, as declared in
+`frontend/package.json`. Docker and CI use Node.js 22. The UI version defaults to `frontend/package.json`;
 release builds can override it with `VITE_VERSION`.
 
 Charts use Docker's cache-adjusted memory usage. Container logs show bounded
@@ -55,8 +73,24 @@ before registry login and publication. A separate required `security-stack` job
 starts the real nginx/backend/fail2ban stack and verifies bans and protection
 outages; publication rejects a missing, failed or skipped security job. Ruff
 remains an informational check.
-Version-tag runs do not move `latest`. Tags are pushed sequentially, so an
-interruption can leave a partial set of tags; the tested image is not rebuilt.
+For a new release, update the canonical version in `frontend/package.json` and
+`frontend/package-lock.json` together, document the change in `CHANGELOG.md`,
+and merge the reviewed change into `master`. After all validation and candidate
+checks pass, CI reserves `vMAJOR.MINOR.PATCH` at the exact validated commit,
+publishes the same image under its version, commit SHA and `latest`, and creates
+the matching GitHub Release. Release notes include the build link, commit and
+registry digest, so deployments can pin `ghcr.io/xnicolas99/yachtplus@sha256:…`.
+
+Version tags never move. Completed releases and their versioned images are preserved.
+Later `master` commits with an unchanged version update only the SHA image and
+`latest`; bump the canonical version to create another release. A completed
+release is not duplicated on rerun. Version-tag runs do not move `latest`.
+Tags are pushed sequentially, so an interruption can leave a partial set of
+tags; release creation waits for successful publication and matching digests.
+Investigate an incomplete reserved version before proceeding; never retarget a
+released version to another commit. The tested image is not rebuilt for pushing.
+Operator-created release drafts are preserved and are not published implicitly.
+An existing draft without a matching Git tag requires explicit investigation.
 Workflow actions are pinned to commit SHAs. Python runtime and development
 dependencies use separate committed locks with distribution hashes; test
 tooling and backend tests are excluded from the release image. The downloaded
@@ -115,6 +149,8 @@ token's credential version still matches. Password, username, permissions and
 or password requires your current password and returns you to login. User
 management preserves at least one active administrator, including during
 concurrent changes; administrators cannot disable or demote themselves.
+Account input rejects blank usernames and names exceeding 264 characters after
+normalization. Passwords and password confirmations are limited to 72 UTF-8 bytes.
 
 TOTP codes are consumed once for their matched time step. After using a code
 to enable 2FA or log in, wait for a new code before another confirmation.
@@ -125,6 +161,9 @@ sends it as `X-CSRF-TOKEN` for cookie-authenticated mutations; it contains no
 JWT. Browser mutations and terminal connections require an exact matching
 Origin, including scheme and port. Refresh requests share one in-flight
 operation and revoke the previous token before issuing a replacement.
+After a successful refresh, a failed API operation keeps its own error without
+ending the session. An unavailable setup-status endpoint preserves unknown or
+previously confirmed setup state instead of treating the installation as new.
 
 WebSocket exec sessions (container terminal) reuse the same cookie: `backend/api/routers/containers.py` reads `access_token_cookie` straight off the WS handshake; no token is ever passed in the URL.
 The terminal closes when its token expires, is revoked, or loses the required
@@ -230,6 +269,9 @@ Compose projects support `compose.yaml`, `compose.yml`, `docker-compose.yaml`
 and `docker-compose.yml` in direct project directories. YAML must be valid
 before an atomic save; the existing filename is preserved. Deletion runs
 `docker compose down` before removing files and retains them if shutdown fails.
+Saving through a project-directory symlink is rejected before any file change.
+Container forms preserve explicitly empty environment values and replace all
+configured template variables within each value.
 Daily automatic Compose updates are disabled by default; set
 `COMPOSE_AUTO_UPDATE=true` to opt in. Manual updates report their completed
 result instead of returning success while the job is still pending.
@@ -261,6 +303,10 @@ result instead of returning success while the job is still pending.
 | `YACHT_DOCKER_PROXY_NETWORK` | `${COMPOSE_PROJECT_NAME:-yachtplus}_docker_api` in Compose | Network used by rootless update workers; updates never mount the host socket. |
 | `COMPOSE_DIR` | `/compose/` | Compose project directory; trailing slash is optional. |
 | `COMPOSE_AUTO_UPDATE` | `false` | Enable daily automatic Compose pull/recreate jobs. |
+| `BACKUP_DIR` | `/config/backups` | Private persistent volume archives and staging. |
+| `BACKUP_HELPER_IMAGE` | auto | Existing local archive helper image, normally current YachtPlus; never started or automatically pulled. |
+| `BACKUP_MAX_BYTES` | `1073741824` | Maximum archive size including tar overhead; minimum 10 KiB. |
+| `NO_PROXY` / `no_proxy` | internal hosts plus inherited list in Compose | Keep private Docker API traffic out of an HTTP egress proxy. |
 | `AUDIT_RETENTION_DAYS` | `90` | Activity log retention, cleaned hourly; minimum 1 day. |
 | `LOGIN_RETENTION_DAYS` | `30` | Login-attempt retention, cleaned hourly; minimum 1 day. |
 | `RATE_LIMIT_STORAGE_URI` | `memory://` | slowapi storage backend; the image runs one API worker so limits are shared by all its requests. Custom multiple-worker deployments need shared storage and its client dependency. |
@@ -328,11 +374,13 @@ npx vitest run
 
 Run publication-policy checks from the repository root with the backend
 environment: `python -m unittest discover -s scripts -p 'test_*.py' -v`.
-Local verification on 2026-10-02 passed **852 backend, 197 frontend and 42
-publication-policy tests**. The latest [changelog](CHANGELOG.md) and
+Local verification on 2026-10-27 passed **1068 backend, 344 frontend and 67
+publication-policy/security-script tests**. The latest [changelog](CHANGELOG.md) and
 [remediation report](docs/AUDIT_REMEDIATION_2026-10-02.md) record the completed
 checks and remaining work. Older audit documents contain historical counts.
-The candidate still requires Docker/runtime verification before release.
+The local candidate also passed image/start/health, real fail2ban protection,
+volume restoration and browser checks. Remote CI/CodeQL, PostgreSQL/MySQL and
+multiarch verification remain separate; see the latest changelog.
 
 ---
 

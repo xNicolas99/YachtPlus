@@ -14,7 +14,7 @@ import api.db.models  # noqa: F401 - register all mapped tables
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
-HEAD = "20261001_0001"
+HEAD = "20261027_0003"
 
 
 @pytest.mark.parametrize(
@@ -144,5 +144,39 @@ def test_upgrade_allows_missing_optional_smtp_table(tmp_path):
             conn.execute(text("INSERT INTO alembic_version VALUES ('20260929_0001')"))
         _upgrade(database_path)
         _assert_upgraded(database_path)
+    finally:
+        engine.dispose()
+
+
+def test_upgrade_backfills_stable_account_instances_without_rotating_credentials(tmp_path):
+    """An existing 3.0.x account keeps its sessions but gets a durable identity."""
+    from api.db.models.users import User
+    database_path = tmp_path / "account-instances.db"
+    engine = create_engine(f"sqlite:///{database_path.as_posix()}")
+    try:
+        with engine.begin() as connection:
+            Base.metadata.create_all(connection)
+            connection.execute(User.__table__.insert(), [
+                {"email": "captain", "hashed_password": "hash", "auth_version": "original-version"},
+                {"email": "operator", "hashed_password": "hash", "auth_version": "operator-version"},
+            ])
+            connection.execute(text("ALTER TABLE user DROP COLUMN account_instance"))
+            connection.execute(text("CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL)"))
+            connection.execute(text("INSERT INTO alembic_version VALUES ('20261001_0001')"))
+        _upgrade(database_path)
+        with engine.connect() as connection:
+            rows = connection.execute(text("SELECT email, auth_version, account_instance FROM user ORDER BY email")).all()
+            assert len(rows) == 2
+            assert rows[0].auth_version == "original-version"
+            assert rows[1].auth_version == "operator-version"
+            assert len(rows[0].account_instance) == len(rows[1].account_instance) == 36
+            assert rows[0].account_instance != rows[1].account_instance
+            assert not next(column for column in inspect(connection).get_columns("user")
+                            if column["name"] == "account_instance")["nullable"]
+        _upgrade(database_path)
+        with engine.connect() as connection:
+            assert connection.execute(text("SELECT account_instance FROM user ORDER BY email")).scalars().all() == [
+                rows[0].account_instance, rows[1].account_instance,
+            ]
     finally:
         engine.dispose()

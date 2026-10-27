@@ -62,9 +62,37 @@ def update_all_projects():
     """
     if not get_settings().COMPOSE_AUTO_UPDATE:
         return
-    files = find_yml_files(get_settings().COMPOSE_DIR)
-    for project_name in files.keys():
-        update_compose_project(project_name)
+    # A saved per-project policy overrides the global legacy opt-in,
+    # including disabled schedules and explicit exclusions. Failure to read
+    # those policies must never silently bypass a maintenance window.
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+    from api.db.database import sync_migration_url
+    from api.db.models.update_plans import UpdatePlan
+    plan_engine = create_engine(sync_migration_url(get_settings().DATABASE_URL))
+
+    def uses_global_policy(project_name):
+        try:
+            with Session(plan_engine) as db:
+                return db.scalar(select(UpdatePlan.project_name).where(
+                    UpdatePlan.project_name == project_name
+                )) is None
+        except Exception:
+            logger.exception("Automatic updates stopped because project update policies are unavailable")
+            return False
+
+    try:
+        files = find_yml_files(get_settings().COMPOSE_DIR)
+        for project_name in files:
+            if not get_settings().COMPOSE_AUTO_UPDATE or not uses_global_policy(project_name):
+                continue
+            _compose_action_sync(project_name, "pull")
+            # A plan or exclusion may be saved while another project's pull
+            # is running. Check again immediately before service recreation.
+            if get_settings().COMPOSE_AUTO_UPDATE and uses_global_policy(project_name):
+                _compose_action_sync(project_name, "up")
+    finally:
+        plan_engine.dispose()
 
 def _acquire_leader_lock() -> bool:
     """Try to acquire a filesystem lock so only one worker becomes leader.
@@ -120,6 +148,8 @@ def start_scheduler():
     if get_settings().COMPOSE_AUTO_UPDATE:
         scheduler.add_job(update_all_projects, 'interval', hours=24, id='auto_update_all')
     scheduler.add_job(cleanup_security_records, 'interval', hours=1, id='security_cleanup')
+    scheduler.add_job(run_scheduled_policies, 'interval', seconds=60,
+                      id='scheduled_policies', max_instances=1, coalesce=True)
     scheduler.start()
     _scheduler_started = True
     logger.info("Watchtower scheduler started.")
@@ -128,8 +158,34 @@ def stop_scheduler():
     global _scheduler_started
     if not _scheduler_started:
         return
-    scheduler.shutdown()
+    scheduler.shutdown(wait=False)
     _scheduler_started = False
+
+
+def run_scheduled_policies():
+    """Enqueue opt-in policies on the API loop from the scheduler thread."""
+    import asyncio
+    from concurrent.futures import TimeoutError
+    from api.services.operations import get_operation_loop
+    loop = get_operation_loop()
+    if loop is None or not loop.is_running():
+        return
+
+    async def enqueue():
+        from api.services.backups import run_due_backups
+        from api.services.update_plans import run_due_update_plans
+        for callback in (run_due_update_plans, run_due_backups):
+            try:
+                await callback()
+            except Exception:
+                logger.exception("Scheduled policy scan failed: %s", callback.__name__)
+
+    future = asyncio.run_coroutine_threadsafe(enqueue(), loop)
+    try:
+        future.result(timeout=45)
+    except TimeoutError:
+        future.cancel()
+        logger.error("Scheduled policy scan exceeded its time limit")
 
 def cleanup_security_records():
     from datetime import datetime, timezone, timedelta

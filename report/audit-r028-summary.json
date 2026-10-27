@@ -1,0 +1,44 @@
+{
+  "run": "R-028",
+  "date": "2026-10-27",
+  "version": "3.1.0",
+  "source_baseline": "6c97521",
+  "verification": {
+    "backend_tests": 1068,
+    "frontend_tests": 344,
+    "release_security_script_tests": 45,
+    "additional_tests_over_3_0_4": 247,
+    "production_build_and_bundle_gates": "passed",
+    "fresh_and_existing_sqlite_upgrade": "20261027_0003; passed and repeatable; credentials preserved",
+    "image_contents_start_health": "passed",
+    "real_fail2ban_security_stack": "passed",
+    "volume_backup_restore": "real Docker; exact bytes; UID/GID 1000:1000; existing destination refused",
+    "worker_restart": "unfinished task interrupted without replay",
+    "browser": {
+      "flow_groups_passed": 13,
+      "screenshots_inspected": 22,
+      "viewports": "desktop and 390px mobile",
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "final_3_1_0_artifact_smoke": "passed",
+      "deployment_form": "all four UI steps and advanced command; real restricted running container; succeeded task; passed on final 3.1.0 image"
+    }
+  },
+  "image": {
+    "reference": "yachtplus:3.1.0",
+    "id": "sha256:2921036ef5a184d6e2e57f9ce2cdbb33538de6aa5cef837c1c83880b4666e0bb",
+    "size_bytes": 482178073,
+    "architecture": "amd64",
+    "published": false
+  },
+  "guide": "docs/OPERATIONS_GUIDE.md",
+  "local_logs": "report/audit-r028-*.txt",
+  "browser_artifacts": "report/tools/r028/",
+  "not_verified": [
+    "remote CI/CodeQL",
+    "live PostgreSQL/MySQL",
+    "multiarch"
+  ]
+}

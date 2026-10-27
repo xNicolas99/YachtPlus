@@ -1,3 +1,7 @@
+# syntax=docker/dockerfile:1
+# Use the matching, digest-pinned official CLI instead of an unchecked tarball.
+FROM docker:27.1.2-cli@sha256:c8af17c2e98d13ce5c18d9d31d6e8df47c76d1ba504d2f1782980bb8673af4cb AS docker-cli
+
 # Build Vue.js frontend
 FROM node:22-alpine AS build-stage
 
@@ -9,7 +13,9 @@ COPY ./frontend/package*.json ./
 
 # A release build must use the committed lockfile. Falling back to
 # npm install silently changes dependency versions when the lockfile drifts.
-RUN npm ci --include=dev
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/proxy_ca; fi; \
+    npm ci --include=dev
 
 COPY ./frontend/ ./
 
@@ -26,7 +32,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends     build-essen
 
 COPY ./backend/requirements.txt ./
 COPY ./backend/requirements.lock ./
-RUN pip install --upgrade pip setuptools wheel &&     pip wheel --no-cache-dir --wheel-dir /deps/wheels --require-hashes -r requirements.lock
+RUN --mount=type=secret,id=proxy_ca \
+    if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
+    pip install --upgrade pip setuptools wheel && \
+    pip wheel --no-cache-dir --wheel-dir /deps/wheels --require-hashes -r requirements.lock
 
 # Setup Container and install FastAPI backend
 FROM python:3.11-slim AS deploy-stage
@@ -60,26 +69,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # plugin in /usr/local/lib/docker/cli-plugins. The previous build symlinked
 # `/usr/local/bin/docker` directly to the Compose binary, causing
 # `unknown docker command: "compose compose"`.
-# Architecture: download.docker.com only publishes static docker tgz for
-# x86_64 and aarch64 under the generic path used below. For other architectures
-# the build would need an alternative Docker CLI source.
+COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+
+# Compose release assets are available for x86_64 and aarch64.
 ARG TARGETARCH
-ARG DOCKER_VERSION=27.1.2
 ARG COMPOSE_VERSION=2.29.1
-RUN set -eux; \
+RUN --mount=type=secret,id=proxy_ca \
+    set -eux; \
+    if [ -f /run/secrets/proxy_ca ]; then export CURL_CA_BUNDLE=/run/secrets/proxy_ca; fi; \
     mkdir -p /usr/local/lib/docker/cli-plugins; \
     case "${TARGETARCH:-$(uname -m)}" in \
         amd64|x86_64)  docker_arch=x86_64 ;; \
         arm64|aarch64) docker_arch=aarch64 ;; \
         *) echo "Unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
     esac; \
-    curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
-        "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_VERSION}.tgz" \
-        -o /tmp/docker.tgz && \
-    tar -xzf /tmp/docker.tgz -C /tmp && \
-    mv /tmp/docker/docker /usr/local/bin/docker && \
-    chmod +x /usr/local/bin/docker && \
-    rm -rf /tmp/docker /tmp/docker.tgz && \
     curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
         "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-${docker_arch}" \
         -o /usr/local/lib/docker/cli-plugins/docker-compose && \
